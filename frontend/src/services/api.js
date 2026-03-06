@@ -77,11 +77,109 @@ export const chuyenDoiFile = async (file, templateType = 'onecolumn') => {
   }
 }
 
+/**
+ * SSE-based conversion: streams real-time progress events from backend.
+ * @param {File} file - Word file to convert
+ * @param {string} templateType - Template ID
+ * @param {function} onProgress - Callback(step, msg) for progress updates
+ * @returns {Promise<{thanhCong, data?, loiMessage?, errorDetails?}>}
+ */
+export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress) => {
+  return new Promise((resolve) => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+      resolve({
+        thanhCong: false,
+        loiMessage: 'Xử lý quá lâu (>3 phút). Vui lòng thử lại.'
+      })
+    }, 180000)
+
+    const explicitApiUrl = `http://localhost:8000/api/chuyen-doi-stream?template_type=${encodeURIComponent(templateType)}`;
+    fetch(explicitApiUrl, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    }).then(async (response) => {
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const message = await docLoiJsonTuResponse(response)
+        resolve({ thanhCong: false, loiMessage: message })
+        return
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() // keep incomplete line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const event = JSON.parse(line.slice(6))
+
+            if (event.error) {
+              resolve({
+                thanhCong: false,
+                loiMessage: event.msg || 'Lỗi chuyển đổi',
+                errorDetails: event.details || null,
+                errorType: event.error_type || null,
+              })
+              return
+            }
+
+            if (onProgress) {
+              onProgress(event.step, event.msg)
+            }
+
+            if (event.done) {
+              resolve({
+                thanhCong: true,
+                data: {
+                  texContent: event.tex_content || '',
+                  jobId: event.job_id || '',
+                  tenFileZip: event.ten_file_zip || '',
+                  tenFileLatex: event.ten_file_latex || '',
+                  metadata: event.metadata || {},
+                }
+              })
+              return
+            }
+          } catch {
+            // skip unparseable lines
+          }
+        }
+      }
+
+      // Stream ended without done event
+      resolve({ thanhCong: false, loiMessage: 'Kết nối bị gián đoạn' })
+    }).catch((loi) => {
+      clearTimeout(timeoutId)
+      if (loi?.name === 'AbortError') {
+        resolve({ thanhCong: false, loiMessage: 'Xử lý quá lâu. Vui lòng thử lại.' })
+      } else {
+        resolve({ thanhCong: false, loiMessage: loi.message || 'Không thể kết nối đến server' })
+      }
+    })
+  })
+}
+
 export const taiFile = async (duongDan, tenFile) => {
   // Tải file từ server
   try {
     const response = await fetch(duongDan)
-    
+
     if (!response.ok) {
       throw new Error('Không thể tải file')
     }
@@ -129,9 +227,9 @@ export const taiFileZip = async (jobId, tenFileZipFallback = '') => {
 }
 
 export const layDanhSachTemplate = async () => {
-  // Lấy danh sách template từ backend
+  // Lấy danh sách template từ backend (no-store tránh browser cache stale data)
   try {
-    const response = await fetch(`${API_BASE_URL}/api/templates`)
+    const response = await fetch(`${API_BASE_URL}/api/templates`, { cache: 'no-store' })
     if (!response.ok) throw new Error('Không thể tải danh sách template')
     const data = await response.json()
     return { thanhCong: true, templates: data.templates || [] }

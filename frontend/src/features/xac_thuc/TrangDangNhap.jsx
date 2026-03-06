@@ -59,14 +59,22 @@ const TrangDangNhap = () => {
   }, [navigate])
 
   const xuLyDangNhapGoogle = async () => {
-    // Xử lý đăng nhập bằng Google (redirect flow - tránh COOP)
+    // Xử lý đăng nhập bằng Google (qua popup)
     setDangXuLy(true)
     try {
-      await dangNhapVoiGoogle()
-      // Trang sẽ redirect sang Google, không cần xử lý tiếp
+      const ketQua = await dangNhapVoiGoogle()
+      if (ketQua.thanhCong && ketQua.nguoiDung) {
+        toast.success(`Chào mừng ${ketQua.nguoiDung.displayName || 'bạn'}!`)
+        navigate('/chuyen-doi')
+      } else if (ketQua.loiMessage) {
+        toast.error(ketQua.loiMessage)
+      }
     } catch (loi) {
       toast.error('Không thể kết nối đến Google')
-      setDangXuLy(false)
+    } finally {
+      if (!window.location.pathname.includes('/chuyen-doi')) {
+        setDangXuLy(false)
+      }
     }
   }
 
@@ -214,8 +222,8 @@ const TrangDangNhap = () => {
             <button
               onClick={() => setCheDoForm('dangNhap')}
               className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${cheDoForm === 'dangNhap'
-                  ? 'bg-primary-600 text-white shadow-lg'
-                  : 'text-white/60 hover:text-white'
+                ? 'bg-primary-600 text-white shadow-lg'
+                : 'text-white/60 hover:text-white'
                 }`}
             >
               Đăng nhập
@@ -223,8 +231,8 @@ const TrangDangNhap = () => {
             <button
               onClick={() => setCheDoForm('dangKy')}
               className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${cheDoForm === 'dangKy'
-                  ? 'bg-primary-600 text-white shadow-lg'
-                  : 'text-white/60 hover:text-white'
+                ? 'bg-primary-600 text-white shadow-lg'
+                : 'text-white/60 hover:text-white'
                 }`}
             >
               Đăng ký

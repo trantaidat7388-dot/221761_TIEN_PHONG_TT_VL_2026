@@ -4,20 +4,23 @@ import uuid
 import shutil
 import zipfile
 import time
+import json
 import asyncio
 import re
 from pathlib import Path
 from datetime import datetime
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Query, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query, BackgroundTasks, Request
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from chuyen_doi import ChuyenDoiWordSangLatex
-from utils import don_dep_file_rac, bien_dich_latex
+from utils import don_dep_file_rac, bien_dich_latex, find_main_tex, extract_zip_template, package_output_directory
+from tex_log_parser import parse_latex_log
+from template_preprocessor import TemplatePreprocessor
 
 # Khởi tạo FastAPI app
 app = FastAPI(title="Word2LaTeX API", version="1.0.0")
@@ -86,21 +89,21 @@ def xoa_thu_muc_an_toan(duong_dan: Path):
         in_log_loi(f"Không thể xóa thư mục: {duong_dan}", loi)
 
 
-async def don_dep_sau_15_phut(duong_dan: Path):
-    # Dọn dẹp thư mục job sau 15 phút để user có thời gian tải ZIP
+async def don_dep_sau_thoi_gian(duong_dan: Path, giay: int = 3600):
+    # Dọn dẹp thư mục job sau TTL (mặc định 1 giờ) để user có thời gian tải ZIP
     try:
-        await asyncio.sleep(900)
+        await asyncio.sleep(giay)
     except Exception as loi:
         in_log_loi(f"Lỗi sleep cleanup: {duong_dan}", loi)
     xoa_thu_muc_an_toan(duong_dan)
 
 
-def chay_don_dep_sau_15_phut(duong_dan: Path):
-    # Chạy cleanup async trong threadpool để không block request
-    try:
-        asyncio.run(don_dep_sau_15_phut(duong_dan))
-    except Exception as loi:
-        in_log_loi(f"Không thể chạy cleanup: {duong_dan}", loi)
+# Alias backward-compatible
+async def don_dep_sau_15_phut(duong_dan: Path):
+    await don_dep_sau_thoi_gian(duong_dan, 900)
+
+
+
 
 
 def quet_xoa_thu_muc_mo_coi(thu_muc_goc: Path, so_gio_ton_tai_toi_da: int):
@@ -141,56 +144,135 @@ def doc_api():
 @app.get("/api/templates")
 def lay_danh_sach_template():
     # Lấy danh sách tất cả templates (mặc định + custom)
+    # Luôn đọc trực tiếp từ disk — KHÔNG cache trong memory
     templates = []
     
     # Templates mặc định
-    for name, label, filename in [
+    DEFAULT_TEMPLATES = [
         ("ieee_conference", "IEEE Conference (2 cột)", "IEEE-conference-template-062824.tex"),
         ("onecolumn", "Article (1 cột)", "latex_template_onecolumn.tex"),
-    ]:
-        tpl_path = template_folder / filename
-        if tpl_path.exists():
+        ("springer_lncs", "Springer LNCS", "samplepaper_springer_.tex"),
+    ]
+    
+    # Tập hợp tên file/thư mục mặc định — dùng để loại trừ khi liệt kê custom templates
+    DEFAULT_BASENAMES = set()
+    for _, _, fn in DEFAULT_TEMPLATES:
+        DEFAULT_BASENAMES.add(Path(fn).stem)  # e.g. "IEEE-conference-template-062824"
+    # Thêm các file phụ thuộc (.cls, .j2) không phải template user upload
+    DEFAULT_BASENAMES.update({'IEEEtran', 'llncs'})
+    
+    for name, label, filename in DEFAULT_TEMPLATES:
+        # Tìm trong custom_templates trước (ghi đè), rồi input_data (mặc định)
+        tpl_custom = custom_template_folder / filename
+        tpl_default = template_folder / filename
+        
+        path = tpl_custom if tpl_custom.exists() else tpl_default
+        if path.exists():
             templates.append({
                 "id": name,
-                "ten": label,
+                "ten": label + (" (Tùy chỉnh)" if tpl_custom.exists() else ""),
                 "loai": "mac_dinh",
-                "kichThuoc": tpl_path.stat().st_size
+                "kichThuoc": path.stat().st_size
             })
     
-    # Templates custom do người dùng upload
-    for tpl_file in custom_template_folder.glob("*.tex"):
-        templates.append({
-            "id": f"custom_{tpl_file.stem}",
-            "ten": tpl_file.stem,
-            "loai": "tuy_chinh",
-            "kichThuoc": tpl_file.stat().st_size
-        })
+    # Templates custom do người dùng upload — bỏ qua file/thư mục mặc định và .j2
+    for tpl_path in custom_template_folder.iterdir():
+        if tpl_path.is_file() and tpl_path.suffix in ('.j2', '.cls', '.bst'):
+            continue
+        
+        # Bỏ qua nếu là file mặc định đã được liệt kê ở trên
+        if tpl_path.stem in DEFAULT_BASENAMES or tpl_path.name in DEFAULT_BASENAMES:
+            continue
+        
+        if tpl_path.is_file() and tpl_path.suffix == '.tex':
+            templates.append({
+                "id": f"custom_{tpl_path.stem}",
+                "ten": tpl_path.stem,
+                "loai": "tuy_chinh",
+                "kichThuoc": tpl_path.stat().st_size
+            })
+        elif tpl_path.is_dir():
+            # Find main tex bằng hàm tiện ích
+            try:
+                main_tex = Path(find_main_tex(str(tpl_path)))
+            except Exception:
+                main_tex = None
+            if main_tex:
+                try:
+                    kich_thuoc = sum(f.stat().st_size for f in tpl_path.rglob('*') if f.is_file())
+                except Exception:
+                    kich_thuoc = 0
+                templates.append({
+                    "id": f"custom_{tpl_path.name}",
+                    "ten": tpl_path.name,
+                    "loai": "tuy_chinh",
+                    "kichThuoc": kich_thuoc
+                })
     
-    return {"templates": templates}
+    return JSONResponse(
+        content={"templates": templates},
+        headers={"Cache-Control": "no-store"}
+    )
 
 
 @app.post("/api/templates/upload")
 async def tai_len_template(file: UploadFile = File(...)):
-    # Upload template LaTeX tùy chỉnh
-    if not file.filename.endswith('.tex'):
-        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .tex")
+    # Upload template LaTeX tùy chỉnh (hỗ trợ .tex và .zip)
+    is_zip = file.filename.lower().endswith('.zip')
+    if not (file.filename.lower().endswith('.tex') or is_zip):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .tex hoặc .zip")
     
     contents = await file.read()
-    if len(contents) > 2 * 1024 * 1024:  # 2MB
-        raise HTTPException(status_code=400, detail="File template quá lớn (tối đa 2MB)")
+    if len(contents) > 20 * 1024 * 1024:  # 20MB
+        raise HTTPException(status_code=400, detail="File template quá lớn (tối đa 20MB)")
     
-    # Kiểm tra nội dung có phải LaTeX hợp lệ
-    text = contents.decode('utf-8', errors='ignore')
-    if '\\documentclass' not in text and '\\begin{document}' not in text:
-        raise HTTPException(status_code=400, detail="File không phải template LaTeX hợp lệ (thiếu documentclass hoặc begin{document})")
+    safe_name = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in Path(file.filename).stem)
+    safe_name = safe_name.strip('_') or "template"
     
-    # Lưu file
-    safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in Path(file.filename).stem)
-    save_path = custom_template_folder / f"{safe_name}.tex"
-    
-    with open(save_path, 'wb') as f:
-        f.write(contents)
-    
+    if not is_zip:
+        text = contents.decode('utf-8', errors='ignore')
+        if '\\documentclass' not in text and '\\begin{document}' not in text:
+            raise HTTPException(status_code=400, detail="File không phải template LaTeX hợp lệ")
+        save_path = custom_template_folder / f"{safe_name}.tex"
+        with open(save_path, 'wb') as f:
+            f.write(contents)
+    else:
+        # Xử lý file zip
+        target_dir = custom_template_folder / safe_name
+        target_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = target_dir / "temp.zip"
+        with open(zip_path, 'wb') as f:
+            f.write(contents)
+            
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(target_dir)
+        except Exception as e:
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise HTTPException(status_code=400, detail="File ZIP không hợp lệ")
+        finally:
+            if zip_path.exists():
+                zip_path.unlink()
+                
+        # Nếu zip chỉ chứa 1 thư mục duy nhất thì dời các file ra ngoài
+        extracted_items = list(target_dir.iterdir())
+        if len(extracted_items) == 1 and extracted_items[0].is_dir():
+            inner_dir = extracted_items[0]
+            for item in inner_dir.iterdir():
+                shutil.move(str(item), str(target_dir / item.name))
+            inner_dir.rmdir()
+                
+        # Kiểm tra file .tex chính
+        has_main_tex = False
+        for f in target_dir.rglob("*.tex"):
+            text = doc_noi_dung_tex_an_toan(f)
+            if '\\documentclass' in text and '\\begin{document}' in text:
+                has_main_tex = True
+                break
+        if not has_main_tex:
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise HTTPException(status_code=400, detail="Không tìm thấy file .tex chính (có chứa documentclass) trong thư mục ZIP")
+
     return {
         "thanhCong": True,
         "template": {
@@ -211,11 +293,15 @@ def xoa_template(template_id: str):
     
     name = template_id.replace("custom_", "", 1)
     file_path = custom_template_folder / f"{name}.tex"
+    dir_path = custom_template_folder / name
     
-    if not file_path.exists():
+    if file_path.exists():
+        file_path.unlink()
+    elif dir_path.exists() and dir_path.is_dir():
+        shutil.rmtree(dir_path, ignore_errors=True)
+    else:
         raise HTTPException(status_code=404, detail="Template không tồn tại")
     
-    file_path.unlink()
     return {"thanhCong": True, "message": f"Đã xóa template: {name}"}
 
 
@@ -223,7 +309,8 @@ def xoa_template(template_id: str):
 async def chuyen_doi_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    template_type: str = Query("ieee_conference", description="ieee_conference hoặc custom_xxx")
+    template_type: str = Query("ieee_conference", description="ieee_conference hoặc custom_xxx"),
+    template_file: UploadFile = File(None, description="Tùy chọn: file .tex hoặc .zip chứa template")
 ):
     # Endpoint chuyển đổi file Word → LaTeX
     
@@ -251,6 +338,9 @@ async def chuyen_doi_file(
     # Tạo tên file an toàn
     original_name = Path(file.filename).stem  # Tên không có extension
     safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in original_name)
+    safe_name = safe_name.lstrip(" -_")
+    if not safe_name:
+        safe_name = "document"
     
     job_folder = temp_folder / f"job_{job_id}"
     job_folder.mkdir(parents=True, exist_ok=True)
@@ -260,36 +350,118 @@ async def chuyen_doi_file(
     input_path = job_folder / input_filename
     output_filename = f"{safe_name}_{timestamp}.tex"
     output_path = job_folder / output_filename
-    images_folder = job_folder / f"{safe_name}_{timestamp}"
+    images_folder = job_folder / "images"
     images_folder.mkdir(parents=True, exist_ok=True)
 
     with open(input_path, "wb") as f:
         f.write(contents)
     
-    # Chọn template (mặc định hoặc custom)
-    TEMPLATE_MAP = {
-        "ieee_conference": "IEEE-conference-template-062824.tex",
-        "twocolumn": "IEEE-conference-template-062824.tex",
-        "onecolumn": "latex_template_onecolumn.tex",
-        "elsarticle": "elsarticle-template-harv.tex",
-        "springer_lncs": "splnproc1110.tex"
-    }
+    template_path = None
+    
+    # 1. Ưu tiên sử dụng file template được upload trực tiếp
+    if template_file:
+        is_zip = template_file.filename.lower().endswith('.zip')
+        template_contents = await template_file.read()
+        
+        if is_zip:
+            zip_path = job_folder / "uploaded_template.zip"
+            with open(zip_path, "wb") as f:
+                f.write(template_contents)
+            try:
+                extract_zip_template(str(zip_path), str(job_folder))
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"File ZIP template không hợp lệ: {e}")
+            finally:
+                if zip_path.exists():
+                    zip_path.unlink()
 
-    if template_type.startswith("custom_"):
-        custom_name = template_type.replace("custom_", "", 1)
-        template_path = custom_template_folder / f"{custom_name}.tex"
-    elif template_type in TEMPLATE_MAP:
-        template_path = template_folder / TEMPLATE_MAP[template_type]
+            # Tìm file .tex chính bằng hàm tiện ích (đệ quy + blacklist + ưu tiên main.tex)
+            try:
+                template_path = Path(find_main_tex(str(job_folder)))
+            except FileNotFoundError:
+                raise HTTPException(status_code=400, detail="Không tìm thấy file .tex chính (có chứa \\documentclass) trong ZIP")
+
+            # Nếu file .tex chính nằm ở thư mục con, copy các file dependency (.cls, .sty, .bst, hình ảnh)
+            # lên job_folder để trình biên dịch xelatex nhìn thấy chúng.
+            template_tex_dir = template_path.parent
+            if template_tex_dir != job_folder:
+                print(f"[INFO] File .tex chính nằm trong thư mục con: {template_tex_dir.relative_to(job_folder)}")
+                dep_extensions = {'.cls', '.sty', '.bst', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib'}
+                for item in template_tex_dir.rglob("*"):
+                    if item.is_file() and item.suffix.lower() in dep_extensions:
+                        target_file = job_folder / item.relative_to(template_tex_dir)
+                        target_file.parent.mkdir(parents=True, exist_ok=True)
+                        if not target_file.exists():
+                            shutil.copy2(item, target_file)
+                # Copy file .tex chính ra job_folder để compiler cwd đúng
+                main_tex_dest = job_folder / template_path.name
+                if not main_tex_dest.exists():
+                    shutil.copy2(template_path, main_tex_dest)
+                template_path = main_tex_dest
+        else:
+            # Upload file .tex đơn
+            template_path = job_folder / "custom_uploaded_template.tex"
+            with open(template_path, "wb") as f:
+                f.write(template_contents)
+                
+    # 2. Xử lý template theo template_type (nếu không upload file)
     else:
-        # Mặc định: sử dụng IEEE Conference template
-        template_path = template_folder / "IEEE-conference-template-062824.tex"
-    
-    if not template_path.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=f"Template không tồn tại: {template_path.name}"
-        )
-    
+        TEMPLATE_MAP = {
+            "ieee_conference": "IEEE-conference-template-062824.tex",
+            "twocolumn": "IEEE-conference-template-062824.tex",
+            "onecolumn": "latex_template_onecolumn.tex",
+            "elsarticle": "elsarticle-template-harv.tex",
+            "springer_lncs": "samplepaper_springer_.tex"
+        }
+
+        if template_type.startswith("custom_"):
+            custom_name = template_type.replace("custom_", "", 1)
+            temp_file = custom_template_folder / f"{custom_name}.tex"
+            temp_dir = custom_template_folder / custom_name
+            
+            if temp_file.exists():
+                template_path = temp_file
+            elif temp_dir.exists() and temp_dir.is_dir():
+                # Dùng hàm tiện ích find_main_tex (đệ quy + blacklist + ưu tiên main.tex)
+                try:
+                    template_path = Path(find_main_tex(str(temp_dir)))
+                except FileNotFoundError:
+                    # Fallback: lấy bất kỳ file .tex nào
+                    template_path = next(temp_dir.rglob("*.tex"), None)
+            else:
+                raise HTTPException(status_code=500, detail="Template tùy chỉnh không tồn tại")
+        elif template_type in TEMPLATE_MAP:
+            template_path = custom_template_folder / TEMPLATE_MAP[template_type]
+            if not template_path.exists():
+                template_path = template_folder / TEMPLATE_MAP[template_type]
+        else:
+            template_path = custom_template_folder / "IEEE-conference-template-062824.tex"
+            if not template_path.exists():
+                template_path = template_folder / "IEEE-conference-template-062824.tex"
+        
+        if not template_path or not template_path.exists():
+            raise HTTPException(
+                status_code=500,
+                detail=f"Template không tồn tại hoặc lỗi cấu trúc thư mục."
+            )
+        
+        # Copy các file dependencies (.cls, .sty, .bst, images) sang thư mục job_folder để thư mục an toàn khi run
+        template_dir_actual = template_path.parent
+        for item in template_dir_actual.rglob("*"):
+            if item.is_file() and item.suffix in ['.cls', '.sty', '.bst', '.png', '.jpg', '.pdf']:
+                try:
+                    target_file = job_folder / item.relative_to(template_dir_actual)
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(item, target_file)
+                except Exception as e:
+                    print(f"[WARN] Lỗi khi copy dependency {item.name}: {e}")
+        
+        # Copy template .tex sang job_folder để chuyen_doi sinh .j2 trong job folder (không ô nhiễm custom_templates/)
+        template_dest = job_folder / template_path.name
+        if not template_dest.exists():
+            shutil.copy2(template_path, template_dest)
+        template_path = template_dest
+
     zip_filename = output_filename.replace('.tex', '.zip')
     zip_path = job_folder / zip_filename
 
@@ -309,19 +481,77 @@ async def chuyen_doi_file(
 
         print(f"[JOB {job_id}] Đã tạo file .tex, bắt đầu biên dịch PDF")
 
-        bien_dich_latex(str(output_path))
+        # POST-PROCESSING: Thay đường dẫn ảnh tuyệt đối bằng đường dẫn tương đối
+        # Overleaf không thể đọc đường dẫn tuyệt đối (d:/, c:/, /tmp/...)
+        try:
+            tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
+            images_abs = str(images_folder).replace('\\', '/')
+            job_abs = str(job_folder).replace('\\', '/')
+            # Thay thế đường dẫn tuyệt đối thư mục images bằng "images"
+            tex_raw = tex_raw.replace(images_abs + '/', 'images/')
+            tex_raw = tex_raw.replace(images_abs, 'images')
+            # Thay thế đường dẫn tuyệt đối thư mục job bằng ""
+            tex_raw = tex_raw.replace(job_abs + '/', '')
+            tex_raw = tex_raw.replace(job_abs, '')
+            # Cũng xử lý backslash paths trên Windows
+            images_abs_win = str(images_folder).replace('/', '\\')
+            job_abs_win = str(job_folder).replace('/', '\\')
+            tex_raw = tex_raw.replace(images_abs_win + '\\', 'images/')
+            tex_raw = tex_raw.replace(images_abs_win, 'images')
+            tex_raw = tex_raw.replace(job_abs_win + '\\', '')
+            tex_raw = tex_raw.replace(job_abs_win, '')
+            output_path.write_text(tex_raw, encoding='utf-8')
+            print(f"[JOB {job_id}] POST-PROCESS: Đã thay thế đường dẫn tuyệt đối → tương đối")
+        except Exception as e:
+            print(f"[WARN] Không thể post-process đường dẫn ảnh: {e}")
+
+        # Redundant package injection removed - already handled by TemplatePreprocessor
+
+        thanh_cong, thong_bao_loi = bien_dich_latex(str(output_path))
+        
+        if not thanh_cong:
+            print(f"[JOB {job_id}] CẢNH BÁO: Biên dịch Xelatex thất bại.")
+            # Tìm kiếm lỗi thiếu file LaTeX (.cls, .sty)
+            missing_file_match = re.search(r"! LaTeX Error: File `(.*?)' not found.", thong_bao_loi)
+            if missing_file_match:
+                ten_file_thieu = missing_file_match.group(1)
+                raise Exception(f"Thiếu thư viện cấu trúc LaTeX: '{ten_file_thieu}'. Vui lòng tải {ten_file_thieu} vào thư mục chứa template này.")
+                
+            # Dùng NLP/Regex bóc xuất nguyên nhân Visual Debugger
+            chi_tiet_loi = parse_latex_log(thong_bao_loi)
+            # Serialize thành JSON string để HTTP exception có thể chuyên chở được data cấu trúc phức tạp
+            raise HTTPException(
+                status_code=422,
+                detail=json.dumps(chi_tiet_loi, ensure_ascii=False)
+            )
 
         print(f"[JOB {job_id}] Đã chạy xelatex, đọc log/metadata")
 
         so_trang = None
         try:
             log_path = output_path.with_suffix('.log')
-            log_text = doc_noi_dung_tex_an_toan(log_path)
-            match = re.search(r'Output written on .*?\((\d+) pages?[,\)]', log_text)
-            if match:
-                so_trang = int(match.group(1))
+            if log_path.exists():
+                log_text = log_path.read_text(encoding='utf-8', errors='ignore')
+                match = re.search(r'Output written on .*?\((\d+) pages?[,\)]', log_text, re.DOTALL)
+                if match:
+                    so_trang = int(match.group(1))
         except Exception as loi:
-            in_log_loi(f"Không thể lấy số trang từ log job_id={job_id}", loi)
+            print(f"[WARN] Không thể lấy số trang từ log job_id={job_id}: {loi}")
+
+        # Tránh trả về 0 trang nếu PDF đã tồn tại nhưng không parse được log
+        pdf_path = output_path.with_suffix('.pdf')
+        if so_trang is None and pdf_path.exists():
+            so_trang = 1  # Fallback tối thiểu
+            # Thử đọc trực tiếp binary PDF để đếm thẻ /Type/Page
+            try:
+                import re as regex_pdf
+                with open(pdf_path, 'rb') as f:
+                    pdf_data = f.read()
+                    pages_found = len(regex_pdf.findall(b'/Type\\s*/Page\\b', pdf_data))
+                    if pages_found > 0:
+                        so_trang = pages_found
+            except:
+                pass
 
         don_dep_file_rac(str(output_path))
 
@@ -330,51 +560,49 @@ async def chuyen_doi_file(
         if not output_path.exists():
             raise Exception("Không tạo được file .tex đầu ra")
 
-        tex_raw = doc_noi_dung_tex_an_toan(output_path)
+        tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
         if not tex_raw.strip():
             raise Exception("Nội dung LaTeX rỗng hoặc không đọc được")
 
         so_hinh_anh = 0
         so_cong_thuc = 0
+        so_bang = 0
         try:
             so_hinh_anh = len(re.findall(r'\\includegraphics', tex_raw))
+            so_bang = len(re.findall(r'\\begin\{table', tex_raw))
 
-            so_equation_env = len(re.findall(r'\\begin\{(equation\*?|align\*?|eqnarray\*?)\}', tex_raw))
-            so_bracket_math = len(re.findall(r'\\\[', tex_raw))
-            so_inline_math = len(re.findall(r'\\\(', tex_raw))
-            so_dollar_blocks = len(re.findall(r'\$\$', tex_raw)) // 2
-            so_cong_thuc = so_equation_env + so_bracket_math + so_inline_math + so_dollar_blocks
+            # Ưu tiên dùng total_formulas từ AST IR (chính xác hơn regex)
+            ir = getattr(bo_chuyen_doi, 'ir', None)
+            if ir and ir.get("metadata", {}).get("total_formulas", 0) > 0:
+                so_cong_thuc = ir["metadata"]["total_formulas"]
+            else:
+                so_equation_env = len(re.findall(r'\\begin\{(equation\*?|align\*?|eqnarray\*?)\}', tex_raw))
+                so_bracket_math = len(re.findall(r'\\\[', tex_raw))
+                so_inline_math = len(re.findall(r'\\\(', tex_raw))
+                so_dollar_blocks = len(re.findall(r'\$\$', tex_raw)) // 2
+                so_cong_thuc = so_equation_env + so_bracket_math + so_inline_math + so_dollar_blocks
         except Exception as loi:
-            in_log_loi(f"Không thể đếm metadata job_id={job_id}", loi)
+            print(f"[WARN] Không thể đếm metadata job_id={job_id}: {loi}")
 
         thoi_gian_xu_ly_giay = max(0.0, time.time() - thoi_gian_bat_dau)
 
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            if output_path.exists():
-                zipf.write(output_path, output_filename)
-
-            pdf_path = output_path.with_suffix('.pdf')
-            if pdf_path.exists():
-                zipf.write(pdf_path, pdf_path.name)
-
-            if images_folder.exists():
-                for image_file in images_folder.rglob('*'):
-                    if image_file.is_file():
-                        arcname = (Path('images') / image_file.relative_to(job_folder)).as_posix()
-                        zipf.write(image_file, arcname)
+        # Đóng gói TOÀN BỘ thư mục job thành ZIP (Overleaf-ready)
+        # Bao gồm: .tex render, .pdf, images, .cls, .sty, .bst, .bib, v.v.
+        # Loại trừ: file rác LaTeX (.aux, .log), file Word gốc (.docx, .docm)
+        package_output_directory(str(job_folder), str(zip_path))
 
         print(f"[JOB {job_id}] Hoàn tất zip: {zip_path.name}")
 
         tex_content = tex_raw
 
         da_thanh_cong = True
-        background_tasks.add_task(chay_don_dep_sau_15_phut, job_folder)
+        background_tasks.add_task(don_dep_sau_15_phut, job_folder)
 
         # Lưu copy vào thư mục outputs để người dùng dễ theo dõi
         try:
             shutil.copy2(zip_path, outputs_folder / zip_filename)
         except Exception as e:
-            in_log_loi(f"Không thể copy kết quả vào outputs job_id={job_id}", e)
+            print(f"[WARN] Không thể copy kết quả vào outputs job_id={job_id}: {e}")
 
         return JSONResponse(status_code=200, content={
             "thanh_cong": True,
@@ -386,16 +614,298 @@ async def chuyen_doi_file(
                 "so_trang": so_trang,
                 "so_hinh_anh": so_hinh_anh,
                 "so_cong_thuc": so_cong_thuc,
+                "so_bang": so_bang,
                 "thoi_gian_xu_ly_giay": round(thoi_gian_xu_ly_giay, 2)
             }
         })
+    except HTTPException:
+        raise
     except Exception as loi:
-        in_log_loi(f"Lỗi chuyển đổi job_id={job_id}", loi)
+        print(f"[ERROR] Lỗi chuyển đổi job_id={job_id}: {loi}")
         thong_diep_loi = str(loi).strip() if str(loi) else "File Word không hợp lệ hoặc không thể xử lý"
         return JSONResponse(status_code=400, content={"error": f"Lỗi khi chuyển đổi: {thong_diep_loi}"})
     finally:
         if not da_thanh_cong:
-            xoa_thu_muc_an_toan(job_folder)
+             xoa_thu_muc_an_toan(job_folder)
+
+
+# ========================= SSE REAL-TIME CONVERSION =========================
+
+@app.post("/api/chuyen-doi-stream")
+async def chuyen_doi_file_stream(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    template_type: str = Query("ieee_conference"),
+    template_file: UploadFile = File(None)
+):
+    """SSE endpoint: trả về Server-Sent Events cho tiến trình chuyển đổi real-time."""
+
+    ten_file = file.filename.lower()
+    if not (ten_file.endswith('.docx') or ten_file.endswith('.docm')):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .docx hoặc .docm")
+
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File quá lớn. Kích thước tối đa 10MB")
+
+    template_contents = None
+    template_filename = None
+    if template_file:
+        template_contents = await template_file.read()
+        template_filename = template_file.filename
+
+    async def event_generator():
+        job_id = str(uuid.uuid4())
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        da_thanh_cong = False
+
+        original_name = Path(file.filename).stem
+        safe_name = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in original_name)
+        safe_name = safe_name.strip('_') or "document"
+
+        job_folder = temp_folder / f"job_{job_id}"
+        job_folder.mkdir(parents=True, exist_ok=True)
+        file_ext = Path(file.filename).suffix.lower() or '.docx'
+        input_filename = f"{safe_name}_{timestamp}{file_ext}"
+        input_path = job_folder / input_filename
+        output_filename = f"{safe_name}_{timestamp}.tex"
+        output_path = job_folder / output_filename
+        images_folder = job_folder / "images"
+        images_folder.mkdir(parents=True, exist_ok=True)
+
+        def sse_event(step, msg, **extra):
+            payload = {"step": step, "msg": msg, **extra}
+            return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        try:
+            yield sse_event(1, "Đang tải file lên server...")
+
+            with open(input_path, "wb") as f:
+                f.write(contents)
+
+            # --- Template resolution (giống endpoint gốc) ---
+            template_path = None
+            if template_contents:
+                is_zip = template_filename and template_filename.lower().endswith('.zip')
+                if is_zip:
+                    zip_path = job_folder / "uploaded_template.zip"
+                    with open(zip_path, "wb") as f:
+                        f.write(template_contents)
+                    try:
+                        extract_zip_template(str(zip_path), str(job_folder))
+                    except ValueError as e:
+                        yield sse_event(-1, f"File ZIP template không hợp lệ: {e}", error=True)
+                        return
+                    finally:
+                        if zip_path.exists():
+                            zip_path.unlink()
+                    try:
+                        template_path = Path(find_main_tex(str(job_folder)))
+                    except FileNotFoundError:
+                        yield sse_event(-1, "Không tìm thấy file .tex chính trong ZIP", error=True)
+                        return
+                    template_tex_dir = template_path.parent
+                    if template_tex_dir != job_folder:
+                        dep_extensions = {'.cls', '.sty', '.bst', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib'}
+                        for item in template_tex_dir.rglob("*"):
+                            if item.is_file() and item.suffix.lower() in dep_extensions:
+                                target_file = job_folder / item.relative_to(template_tex_dir)
+                                target_file.parent.mkdir(parents=True, exist_ok=True)
+                                if not target_file.exists():
+                                    shutil.copy2(item, target_file)
+                        main_tex_dest = job_folder / template_path.name
+                        if not main_tex_dest.exists():
+                            shutil.copy2(template_path, main_tex_dest)
+                        template_path = main_tex_dest
+                else:
+                    template_path = job_folder / "custom_uploaded_template.tex"
+                    with open(template_path, "wb") as f:
+                        f.write(template_contents)
+            else:
+                TEMPLATE_MAP = {
+                    "ieee_conference": "IEEE-conference-template-062824.tex",
+                    "twocolumn": "IEEE-conference-template-062824.tex",
+                    "onecolumn": "latex_template_onecolumn.tex",
+                    "elsarticle": "elsarticle-template-harv.tex",
+                    "springer_lncs": "samplepaper_springer_.tex"
+                }
+                if template_type.startswith("custom_"):
+                    custom_name = template_type.replace("custom_", "", 1)
+                    temp_file = custom_template_folder / f"{custom_name}.tex"
+                    temp_dir = custom_template_folder / custom_name
+                    if temp_file.exists(): template_path = temp_file
+                    elif temp_dir.exists() and temp_dir.is_dir():
+                        try: template_path = Path(find_main_tex(str(temp_dir)))
+                        except FileNotFoundError: template_path = next(temp_dir.rglob("*.tex"), None)
+                    else:
+                        yield sse_event(-1, "Template tùy chỉnh không tồn tại", error=True)
+                        return
+                elif template_type in TEMPLATE_MAP:
+                    template_path = custom_template_folder / TEMPLATE_MAP[template_type]
+                    if not template_path.exists():
+                        template_path = template_folder / TEMPLATE_MAP[template_type]
+                else:
+                    template_path = custom_template_folder / "IEEE-conference-template-062824.tex"
+                    if not template_path.exists():
+                        template_path = template_folder / "IEEE-conference-template-062824.tex"
+
+                if not template_path or not template_path.exists():
+                    yield sse_event(-1, "Template không tồn tại", error=True)
+                    return
+
+                template_dir_actual = template_path.parent
+                for item in template_dir_actual.rglob("*"):
+                    if item.is_file() and item.suffix in ['.cls', '.sty', '.bst', '.png', '.jpg', '.pdf']:
+                        try:
+                            target_file = job_folder / item.relative_to(template_dir_actual)
+                            target_file.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(item, target_file)
+                        except Exception:
+                            pass
+                template_dest = job_folder / template_path.name
+                if not template_dest.exists():
+                    shutil.copy2(template_path, template_dest)
+                template_path = template_dest
+
+            yield sse_event(2, "Đang xây dựng cây AST & Phân tích ngữ nghĩa...")
+
+            thoi_gian_bat_dau = time.time()
+            bo_chuyen_doi = ChuyenDoiWordSangLatex(
+                duong_dan_word=str(input_path),
+                duong_dan_template=str(template_path),
+                duong_dan_dau_ra=str(output_path),
+                thu_muc_anh=str(images_folder),
+                mode='demo'
+            )
+
+            yield sse_event(3, "Đang nạp dữ liệu vào template Jinja2...")
+            bo_chuyen_doi.chuyen_doi()
+
+            # Post-process: đường dẫn tuyệt đối → tương đối
+            try:
+                tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
+                images_abs = str(images_folder).replace('\\', '/')
+                job_abs = str(job_folder).replace('\\', '/')
+                tex_raw = tex_raw.replace(images_abs + '/', 'images/')
+                tex_raw = tex_raw.replace(images_abs, 'images')
+                tex_raw = tex_raw.replace(job_abs + '/', '')
+                tex_raw = tex_raw.replace(job_abs, '')
+                images_abs_win = str(images_folder).replace('/', '\\')
+                job_abs_win = str(job_folder).replace('/', '\\')
+                tex_raw = tex_raw.replace(images_abs_win + '\\', 'images/')
+                tex_raw = tex_raw.replace(images_abs_win, 'images')
+                tex_raw = tex_raw.replace(job_abs_win + '\\', '')
+                tex_raw = tex_raw.replace(job_abs_win, '')
+                output_path.write_text(tex_raw, encoding='utf-8')
+            except Exception:
+                pass
+
+            yield sse_event(4, "Đang biên dịch XeLaTeX (Sẽ mất vài giây)...")
+
+            thanh_cong, thong_bao_loi = bien_dich_latex(str(output_path))
+
+            if not thanh_cong:
+                # Structured error with Visual Debugger info
+                missing_file_match = re.search(r"! LaTeX Error: File `(.*?)' not found.", thong_bao_loi)
+                if missing_file_match:
+                    yield sse_event(-1, f"Thiếu thư viện: '{missing_file_match.group(1)}'",
+                                    error=True, error_type="MISSING_FILE")
+                    return
+
+                chi_tiet_loi = parse_latex_log(thong_bao_loi)
+                yield sse_event(-1, chi_tiet_loi.get("thong_diep", "Biên dịch thất bại"),
+                                error=True,
+                                error_type="LATEX_COMPILATION_FAILED",
+                                details=chi_tiet_loi)
+                return
+
+            yield sse_event(5, "Đang đóng gói kết quả...")
+
+            # Metadata
+            so_trang = None
+            try:
+                log_path = output_path.with_suffix('.log')
+                if log_path.exists():
+                    log_text = log_path.read_text(encoding='utf-8', errors='ignore')
+                    match = re.search(r'Output written on .*?\((\d+) pages?[,\)]', log_text, re.DOTALL)
+                    if match:
+                        so_trang = int(match.group(1))
+            except Exception:
+                pass
+
+            pdf_path = output_path.with_suffix('.pdf')
+            if so_trang is None and pdf_path.exists():
+                so_trang = 1
+                try:
+                    with open(pdf_path, 'rb') as f:
+                        pdf_data = f.read()
+                        pages_found = len(re.findall(b'/Type\\s*/Page\\b', pdf_data))
+                        if pages_found > 0:
+                            so_trang = pages_found
+                except Exception:
+                    pass
+
+            don_dep_file_rac(str(output_path))
+
+            tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
+            so_hinh_anh = len(re.findall(r'\\includegraphics', tex_raw))
+            so_bang = len(re.findall(r'\\begin\{table', tex_raw))
+
+            # Ưu tiên dùng total_formulas từ AST IR (chính xác hơn regex)
+            ir = getattr(bo_chuyen_doi, 'ir', None)
+            if ir and ir.get("metadata", {}).get("total_formulas", 0) > 0:
+                so_cong_thuc = ir["metadata"]["total_formulas"]
+            else:
+                so_equation_env = len(re.findall(r'\\begin\{(equation\*?|align\*?|eqnarray\*?)\}', tex_raw))
+                so_bracket_math = len(re.findall(r'\\\[', tex_raw))
+                so_inline_math = len(re.findall(r'\\\(', tex_raw))
+                so_dollar_blocks = len(re.findall(r'\$\$', tex_raw)) // 2
+                so_cong_thuc = so_equation_env + so_bracket_math + so_inline_math + so_dollar_blocks
+            thoi_gian_xu_ly_giay = max(0.0, time.time() - thoi_gian_bat_dau)
+
+            zip_filename = output_filename.replace('.tex', '.zip')
+            zip_path = job_folder / zip_filename
+            package_output_directory(str(job_folder), str(zip_path))
+
+            da_thanh_cong = True
+            # TTL 1 giờ (3600s) cho temp directories
+            background_tasks.add_task(don_dep_sau_thoi_gian, job_folder, 3600)
+
+            try:
+                shutil.copy2(zip_path, outputs_folder / zip_filename)
+            except Exception:
+                pass
+
+            yield sse_event(6, "Hoàn tất!",
+                            done=True,
+                            job_id=job_id,
+                            ten_file_zip=zip_filename,
+                            ten_file_latex=output_filename,
+                            tex_content=tex_raw,
+                            metadata={
+                                "so_trang": so_trang,
+                                "so_hinh_anh": so_hinh_anh,
+                                "so_cong_thuc": so_cong_thuc,
+                                "so_bang": so_bang,
+                                "thoi_gian_xu_ly_giay": round(thoi_gian_xu_ly_giay, 2)
+                            })
+
+        except Exception as loi:
+            print(f"[ERROR] SSE lỗi job_id={job_id}: {loi}")
+            yield sse_event(-1, str(loi) or "Lỗi không xác định", error=True)
+        finally:
+            if not da_thanh_cong:
+                xoa_thu_muc_an_toan(job_folder)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @app.get("/api/tai-ve-zip/{job_id}")
@@ -423,18 +933,23 @@ def tai_ve_zip_theo_job(job_id: str):
 
 @app.on_event("startup")
 def xu_ly_don_dep_khi_khoi_dong():
+    print("Registered POST routes:")
+    for route in app.routes:
+        if getattr(route, "methods", None) and "POST" in route.methods:
+            print(f" - {route.path}")
+
     # Dọn dẹp các thư mục/file mồ côi trong temp khi server khởi động
     try:
         so_gio_ttl = int(os.getenv('TEMP_TTL_HOURS', '6').strip() or '6')
     except Exception as loi:
-        in_log_loi('Giá trị TEMP_TTL_HOURS không hợp lệ, dùng mặc định 6 giờ', loi)
+        print(f'[WARN] Giá trị TEMP_TTL_HOURS không hợp lệ, dùng mặc định 6 giờ: {loi}')
         so_gio_ttl = 6
     quet_xoa_thu_muc_mo_coi(temp_folder, so_gio_ttl)
 
     try:
         so_gio_ttl_output = int(os.getenv('OUTPUT_TTL_HOURS', '24').strip() or '24')
     except Exception as loi:
-        in_log_loi('Giá trị OUTPUT_TTL_HOURS không hợp lệ, dùng mặc định 24 giờ', loi)
+        print(f'[WARN] Giá trị OUTPUT_TTL_HOURS không hợp lệ, dùng mặc định 24 giờ: {loi}')
         so_gio_ttl_output = 24
     quet_xoa_thu_muc_mo_coi(outputs_folder, so_gio_ttl_output)
 
@@ -446,6 +961,12 @@ def kiem_tra_suc_khoe():
         "status": "healthy",
         "timestamp": datetime.now().isoformat()
     }
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    # Trả về 204 No Content để tắt lỗi 404 từ trình duyệt
+    return Response(status_code=204)
 
 
 if __name__ == "__main__":

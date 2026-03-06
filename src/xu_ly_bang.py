@@ -641,10 +641,11 @@ class BoXuLyBang:
         # Bỏ kẻ sọc dọc '|' theo chuẩn booktabs
         # Sửa lại: Dùng đường kẻ dọc và ngang tiêu chuẩn (giống Word)
         cot = '|' + '|'.join([f"p{{{width_frac:.3f}\\linewidth}}" for _ in range(so_cot)]) + '|'
-        vi_tri = "[H]" if self.bo_chuyen.mode == 'demo' else "[htbp]"
+        vi_tri = "[!ht]"
 
         latex = rf"\begin{{table}}{vi_tri}" + "\n"
         latex += r"  \centering" + "\n"
+        latex += r"  \resizebox{\columnwidth}{!}{%" + "\n"
         latex += rf"  \begin{{tabular}}{{{cot}}}" + "\n"
         
         # Dùng \hline thay vì \toprule
@@ -725,9 +726,9 @@ class BoXuLyBang:
 
             latex += "    " + " & ".join(dong_filtered) + r" \\" + "\n"
             
-            # Dùng \hline cho mỗi dòng để giống word
             latex += r"  \hline" + "\n"
-        latex += r"  \end{tabular}" + "\n"
+        latex += r"  \end{tabular}%" + "\n"
+        latex += r"  }" + "\n"
         caption_bang = self.bo_chuyen.bat_caption_bang()
         caption_final = caption_bang or ""
         latex += rf"  \caption{{{caption_final}}}" + "\n"
@@ -760,12 +761,13 @@ class BoXuLyBang:
             if self.la_bang_chua_anh(bang):
                 danh_sach_anh = self.trich_xuat_anh_tu_bang(bang)
                 if danh_sach_anh:
+                    # Ảnh trong bảng: KHÔNG dùng \begin{figure} để tránh lỗi "Not in outer par mode"
                     if len(danh_sach_anh) > 1:
                         caption_con = self._tim_caption_con_trong_bang(bang)
                         caption_chinh = self.bo_chuyen.bat_caption_hinh()
-                        return self.bo_chuyen.tao_latex_nhom_hinh(danh_sach_anh, caption_con, caption_chinh)
+                        return self.bo_chuyen.tao_latex_nhom_hinh(danh_sach_anh, caption_con, caption_chinh, trong_bang=True)
                     caption_chinh = self.bo_chuyen.bat_caption_hinh()
-                    return self.bo_chuyen.tao_latex_hinh(danh_sach_anh[0], caption_chinh)
+                    return self.bo_chuyen.tao_latex_hinh(danh_sach_anh[0], caption_chinh, trong_bang=True)
 
             self.bo_chuyen.so_bang_noi_dung += 1
             self.bo_chuyen.dem_bang += 1

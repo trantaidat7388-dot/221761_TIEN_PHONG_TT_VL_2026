@@ -1,13 +1,118 @@
 # utils.py - Tiện ích: escape ký tự, biên dịch LaTeX, dọn file rác
 
 import os
+import re
 import subprocess
 import time
+import zipfile
+import shutil
+import tempfile
+
+def fix_macro_enabled_docx(doc_path: str):
+    """
+    Tẩy rửa file Word có chứa Macro (.docm hoặc .docx dính macro):
+    - Mở file dưới dạng ZIP, sửa [Content_Types].xml (content type macro → chuẩn).
+    - Sửa các file .rels để loại bỏ các Relationship tới macro.
+    - Xóa file cũ và đổi tên file ZIP mới thành doc_path để python-docx mở được.
+    """
+    if not os.path.isfile(doc_path):
+        return
+    try:
+        dir_path = os.path.dirname(os.path.abspath(doc_path))
+        base_name = os.path.basename(doc_path)
+        new_zip_path = os.path.join(dir_path, base_name + ".tmp_cleaned.docx")
+
+        with zipfile.ZipFile(doc_path, 'r') as zin:
+            with zipfile.ZipFile(new_zip_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    fn_lower = item.filename.lower()
+                    # Bỏ qua file VBA macro
+                    if 'vbaproject.bin' in fn_lower or 'vbadata.xml' in fn_lower:
+                        continue
+
+                    content = zin.read(item.filename)
+                    
+                    # Sửa [Content_Types].xml (MIME types)
+                    if item.filename == '[Content_Types].xml':
+                        content_str = content.decode('utf-8', errors='ignore')
+                        content_str = content_str.replace(
+                            'application/vnd.ms-word.document.macroEnabled.main+xml',
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml'
+                        )
+                        # Loại bỏ Override cho vbaProject / vbaData
+                        content_str = re.sub(
+                            r'<Override[^>]*(?:vbaProject|vbaData)[^>]*/>', '', content_str
+                        )
+                        content = content_str.encode('utf-8')
+                        
+                    # Sửa các file quan hệ (.rels) để xóa liên kết tới macro
+                    elif fn_lower.endswith('.rels'):
+                        content_str = content.decode('utf-8', errors='ignore')
+                        # Regex xóa tag Relationship nếu Target chứa vbaProject hoặc vbaData
+                        content_str = re.sub(
+                            r'<Relationship[^>]*Target="[^"]*(?:vbaProject|vbaData)[^"]*"[^>]*/>', 
+                            '', content_str
+                        )
+                        # Cũng xóa Relationship dựa trên Type nếu Target không bắt được
+                        content_str = re.sub(
+                            r'<Relationship[^>]*Type="[^"]*vbaProject"[^>]*/>',
+                            '', content_str
+                        )
+                        content = content_str.encode('utf-8')
+
+                    zout.writestr(item, content)
+
+        os.remove(doc_path)
+        os.rename(new_zip_path, doc_path)
+        print(f"[INFO] Tẩy rửa macro thành công cho {doc_path}")
+    except Exception as e:
+        print(f"[WARN] Lỗi khi tẩy rửa macro cho {doc_path}: {e}")
 
 def loc_ky_tu(text: str) -> str:
     # Escape các ký tự đặc biệt LaTeX (\, %, $, _, &, #, {, }, ~, ^)
     if not text:
         return ""
+    
+    # BƯỚC 1: Thay Unicode bằng PLACEHOLDER trước khi escape ký tự đặc biệt
+    # Placeholder dùng ASCII thuần túy, không chứa ký tự LaTeX đặc biệt
+    unicode_placeholders = [
+        ('\u00BD', 'UNIPHxFRAC12x', r'\ensuremath{\frac{1}{2}}'),
+        ('\u00BC', 'UNIPHxFRAC14x', r'\ensuremath{\frac{1}{4}}'),
+        ('\u00BE', 'UNIPHxFRAC34x', r'\ensuremath{\frac{3}{4}}'),
+        ('\u00D7', 'UNIPHxTIMESx', r'\ensuremath{\times}'),
+        ('\u00F7', 'UNIPHxDIVx', r'\ensuremath{\div}'),
+        ('\u00B0', 'UNIPHxDEGx', r'\ensuremath{^{\circ}}'),
+        ('\u00B1', 'UNIPHxPMx', r'\ensuremath{\pm}'),
+        ('\u2265', 'UNIPHxGEQx', r'\ensuremath{\geq}'),
+        ('\u2264', 'UNIPHxLEQx', r'\ensuremath{\leq}'),
+        ('\u2260', 'UNIPHxNEQx', r'\ensuremath{\neq}'),
+        ('\u2248', 'UNIPHxAPPROXx', r'\ensuremath{\approx}'),
+        ('\u2192', 'UNIPHxRARRx', r'\ensuremath{\rightarrow}'),
+        ('\u2190', 'UNIPHxLARRx', r'\ensuremath{\leftarrow}'),
+        ('\u2022', 'UNIPHxBULLETx', r'\ensuremath{\bullet}'),
+    ]
+    # Ký tự Unicode thay thẳng (không cần placeholder)
+    simple_unicode = [
+        ('\u2014', '---'),   # em dash
+        ('\u2013', '--'),    # en dash
+        ('\u2018', "'"),     # Left single quote
+        ('\u2019', "'"),     # Right single quote
+        ('\u201C', "``"),    # Left double quote
+        ('\u201D', "''"),    # Right double quote
+        ('\u2026', '...'),   # ellipsis
+    ]
+    
+    ket_qua = text
+    
+    # Thay Unicode đơn giản trước
+    for ky_tu_u, thay_the_u in simple_unicode:
+        ket_qua = ket_qua.replace(ky_tu_u, thay_the_u)
+    
+    # Thay Unicode phức tạp bằng placeholder ASCII
+    for ky_tu_u, placeholder, _ in unicode_placeholders:
+        ket_qua = ket_qua.replace(ky_tu_u, placeholder)
+    
+    # BƯỚC 2: Escape ký tự đặc biệt LaTeX (bình thường)
     ky_tu_dac_biet = [
         ('\\', r'\textbackslash{}'),
         ('%', r'\%'),
@@ -20,9 +125,31 @@ def loc_ky_tu(text: str) -> str:
         ('~', r'\textasciitilde{}'),
         ('^', r'\textasciicircum{}'),
     ]
-    ket_qua = text
     for ky_tu, thay_the in ky_tu_dac_biet:
         ket_qua = ket_qua.replace(ky_tu, thay_the)
+    
+    # BƯỚC 3: Thay placeholder lại thành LaTeX command thật
+    for _, placeholder, latex_cmd in unicode_placeholders:
+        ket_qua = ket_qua.replace(placeholder, latex_cmd)
+        
+    # Tự động bọc URL vào thẻ \url{} để tránh lỗi tràn lề (overflow) trong PDF
+    # Bỏ qua nếu URL đã nằm trong \url{...} hoặc \href{...}
+    import re
+    # Pattern tìm URL không nằm trong cấu trúc LaTeX URL
+    url_pattern = r'(?<!\\url\{)(?<!\\href\{)(https?://[^\s<>"]+)'
+    
+    # Hàm con hỗ trợ việc thay thế với điều kiện an toàn
+    def thay_the_url(match):
+        url = match.group(1)
+        # Loại bỏ các dấu câu thừa phần cuối URL nếu có
+        url_sach = url.rstrip('.,;:\')]}')
+        duoi_bi_cat = url[len(url_sach):]
+        # Phục hồi các ký tự escape LaTeX đặc biệt trong URL để \url{} xử lý đúng
+        url_nguyen_thuy = url_sach.replace(r'\_', '_').replace(r'\&', '&').replace(r'\%', '%').replace(r'\#', '#')
+        return rf'\url{{{url_nguyen_thuy}}}' + duoi_bi_cat
+
+    ket_qua = re.sub(url_pattern, thay_the_url, ket_qua)
+    
     return ket_qua
 
 def don_dep_file_rac(duong_dan_dau_ra: str):
@@ -58,15 +185,16 @@ def xoa_file_an_toan(duong_dan_file: str, so_lan_thu: int = 3, thoi_gian_cho_ms:
             return False
     return False
 
-def bien_dich_latex(duong_dan_dau_ra: str) -> bool:
-    # Biên dịch file .tex bằng XeLaTeX, trả về True nếu thành công
+def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None) -> tuple[bool, str]:
+    # Biên dịch file .tex bằng XeLaTeX, trả về (thành_công, thông_báo_lỗi)
+    # thu_muc_bien_dich: tùy chọn override thư mục cwd cho xelatex (quan trọng cho ZIP template)
     ten_file = os.path.basename(duong_dan_dau_ra)
-    thu_muc = os.path.dirname(duong_dan_dau_ra)
+    thu_muc = thu_muc_bien_dich or os.path.dirname(duong_dan_dau_ra)
 
-    print(f"\nBắt đầu biên dịch XeLaTeX: {ten_file}")
+    print(f"\nBắt đầu biên dịch XeLaTeX: {ten_file} (cwd={thu_muc})")
     try:
         ket_qua = subprocess.run(
-            ['xelatex', '-interaction=nonstopmode', ten_file],
+            ['xelatex', '-interaction=nonstopmode', f"./{ten_file}"],
             cwd=thu_muc if thu_muc else '.',
             capture_output=True,
             text=True,
@@ -77,18 +205,168 @@ def bien_dich_latex(duong_dan_dau_ra: str) -> bool:
 
         if ket_qua.returncode == 0:
             print(f" Biên dịch thành công: {ten_file.replace('.tex', '.pdf')}")
-            return True
+            return True, ""
         else:
             print(f" Biên dịch thất bại (exit code: {ket_qua.returncode})")
+            error_msg = ket_qua.stdout + "\n" + ket_qua.stderr
             if ket_qua.stderr:
                 print(f"Lỗi: {ket_qua.stderr[:500]}")
-            return False
+            return False, error_msg
     except FileNotFoundError:
-        print(" Không tìm thấy xelatex. Vui lòng cài đặt TeX Live hoặc MiKTeX.")
-        return False
+        msg = "Không tìm thấy xelatex. Vui lòng cài đặt TeX Live hoặc MiKTeX."
+        print(f" {msg}")
+        return False, msg
     except subprocess.TimeoutExpired:
-        print(" Biên dịch quá thời gian (>120s)")
-        return False
+        msg = "Biên dịch quá thời gian (>120s)"
+        print(f" {msg}")
+        return False, msg
     except Exception as e:
-        print(f" Lỗi: {e}")
-        return False
+        msg = f"Lỗi hệ thống: {e}"
+        print(f" {msg}")
+        return False, msg
+
+
+# ========================= ZIP TEMPLATE SUPPORT =========================
+
+def extract_zip_template(zip_path: str, target_dir: str = None) -> str:
+    """Giải nén file ZIP template vào thư mục đích.
+
+    - Kiểm tra bảo mật path traversal trước khi giải nén.
+    - Nếu ZIP chứa duy nhất 1 thư mục con, tự động dời nội dung lên gốc.
+
+    Args:
+        zip_path: Đường dẫn tới file .zip template.
+        target_dir: Thư mục đích. Nếu None sẽ tạo tempdir mới.
+
+    Returns:
+        Đường dẫn tuyệt đối tới thư mục đã giải nén.
+
+    Raises:
+        ValueError: Nếu file ZIP bị hỏng hoặc chứa đường dẫn không an toàn.
+    """
+    if target_dir is None:
+        target_dir = tempfile.mkdtemp(prefix="w2l_zip_")
+    os.makedirs(target_dir, exist_ok=True)
+
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            for member in zf.namelist():
+                member_norm = os.path.normpath(member)
+                if member_norm.startswith('..') or os.path.isabs(member_norm):
+                    raise ValueError(f"ZIP chứa đường dẫn không an toàn: {member}")
+            zf.extractall(target_dir)
+    except zipfile.BadZipFile:
+        raise ValueError("File ZIP bị hỏng hoặc không hợp lệ")
+
+    # Nếu ZIP chỉ chứa 1 thư mục duy nhất ở cấp gốc → dời nội dung lên
+    items = [i for i in os.listdir(target_dir)
+             if not i.startswith('.')]  # bỏ qua dotfiles
+    if len(items) == 1:
+        single = os.path.join(target_dir, items[0])
+        if os.path.isdir(single):
+            for child in os.listdir(single):
+                src = os.path.join(single, child)
+                dst = os.path.join(target_dir, child)
+                shutil.move(src, dst)
+            os.rmdir(single)
+
+    return os.path.abspath(target_dir)
+
+
+def find_main_tex(directory: str) -> str:
+    """Tìm file .tex chính trong thư mục (đệ quy bằng os.walk).
+
+    File chính được xác định bằng việc chứa ``\\documentclass``.
+    Nếu có nhiều ứng cử viên, ưu tiên:
+        1. File không nằm trong blacklist (guide, sample…)
+        2. File tên ``main.tex``
+        3. File ở thư mục nông nhất (gốc)
+
+    Args:
+        directory: Thư mục gốc để tìm kiếm.
+
+    Returns:
+        Đường dẫn tuyệt đối tới file .tex chính.
+
+    Raises:
+        FileNotFoundError: Nếu không tìm thấy file .tex chính.
+    """
+    BLACKLIST = ['guide', 'instruction', 'sample', 'example',
+                 'readme', 'howto', 'template_guide']
+    candidates = []
+
+    for dirpath, _dirnames, filenames in os.walk(directory):
+        for fname in filenames:
+            if not fname.lower().endswith('.tex'):
+                continue
+            fpath = os.path.join(dirpath, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                if '\\documentclass' not in content:
+                    continue
+                rel = os.path.relpath(fpath, directory)
+                depth = rel.count(os.sep)
+                stem_lower = fname.lower().replace('.tex', '')
+                is_bl = any(kw in stem_lower for kw in BLACKLIST)
+                candidates.append((fpath, fname.lower(), depth, is_bl))
+            except Exception:
+                continue
+
+    if not candidates:
+        raise FileNotFoundError(
+            "Không tìm thấy file .tex chính (chứa \\documentclass) trong thư mục"
+        )
+
+    # Sắp xếp: không blacklist → tên main.tex → nông nhất
+    candidates.sort(key=lambda c: (c[3], c[1] != 'main.tex', c[2]))
+    return os.path.abspath(candidates[0][0])
+
+
+def package_output_directory(work_dir: str, output_zip_path: str,
+                             exclude_suffixes: set = None) -> str:
+    """Đóng gói thư mục làm việc thành file ZIP (dành cho Overleaf upload).
+
+    CHỈ bao gồm: .tex (đã render), .pdf, .bib, .cls, .sty, .bst, và thư mục images/.
+    Loại trừ: file rác LaTeX, file Word gốc, thư mục template giải nén rác,
+    và chính file ZIP đầu ra.
+
+    Args:
+        work_dir: Thư mục làm việc cần đóng gói.
+        output_zip_path: Đường dẫn file ZIP đầu ra.
+        exclude_suffixes: Tập hợp đuôi file cần bỏ qua (không dùng nữa, giữ cho tương thích).
+
+    Returns:
+        Đường dẫn tới file ZIP đã tạo.
+    """
+    # Chỉ cho phép các đuôi file này vào ZIP
+    ALLOWED_EXTENSIONS = {
+        '.tex', '.pdf', '.bib', '.cls', '.sty', '.bst',
+        '.png', '.jpg', '.jpeg', '.eps', '.gif', '.svg', '.tif', '.tiff',
+    }
+    # Chỉ cho phép thư mục con này (images)
+    ALLOWED_SUBDIRS = {'images'}
+
+    abs_zip = os.path.abspath(output_zip_path)
+
+    with zipfile.ZipFile(output_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for item_name in os.listdir(work_dir):
+            item_path = os.path.join(work_dir, item_name)
+
+            # Bỏ qua chính file ZIP đầu ra
+            if os.path.abspath(item_path) == abs_zip:
+                continue
+
+            if os.path.isfile(item_path):
+                _, ext = os.path.splitext(item_name)
+                if ext.lower() in ALLOWED_EXTENSIONS:
+                    zf.write(item_path, item_name)
+            elif os.path.isdir(item_path) and item_name.lower() in ALLOWED_SUBDIRS:
+                # Đệ quy gom thư mục images/
+                for dirpath, _dirnames, filenames in os.walk(item_path):
+                    for fname in filenames:
+                        fpath = os.path.join(dirpath, fname)
+                        arcname = os.path.relpath(fpath, work_dir)
+                        zf.write(fpath, arcname)
+
+    return output_zip_path
