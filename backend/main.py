@@ -14,6 +14,14 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Query, BackgroundT
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordRequestForm
+
+import database
+import models
+import auth
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -24,6 +32,9 @@ from template_preprocessor import TemplatePreprocessor
 
 # Khởi tạo FastAPI app
 app = FastAPI(title="Word2LaTeX API", version="1.0.0")
+
+# Khởi tạo database
+models.Base.metadata.create_all(bind=database.engine)
 
 # Cấu hình CORS - cho phép frontend truy cập (hỗ trợ nhiều port)
 cors_allow_all = os.getenv('CORS_ALLOW_ALL', '0').strip() == '1'
@@ -129,6 +140,44 @@ def quet_xoa_thu_muc_mo_coi(thu_muc_goc: Path, so_gio_ton_tai_toi_da: int):
         in_log_loi(f"Không thể quét dọn thư mục: {thu_muc_goc}", loi)
 
 
+# ── BUILT-IN TEMPLATE RESOLVER ───────────────────────────────────────────────
+# Directory-based templates live in custom_templates/<name>/.
+# Legacy flat .tex templates (onecolumn, elsarticle) keep their .tex extension
+# so the resolver also handles them transparently.
+
+_BUILTIN_TEMPLATE_MAP = {
+    "ieee_conference":  "IEEE-conference-template-062824",
+    "twocolumn":        "IEEE-conference-template-062824",
+    "springer_lncs":    "LaTeX2e_Proceedings_Templates_download__1",
+    "onecolumn":        "latex_template_onecolumn.tex",
+    "elsarticle":       "elsarticle-template-harv.tex",
+}
+
+def _resolve_template_path(template_type: str) -> Path | None:
+    """Resolve a built-in template type → absolute path of the main .tex file."""
+    tpl_name = _BUILTIN_TEMPLATE_MAP.get(template_type)
+    if not tpl_name:
+        return None
+    if tpl_name.endswith(".tex"):
+        # Legacy flat-file template
+        for probe in (custom_template_folder / tpl_name, template_folder / tpl_name):
+            if probe.exists():
+                return probe
+        return None
+    # Directory-based template
+    dir_path = custom_template_folder / tpl_name
+    if dir_path.is_dir():
+        try:
+            return Path(find_main_tex(str(dir_path)))
+        except FileNotFoundError:
+            return next(dir_path.rglob("*.tex"), None)
+    # Fallback: try flat .tex with the same stem
+    for probe in (custom_template_folder / f"{tpl_name}.tex", template_folder / f"{tpl_name}.tex"):
+        if probe.exists():
+            return probe
+    return None
+
+
 @app.get("/")
 def doc_api():
     # Endpoint gốc - hướng dẫn sử dụng API
@@ -143,47 +192,46 @@ def doc_api():
 
 @app.get("/api/templates")
 def lay_danh_sach_template():
-    # Lấy danh sách tất cả templates (mặc định + custom)
     # Luôn đọc trực tiếp từ disk — KHÔNG cache trong memory
     templates = []
-    
-    # Templates mặc định
-    DEFAULT_TEMPLATES = [
-        ("ieee_conference", "IEEE Conference (2 cột)", "IEEE-conference-template-062824.tex"),
-        ("onecolumn", "Article (1 cột)", "latex_template_onecolumn.tex"),
-        ("springer_lncs", "Springer LNCS", "samplepaper_springer_.tex"),
+
+    # Built-in templates shown to every user (directory-based)
+    BUILTIN = [
+        ("ieee_conference", "IEEE Conference (2 cột)",  "IEEE-conference-template-062824"),
+        ("springer_lncs",  "Springer LNCS",             "LaTeX2e_Proceedings_Templates_download__1"),
     ]
-    
-    # Tập hợp tên file/thư mục mặc định — dùng để loại trừ khi liệt kê custom templates
-    DEFAULT_BASENAMES = set()
-    for _, _, fn in DEFAULT_TEMPLATES:
-        DEFAULT_BASENAMES.add(Path(fn).stem)  # e.g. "IEEE-conference-template-062824"
-    # Thêm các file phụ thuộc (.cls, .j2) không phải template user upload
-    DEFAULT_BASENAMES.update({'IEEEtran', 'llncs'})
-    
-    for name, label, filename in DEFAULT_TEMPLATES:
-        # Tìm trong custom_templates trước (ghi đè), rồi input_data (mặc định)
-        tpl_custom = custom_template_folder / filename
-        tpl_default = template_folder / filename
-        
-        path = tpl_custom if tpl_custom.exists() else tpl_default
-        if path.exists():
-            templates.append({
-                "id": name,
-                "ten": label + (" (Tùy chỉnh)" if tpl_custom.exists() else ""),
-                "loai": "mac_dinh",
-                "kichThuoc": path.stat().st_size
-            })
-    
-    # Templates custom do người dùng upload — bỏ qua file/thư mục mặc định và .j2
+
+    # Names/stems to hide from the custom list (defaults + support/class files)
+    HIDDEN = {
+        "IEEE-conference-template-062824",
+        "LaTeX2e_Proceedings_Templates_download__1",
+        "LaTeX2e_Proceedings_Templates_download__1_",
+        "samplepaper_springer_", "samplepaper_springer",
+        "samplepaper",
+        "latex_template_onecolumn",
+        "elsarticle-template-harv", "elsarticle-template-num",
+        "IEEEtran", "llncs",
+    }
+
+    for tpl_id, tpl_label, tpl_dir in BUILTIN:
+        dir_path = custom_template_folder / tpl_dir
+        if dir_path.is_dir():
+            try:
+                find_main_tex(str(dir_path))  # validate
+                kich_thuoc = sum(f.stat().st_size for f in dir_path.rglob('*') if f.is_file())
+                templates.append({"id": tpl_id, "ten": tpl_label, "loai": "mac_dinh", "kichThuoc": kich_thuoc})
+            except Exception:
+                pass
+
+    # Custom templates uploaded by users
     for tpl_path in custom_template_folder.iterdir():
+        # Skip non-template files
         if tpl_path.is_file() and tpl_path.suffix in ('.j2', '.cls', '.bst'):
             continue
-        
-        # Bỏ qua nếu là file mặc định đã được liệt kê ở trên
-        if tpl_path.stem in DEFAULT_BASENAMES or tpl_path.name in DEFAULT_BASENAMES:
+        # Skip anything matching a default/support name
+        if tpl_path.stem in HIDDEN or tpl_path.name in HIDDEN:
             continue
-        
+
         if tpl_path.is_file() and tpl_path.suffix == '.tex':
             templates.append({
                 "id": f"custom_{tpl_path.stem}",
@@ -192,23 +240,18 @@ def lay_danh_sach_template():
                 "kichThuoc": tpl_path.stat().st_size
             })
         elif tpl_path.is_dir():
-            # Find main tex bằng hàm tiện ích
             try:
-                main_tex = Path(find_main_tex(str(tpl_path)))
-            except Exception:
-                main_tex = None
-            if main_tex:
-                try:
-                    kich_thuoc = sum(f.stat().st_size for f in tpl_path.rglob('*') if f.is_file())
-                except Exception:
-                    kich_thuoc = 0
+                find_main_tex(str(tpl_path))
+                kich_thuoc = sum(f.stat().st_size for f in tpl_path.rglob('*') if f.is_file())
                 templates.append({
                     "id": f"custom_{tpl_path.name}",
                     "ten": tpl_path.name,
                     "loai": "tuy_chinh",
                     "kichThuoc": kich_thuoc
                 })
-    
+            except Exception:
+                pass
+
     return JSONResponse(
         content={"templates": templates},
         headers={"Cache-Control": "no-store"}
@@ -406,38 +449,22 @@ async def chuyen_doi_file(
                 
     # 2. Xử lý template theo template_type (nếu không upload file)
     else:
-        TEMPLATE_MAP = {
-            "ieee_conference": "IEEE-conference-template-062824.tex",
-            "twocolumn": "IEEE-conference-template-062824.tex",
-            "onecolumn": "latex_template_onecolumn.tex",
-            "elsarticle": "elsarticle-template-harv.tex",
-            "springer_lncs": "samplepaper_springer_.tex"
-        }
-
         if template_type.startswith("custom_"):
             custom_name = template_type.replace("custom_", "", 1)
             temp_file = custom_template_folder / f"{custom_name}.tex"
             temp_dir = custom_template_folder / custom_name
-            
+
             if temp_file.exists():
                 template_path = temp_file
             elif temp_dir.exists() and temp_dir.is_dir():
-                # Dùng hàm tiện ích find_main_tex (đệ quy + blacklist + ưu tiên main.tex)
                 try:
                     template_path = Path(find_main_tex(str(temp_dir)))
                 except FileNotFoundError:
-                    # Fallback: lấy bất kỳ file .tex nào
                     template_path = next(temp_dir.rglob("*.tex"), None)
             else:
                 raise HTTPException(status_code=500, detail="Template tùy chỉnh không tồn tại")
-        elif template_type in TEMPLATE_MAP:
-            template_path = custom_template_folder / TEMPLATE_MAP[template_type]
-            if not template_path.exists():
-                template_path = template_folder / TEMPLATE_MAP[template_type]
         else:
-            template_path = custom_template_folder / "IEEE-conference-template-062824.tex"
-            if not template_path.exists():
-                template_path = template_folder / "IEEE-conference-template-062824.tex"
+            template_path = _resolve_template_path(template_type) or _resolve_template_path("ieee_conference")
         
         if not template_path or not template_path.exists():
             raise HTTPException(
@@ -504,8 +531,6 @@ async def chuyen_doi_file(
             print(f"[JOB {job_id}] POST-PROCESS: Đã thay thế đường dẫn tuyệt đối → tương đối")
         except Exception as e:
             print(f"[WARN] Không thể post-process đường dẫn ảnh: {e}")
-
-        # Redundant package injection removed - already handled by TemplatePreprocessor
 
         thanh_cong, thong_bao_loi = bien_dich_latex(str(output_path))
         
@@ -589,7 +614,7 @@ async def chuyen_doi_file(
         # Đóng gói TOÀN BỘ thư mục job thành ZIP (Overleaf-ready)
         # Bao gồm: .tex render, .pdf, images, .cls, .sty, .bst, .bib, v.v.
         # Loại trừ: file rác LaTeX (.aux, .log), file Word gốc (.docx, .docm)
-        package_output_directory(str(job_folder), str(zip_path))
+        package_output_directory(str(job_folder), str(zip_path), generated_tex_name=output_filename)
 
         print(f"[JOB {job_id}] Hoàn tất zip: {zip_path.name}")
 
@@ -628,17 +653,28 @@ async def chuyen_doi_file(
         if not da_thanh_cong:
              xoa_thu_muc_an_toan(job_folder)
 
-
 # ========================= SSE REAL-TIME CONVERSION =========================
 
 @app.post("/api/chuyen-doi-stream")
 async def chuyen_doi_file_stream(
     background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile = File(...),
     template_type: str = Query("ieee_conference"),
-    template_file: UploadFile = File(None)
+    template_file: UploadFile = File(None),
+    db: Session = Depends(database.get_db)
 ):
     """SSE endpoint: trả về Server-Sent Events cho tiến trình chuyển đổi real-time."""
+
+    # --- Resolve user tùy chọn từ Bearer token ---
+    current_user = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1]
+        try:
+            current_user = auth.get_current_user(token=token, db=db)
+        except Exception:
+            pass   # gọp lỗi token thì bỏ qua, không chặn yêu cầu
 
     ten_file = file.filename.lower()
     if not (ten_file.endswith('.docx') or ten_file.endswith('.docm')):
@@ -722,13 +758,6 @@ async def chuyen_doi_file_stream(
                     with open(template_path, "wb") as f:
                         f.write(template_contents)
             else:
-                TEMPLATE_MAP = {
-                    "ieee_conference": "IEEE-conference-template-062824.tex",
-                    "twocolumn": "IEEE-conference-template-062824.tex",
-                    "onecolumn": "latex_template_onecolumn.tex",
-                    "elsarticle": "elsarticle-template-harv.tex",
-                    "springer_lncs": "samplepaper_springer_.tex"
-                }
                 if template_type.startswith("custom_"):
                     custom_name = template_type.replace("custom_", "", 1)
                     temp_file = custom_template_folder / f"{custom_name}.tex"
@@ -740,14 +769,8 @@ async def chuyen_doi_file_stream(
                     else:
                         yield sse_event(-1, "Template tùy chỉnh không tồn tại", error=True)
                         return
-                elif template_type in TEMPLATE_MAP:
-                    template_path = custom_template_folder / TEMPLATE_MAP[template_type]
-                    if not template_path.exists():
-                        template_path = template_folder / TEMPLATE_MAP[template_type]
                 else:
-                    template_path = custom_template_folder / "IEEE-conference-template-062824.tex"
-                    if not template_path.exists():
-                        template_path = template_folder / "IEEE-conference-template-062824.tex"
+                    template_path = _resolve_template_path(template_type) or _resolve_template_path("ieee_conference")
 
                 if not template_path or not template_path.exists():
                     yield sse_event(-1, "Template không tồn tại", error=True)
@@ -865,16 +888,34 @@ async def chuyen_doi_file_stream(
 
             zip_filename = output_filename.replace('.tex', '.zip')
             zip_path = job_folder / zip_filename
-            package_output_directory(str(job_folder), str(zip_path))
+            package_output_directory(str(job_folder), str(zip_path), generated_tex_name=output_filename)
 
             da_thanh_cong = True
             # TTL 1 giờ (3600s) cho temp directories
             background_tasks.add_task(don_dep_sau_thoi_gian, job_folder, 3600)
 
+            # Lưu output ZIP vào outputs/
+            output_zip_path = outputs_folder / zip_filename
             try:
-                shutil.copy2(zip_path, outputs_folder / zip_filename)
+                shutil.copy2(zip_path, output_zip_path)
             except Exception:
-                pass
+                output_zip_path = zip_path   # fallback
+
+            # Lưu lịch sử vào SQLite nếu người dùng đã đăng nhập
+            if current_user is not None:
+                try:
+                    history_record = models.ConversionHistory(
+                        user_id=current_user.id,
+                        job_id=job_id,
+                        file_name=file.filename,
+                        template_name=template_type,
+                        status="Thành công",
+                        file_path=str(output_zip_path)
+                    )
+                    db.add(history_record)
+                    db.commit()
+                except Exception as hist_err:
+                    print(f"[WARN] Không thể lưu lịch sử: {hist_err}")
 
             yield sse_event(6, "Hoàn tất!",
                             done=True,
@@ -967,6 +1008,167 @@ def kiem_tra_suc_khoe():
 async def favicon():
     # Trả về 204 No Content để tắt lỗi 404 từ trình duyệt
     return Response(status_code=204)
+
+
+# ── AUTH ENDPOINTS ────────────────────────────────────────────────────────────
+
+class RegisterRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/api/auth/register")
+def dang_ky(req: RegisterRequest, db: Session = Depends(database.get_db)):
+    """Tạo tài khoản mới, trả về JWT token."""
+    if db.query(models.User).filter(models.User.email == req.email).first():
+        raise HTTPException(status_code=400, detail="Email này đã được đăng ký")
+    if db.query(models.User).filter(models.User.username == req.username).first():
+        raise HTTPException(status_code=400, detail="Tên đăng nhập đã tồn tại")
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Mật khẩu phải có ít nhất 6 ký tự")
+
+    user = models.User(
+        username=req.username,
+        email=req.email,
+        hashed_password=auth.hash_password(req.password)
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = auth.create_access_token({"sub": str(user.id)})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email
+        }
+    }
+
+
+@app.post("/api/auth/login")
+def dang_nhap(req: LoginRequest, db: Session = Depends(database.get_db)):
+    """Đăng nhập bằng email + mật khẩu, trả về JWT token."""
+    user = db.query(models.User).filter(models.User.email == req.email).first()
+    if not user or not auth.verify_password(req.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
+
+    token = auth.create_access_token({"sub": str(user.id)})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email
+        }
+    }
+
+
+@app.get("/api/auth/me")
+def lay_thong_tin_ban_than(
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Trả về thông tin người dùng đang đăng nhập dựa trên JWT token."""
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "created_at": current_user.created_at.isoformat()
+    }
+
+
+# ── HISTORY ENDPOINTS (token-based) ─────────────────────────────────────────
+
+@app.get("/api/history")
+def lay_lich_su(
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Lấy lịch sử chuyển đổi của người dùng đang đăng nhập."""
+    records = (
+        db.query(models.ConversionHistory)
+        .filter(models.ConversionHistory.user_id == current_user.id)
+        .order_by(models.ConversionHistory.created_at.desc())
+        .all()
+    )
+    return {
+        "danhSach": [
+            {
+                "id": r.id,
+                "job_id": r.job_id,
+                "tenFileGoc": r.file_name,
+                "templateName": r.template_name,
+                "trangThai": r.status,
+                "file_path": r.file_path,
+                "thoiGian": r.created_at.isoformat()
+            }
+            for r in records
+        ]
+    }
+
+
+@app.delete("/api/history/{record_id}")
+def xoa_lich_su(
+    record_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Xóa một bản ghi lịch sử (chỉ của người dùng hiện tại)."""
+    record = db.query(models.ConversionHistory).filter(
+        models.ConversionHistory.id == record_id,
+        models.ConversionHistory.user_id == current_user.id
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi")
+    db.delete(record)
+    db.commit()
+    return {"thanhCong": True}
+
+
+@app.get("/api/download/{job_id}")
+def tai_ve_theo_job(
+    job_id: str,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Tải file ZIP từ đường dẫn được lưu trong DB."""
+    record = db.query(models.ConversionHistory).filter(
+        models.ConversionHistory.job_id == job_id,
+        models.ConversionHistory.user_id == current_user.id
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi")
+
+    zip_path = Path(record.file_path) if record.file_path else None
+
+    # Fallback: tìm trong temp_jobs
+    if not zip_path or not zip_path.exists():
+        job_folder = temp_folder / f"job_{job_id}"
+        if job_folder.exists():
+            zips = sorted(job_folder.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if zips:
+                zip_path = zips[0]
+
+    if not zip_path or not zip_path.exists():
+        raise HTTPException(status_code=404, detail="File ZIP không còn tồn tại trên server")
+
+    return FileResponse(
+        path=str(zip_path),
+        filename=zip_path.name,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename={zip_path.name}",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
 
 
 if __name__ == "__main__":

@@ -155,7 +155,7 @@ class WordASTParser:
 
                     if re.match(r'^[\(\[]*[a-zA-Z0-9][\)\]]*\.?$', cell_text):
                         pass
-                    elif re.match(r'^(Hình|Figure|Fig|Bảng|Table)\s*\d+', cell_text, re.IGNORECASE):
+                    elif re.match(r'^(Hình|Figure|Fig\.?|Bảng|Table)\s*\d+(\.\d+)*', cell_text, re.IGNORECASE):
                         pass
                     elif len(cell_text) > 20:
                         so_cell_co_text_dai += 1
@@ -246,8 +246,9 @@ class WordASTParser:
             if re.match(r'^(BẢNG|BANG|TABLE)\b', text, re.IGNORECASE):
                 used_nodes.add(idx_truoc)
                 caption_text = loc_ky_tu(text)
+                # FIX 1: Support decimal chapter numbers like "Table 3.1"
                 caption_text = re.sub(
-                    r'^(Bảng|Table|TABLE|Bang|BANG)\s*\d+\s*[:\.\-–—]?\s*',
+                    r'^(Bảng|Table|TABLE|Bang|BANG)\.?\s*\d+(\.\d+)*\s*[:\.\-–—]?\s*',
                     '', caption_text, flags=re.IGNORECASE
                 ).strip()
                 return caption_text
@@ -271,11 +272,12 @@ class WordASTParser:
                 text = phan_tu.text.strip()
                 if not text:
                     continue
-                if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG)\b', text, re.IGNORECASE):
+                # FIX 1: Support decimal chapter numbers like "Figure 3.1"
+                if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG\.?)\b', text, re.IGNORECASE):
                     used_nodes.add(idx_sau)
                     caption_text = loc_ky_tu(text)
                     caption_text = re.sub(
-                        r'^(Hình|Figure|Fig\.?)\s*\d+\s*[:\.\-–—]?\s*',
+                        r'^(Hình|Figure|Fig\.?)\s*\d+(\.\d+)*\s*[:\.\-–—]?\s*',
                         '', caption_text, flags=re.IGNORECASE
                     ).strip()
                     return caption_text
@@ -340,6 +342,7 @@ class WordASTParser:
                 has_img = bool(element._p.findall(f'.//{{{A_NAMESPACE}}}blip'))
                 if has_img:
                     # Figure caption: look 1-5 paragraphs BELOW
+                    # FIX 1: Match decimal figure numbers like "Figure 3.1"
                     for step in range(1, 6):
                         idx_after = idx + step
                         if idx_after >= len(elements):
@@ -352,7 +355,7 @@ class WordASTParser:
                         a_text = a_el.text.strip()
                         if not a_text:
                             continue
-                        if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG)\b', a_text, re.IGNORECASE):
+                        if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG\.?)\b', a_text, re.IGNORECASE):
                             used_nodes.add(idx_after)
                             break
                         if hasattr(a_el, 'style') and a_el.style and a_el.style.name and 'Heading' in a_el.style.name:
@@ -446,13 +449,27 @@ class WordASTParser:
                     if not any(x in text for x in ("Submission Template", "Reference Format", "Short Title")):
                         authors_buf.append(text)
                 elif state == "abstract":
-                    # Remove "Abstract" label if it started the paragraph
-                    clean_text = re.sub(r"^(abstract\.?)[:\s]*", "", text, flags=re.IGNORECASE).strip()
-                    if clean_text:
-                        abstract_buf.append(loc_ky_tu(clean_text))
+                    # FIX 3: Smart split — paragraph may contain BOTH "Abstract." and "Keywords:"
+                    combined_match = re.search(
+                        r'(?:abstract\.?\s*)(.+?)\s*(?:keywords?\s*[:\-–]\s*)(.+)',
+                        text, re.IGNORECASE | re.DOTALL
+                    )
+                    if combined_match:
+                        abs_text = combined_match.group(1).strip()
+                        kw_text  = combined_match.group(2).strip()
+                        if abs_text:
+                            abstract_buf.append(loc_ky_tu(abs_text))
+                        if kw_text:
+                            keywords_buf.append(loc_ky_tu(kw_text))
+                        # Jump state forward so subsequent parsing picks up body correctly
+                        state = "keywords"
+                    else:
+                        clean_text = re.sub(r"^(abstract\.?)[:\s]*", "", text, flags=re.IGNORECASE).strip()
+                        if clean_text:
+                            abstract_buf.append(loc_ky_tu(clean_text))
                 elif state == "keywords":
                     # Remove label
-                    clean_text = re.sub(r"^(Additional Keywords and Phrases:|Keywords:|Keywords\s*-|Index Terms:|Từ khóa:)\s*", "", text, flags=re.IGNORECASE).strip()
+                    clean_text = re.sub(r"^(Additional Keywords and Phrases:|Keywords?\s*[:\-–]|Index Terms:|Từ khóa:)\s*", "", text, flags=re.IGNORECASE).strip()
                     if clean_text:
                         keywords_buf.append(loc_ky_tu(clean_text))
                 elif state == "body":
@@ -721,19 +738,31 @@ class WordASTParser:
                 if m:
                     affil_map[m.group(1)] = re.sub(r'^\d+\s+', '', af).strip()
 
+        # FIX 2: Collect emails from affiliations block (standalone email lines)
+        email_pattern = re.compile(r'[\w\.\-\+]+@[\w\.\-]+')
+        extracted_emails = []
+        for af in all_affils:
+            emails_in_line = email_pattern.findall(af)
+            extracted_emails.extend(emails_in_line)
+
         if affil_map:
-            # Map by superscript numbers
+            # FIX 2: Map by superscript numbers/symbols (*, †, ‡ included)
             for a in authors:
                 name = a["name"]
-                # Extract trailing digits (superscript markers)
-                num_match = re.search(r'(\d[\d,\s]*)$', name)
+                # Match trailing superscript markers: digits, *, †, ‡, commas
+                num_match = re.search(r'([\d\*†‡,\s]+)$', name)
                 if num_match:
-                    nums = re.findall(r'\d+', num_match.group(1))
+                    raw_markers = num_match.group(1)
+                    # Extract only digit parts for affil_map lookup
+                    nums = re.findall(r'\d+', raw_markers)
                     a["name"] = name[:num_match.start()].strip()
                     a["affiliations"] = []
                     for n in nums:
                         if n in affil_map:
                             a["affiliations"].append(affil_map[n])
+                    # If * present and no numbered affil found, fall back to all
+                    if not a["affiliations"] and '*' in raw_markers:
+                        a["affiliations"] = list(affil_map.values())
                 else:
                     # No superscript => give all affiliations
                     a["affiliations"] = list(affil_map.values())
@@ -744,6 +773,15 @@ class WordASTParser:
             if any_empty and any_multi:
                 for a in authors:
                     a["affiliations"] = all_affils[:]
+
+        # FIX 2: Attach extracted emails to authors who have no email yet
+        if extracted_emails:
+            email_idx = 0
+            for a in authors:
+                has_email = any('@' in aff for aff in a.get('affiliations', []))
+                if not has_email and email_idx < len(extracted_emails):
+                    a.setdefault('email', extracted_emails[email_idx])
+                    email_idx += 1
 
         return authors
 

@@ -63,6 +63,11 @@ tmp/
 # Large test files (keep structure, ignore content)
 input_data/*.docx
 input_data/*.doc
+input_data/*.docm
+input_data/*.zip
+
+# Frontend build logs
+frontend/build_output*.txt
 
 # Node.js
 node_modules/
@@ -76,5 +81,15 @@ backend/__pycache__/
 # Temp jobs
 temp_jobs/
 
+# Generated conversion output archives (root-level)
+outputs/
+
+# Helper scripts
+_write_readme.py
+
 # Firebase config (sensitive)
 frontend/src/services/firebaseConfig.js
+
+# SQLite Database
+*.db
+word2latex.db

@@ -2,18 +2,17 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  FileText, 
-  Download, 
-  Trash2, 
-  CheckCircle2, 
-  XCircle, 
+import {
+  FileText,
+  Download,
+  Trash2,
+  CheckCircle2,
+  XCircle,
   Clock,
   MoreVertical
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { xoaLichSuChuyenDoi } from '../../services/firebaseConfig'
-import { taiFileZip, taiFile } from '../../services/api'
+import { xoaLichSuChuyenDoi, taiFileZip, taiFile } from '../../services/api'
 
 const BangLichSu = ({ danhSach, dangTai, onCapNhat }) => {
   // Component bảng hiển thị lịch sử với các action xóa và tải
@@ -36,7 +35,7 @@ const BangLichSu = ({ danhSach, dangTai, onCapNhat }) => {
   const dinhDangThoiGian = (date) => {
     // Định dạng thời gian thành chuỗi dễ đọc
     if (!date) return 'N/A'
-    
+
     const now = new Date()
     const diff = now - date
     const phut = Math.floor(diff / 60000)
@@ -118,7 +117,7 @@ const BangLichSu = ({ danhSach, dangTai, onCapNhat }) => {
   // Empty state
   if (!danhSach || danhSach.length === 0) {
     return (
-      <motion.div 
+      <motion.div
         className="glass-card p-8 text-center"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -265,9 +264,9 @@ const BangLichSu = ({ danhSach, dangTai, onCapNhat }) => {
 
       {/* Click outside to close menu */}
       {menuMoId && (
-        <div 
-          className="fixed inset-0 z-[5]" 
-          onClick={() => setMenuMoId(null)} 
+        <div
+          className="fixed inset-0 z-[5]"
+          onClick={() => setMenuMoId(null)}
         />
       )}
     </div>

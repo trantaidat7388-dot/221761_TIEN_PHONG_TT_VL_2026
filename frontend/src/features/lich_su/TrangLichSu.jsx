@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { 
-  History, 
-  RefreshCw, 
+import {
+  History,
+  RefreshCw,
   Search,
   Filter,
   Calendar,
@@ -13,7 +13,7 @@ import {
 import toast from 'react-hot-toast'
 import BangLichSu from './BangLichSu'
 import { NutBam } from '../../components'
-import { layLichSuChuyenDoi } from '../../services/firebaseConfig'
+import { layLichSuChuyenDoi } from '../../services/api'
 
 const TrangLichSu = ({ nguoiDung }) => {
   // Trang hiển thị danh sách lịch sử chuyển đổi của người dùng
@@ -24,10 +24,10 @@ const TrangLichSu = ({ nguoiDung }) => {
   const [boLocTrangThai, setBoLocTrangThai] = useState('tat_ca')
 
   const taiLichSu = useCallback(async () => {
-    // Tải danh sách lịch sử từ Firestore
+    // Tải danh sách lịch sử từ backend (JWT tự xác thực user)
     setDangTai(true)
     try {
-      const ketQua = await layLichSuChuyenDoi(nguoiDung.uid)
+      const ketQua = await layLichSuChuyenDoi()   // không cần uid — JWT xử lý
       if (ketQua.thanhCong) {
         setDanhSachLichSu(ketQua.danhSach)
         setDanhSachLoc(ketQua.danhSach)
@@ -39,7 +39,7 @@ const TrangLichSu = ({ nguoiDung }) => {
     } finally {
       setDangTai(false)
     }
-  }, [nguoiDung.uid])
+  }, [])
 
   useEffect(() => {
     // Tải lịch sử khi component mount
@@ -53,7 +53,7 @@ const TrangLichSu = ({ nguoiDung }) => {
     // Lọc theo từ khóa
     if (tuKhoaTimKiem.trim()) {
       const tuKhoa = tuKhoaTimKiem.toLowerCase()
-      ketQua = ketQua.filter(item => 
+      ketQua = ketQua.filter(item =>
         item.tenFileGoc.toLowerCase().includes(tuKhoa)
       )
     }
@@ -84,8 +84,8 @@ const TrangLichSu = ({ nguoiDung }) => {
 
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
-    visible: { 
-      opacity: 1, 
+    visible: {
+      opacity: 1,
       y: 0,
       transition: { type: 'spring', stiffness: 100 }
     }
@@ -93,14 +93,14 @@ const TrangLichSu = ({ nguoiDung }) => {
 
   return (
     <div className="min-h-screen bg-gradient-animated pt-20 pb-12 px-4">
-      <motion.div 
+      <motion.div
         className="max-w-5xl mx-auto"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
         {/* Header */}
-        <motion.div 
+        <motion.div
           className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8"
           variants={itemVariants}
         >
@@ -124,7 +124,7 @@ const TrangLichSu = ({ nguoiDung }) => {
         </motion.div>
 
         {/* Stats */}
-        <motion.div 
+        <motion.div
           className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
           variants={itemVariants}
         >
@@ -148,7 +148,7 @@ const TrangLichSu = ({ nguoiDung }) => {
         </motion.div>
 
         {/* Filters */}
-        <motion.div 
+        <motion.div
           className="flex flex-col sm:flex-row gap-4 mb-6"
           variants={itemVariants}
         >
@@ -190,7 +190,7 @@ const TrangLichSu = ({ nguoiDung }) => {
 
         {/* Results info */}
         {!dangTai && danhSachLoc.length !== danhSachLichSu.length && (
-          <motion.p 
+          <motion.p
             className="text-white/50 text-sm mb-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -201,8 +201,8 @@ const TrangLichSu = ({ nguoiDung }) => {
 
         {/* Table */}
         <motion.div variants={itemVariants}>
-          <BangLichSu 
-            danhSach={danhSachLoc} 
+          <BangLichSu
+            danhSach={danhSachLoc}
             dangTai={dangTai}
             onCapNhat={taiLichSu}
           />

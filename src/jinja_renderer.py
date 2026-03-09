@@ -265,6 +265,9 @@ class JinjaLaTeXRenderer:
                     entry += f"\\\\\n\\email{{{', '.join(email_parts)}}}"
                 inst_parts.append(entry)
             author_block += "\n\\institute{" + " \\and\n".join(inst_parts) + "}"
+        else:
+            # FIX 5: Graceful fallback when no affiliations were parsed (avoids "No Institute Given")
+            author_block += "\n\\institute{Institution not specified}"
 
         return author_block
 

@@ -324,17 +324,18 @@ def find_main_tex(directory: str) -> str:
 
 
 def package_output_directory(work_dir: str, output_zip_path: str,
-                             exclude_suffixes: set = None) -> str:
+                             exclude_suffixes: set = None, generated_tex_name: str = None) -> str:
     """Đóng gói thư mục làm việc thành file ZIP (dành cho Overleaf upload).
 
     CHỈ bao gồm: .tex (đã render), .pdf, .bib, .cls, .sty, .bst, và thư mục images/.
     Loại trừ: file rác LaTeX, file Word gốc, thư mục template giải nén rác,
-    và chính file ZIP đầu ra.
+    và chính file ZIP đầu ra. Đổi tên file .tex sinh ra thành main.tex để Overleaf dễ nhận diện.
 
     Args:
         work_dir: Thư mục làm việc cần đóng gói.
         output_zip_path: Đường dẫn file ZIP đầu ra.
         exclude_suffixes: Tập hợp đuôi file cần bỏ qua (không dùng nữa, giữ cho tương thích).
+        generated_tex_name: Tên file tex được sinh ra (để đổi tên thành main.tex).
 
     Returns:
         Đường dẫn tới file ZIP đã tạo.
@@ -349,6 +350,8 @@ def package_output_directory(work_dir: str, output_zip_path: str,
 
     abs_zip = os.path.abspath(output_zip_path)
 
+    generated_pdf_name = generated_tex_name.replace('.tex', '.pdf') if generated_tex_name else None
+
     with zipfile.ZipFile(output_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
         for item_name in os.listdir(work_dir):
             item_path = os.path.join(work_dir, item_name)
@@ -356,11 +359,26 @@ def package_output_directory(work_dir: str, output_zip_path: str,
             # Bỏ qua chính file ZIP đầu ra
             if os.path.abspath(item_path) == abs_zip:
                 continue
+                
+            # Tránh lỗi clashing với compiler Overleaf (This compile didn't produce a PDF ... output.pdf)
+            if item_name.lower() == "output.pdf":
+                continue
 
             if os.path.isfile(item_path):
                 _, ext = os.path.splitext(item_name)
                 if ext.lower() in ALLOWED_EXTENSIONS:
-                    zf.write(item_path, item_name)
+                    arcname = item_name
+                    if generated_tex_name:
+                        if item_name == generated_tex_name:
+                            arcname = "main.tex"
+                        elif item_name == generated_pdf_name:
+                            arcname = "main.pdf"
+                        elif item_name == "main.tex":
+                            arcname = "template_main.tex"  # Tránh trùng tên
+                        elif item_name == "main.pdf":
+                            arcname = "template_main.pdf"
+
+                    zf.write(item_path, arcname)
             elif os.path.isdir(item_path) and item_name.lower() in ALLOWED_SUBDIRS:
                 # Đệ quy gom thư mục images/
                 for dirpath, _dirnames, filenames in os.walk(item_path):

@@ -3,21 +3,22 @@
 import { useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  FileText, 
-  Upload, 
-  History, 
-  LogOut, 
+import {
+  FileText,
+  Upload,
+  History,
+  LogOut,
   User,
   Menu,
   X,
   ChevronDown
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { dangXuat } from '../services/firebaseConfig'
+import { useAuth } from '../context/AuthContext'
 
 const ThanhDieuHuong = ({ nguoiDung }) => {
   // Component thanh điều hướng với menu responsive và dropdown user
+  const { logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [menuMo, setMenuMo] = useState(false)
@@ -29,23 +30,19 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
     { duongDan: '/lich-su', nhan: 'Lịch sử', icon: History },
   ]
 
-  const xuLyDangXuat = async () => {
-    // Xử lý đăng xuất và chuyển về trang đăng nhập
+  const xuLyDangXuat = () => {
+    // Đăng xuất bằng JWT
     try {
-      const ketQua = await dangXuat()
-      if (ketQua.thanhCong) {
-        toast.success('Đã đăng xuất')
-        navigate('/dang-nhap')
-      } else {
-        toast.error(ketQua.loiMessage)
-      }
-    } catch (loi) {
+      logout()
+      toast.success('Đã đăng xuất')
+      navigate('/dang-nhap')
+    } catch {
       toast.error('Không thể đăng xuất')
     }
   }
 
   const layTenHienThi = () => {
-    // Lấy tên hiển thị hoặc email của người dùng
+    if (nguoiDung?.username) return nguoiDung.username
     if (nguoiDung?.displayName) return nguoiDung.displayName
     if (nguoiDung?.email) return nguoiDung.email.split('@')[0]
     return 'Người dùng'
@@ -71,11 +68,11 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <Link 
-              to="/chuyen-doi" 
+            <Link
+              to="/chuyen-doi"
               className="flex items-center gap-3 group"
             >
-              <motion.div 
+              <motion.div
                 className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-lg shadow-primary-500/20"
                 whileHover={{ scale: 1.05, rotate: 5 }}
                 whileTap={{ scale: 0.95 }}
@@ -99,8 +96,8 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                     className={`
                       flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
                       transition-all duration-200
-                      ${dangChon 
-                        ? 'bg-primary-500/20 text-primary-300' 
+                      ${dangChon
+                        ? 'bg-primary-500/20 text-primary-300'
                         : 'text-white/70 hover:text-white hover:bg-white/10'
                       }
                     `}
@@ -204,8 +201,8 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                       className={`
                         flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium
                         transition-all duration-200
-                        ${dangChon 
-                          ? 'bg-primary-500/20 text-primary-300' 
+                        ${dangChon
+                          ? 'bg-primary-500/20 text-primary-300'
                           : 'text-white/70 hover:text-white hover:bg-white/10'
                         }
                       `}
@@ -215,7 +212,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                     </Link>
                   )
                 })}
-                
+
                 <div className="border-t border-white/10 pt-2 mt-2">
                   <div className="flex items-center gap-3 px-4 py-2">
                     <div className="w-10 h-10 rounded-full bg-primary-500/30 flex items-center justify-center overflow-hidden">
@@ -257,9 +254,9 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
 
       {/* Click outside to close dropdown */}
       {dropdownMo && (
-        <div 
-          className="fixed inset-0 z-[-1]" 
-          onClick={() => setDropdownMo(false)} 
+        <div
+          className="fixed inset-0 z-[-1]"
+          onClick={() => setDropdownMo(false)}
         />
       )}
     </nav>

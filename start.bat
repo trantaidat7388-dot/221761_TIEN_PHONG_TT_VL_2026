@@ -1,113 +1,128 @@
 @echo off
 chcp 65001 >nul
-title Word2LaTeX - Starting...
+title Word2LaTeX - Launcher
 
-echo ╔══════════════════════════════════════════╗
-echo ║     Word2LaTeX - Kill ^& Restart          ║
-echo ╚══════════════════════════════════════════╝
+echo.
+echo ============================================================
+echo   Word2LaTeX Converter  ^|  1-Click Launcher
+echo ============================================================
 echo.
 
-REM Thiết lập thư mục gốc
-set ROOT=%~dp0
+set "ROOT=%~dp0"
 cd /d "%ROOT%"
 
-REM ============================================
-REM 0. TẮT HẾT PROCESSES CŨ
-REM ============================================
-echo [0/3] Dọn dẹp processes cũ...
+REM ============================================================
+REM STEP 1: KILL GHOST PROCESSES (ports 8000 and 5173)
+REM ============================================================
+echo [1/5] Freeing ports 8000 and 5173...
 
-REM Tắt cửa sổ cmd cũ theo tên window title
-taskkill /fi "WINDOWTITLE eq Word2LaTeX Backend" /f >nul 2>&1
+taskkill /fi "WINDOWTITLE eq Word2LaTeX Backend"  /f >nul 2>&1
 taskkill /fi "WINDOWTITLE eq Word2LaTeX Frontend" /f >nul 2>&1
 
-REM Kill mọi process đang chiếm port 8000 (backend)
-echo       Đang giải phóng port 8000...
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":8000 " ^| findstr LISTENING') do (
-    if NOT "%%p"=="0" (
-        taskkill /PID %%p /F >nul 2>&1
-    )
+for /f "tokens=5 delims= " %%P in ('netstat -ano 2^>nul ^| findstr /R ":8000 " ^| findstr "LISTENING"') do (
+    if NOT "%%P"=="0" if NOT "%%P"=="" taskkill /PID %%P /F >nul 2>&1
 )
-
-REM Kill mọi process đang chiếm port 5173 (frontend)
-echo       Đang giải phóng port 5173...
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":5173 " ^| findstr LISTENING') do (
-    if NOT "%%p"=="0" (
-        taskkill /PID %%p /F >nul 2>&1
-    )
+for /f "tokens=5 delims= " %%P in ('netstat -ano 2^>nul ^| findstr /R ":5173 " ^| findstr "LISTENING"') do (
+    if NOT "%%P"=="0" if NOT "%%P"=="" taskkill /PID %%P /F >nul 2>&1
 )
-
-REM Xóa __pycache__ để đảm bảo code mới nhất được load
-echo       Xóa __pycache__...
-if exist "src\__pycache__" rd /s /q "src\__pycache__"
-if exist "backend\__pycache__" rd /s /q "backend\__pycache__"
-
-REM Đợi OS giải phóng port
-timeout /t 2 /nobreak >nul
-echo       OK - Đã dọn sạch.
+timeout /t 1 /nobreak >nul
+echo       OK - Ports cleared.
 echo.
 
-REM ============================================
-REM 1. Khởi động Backend (FastAPI + Uvicorn)
-REM ============================================
-echo [1/3] Đang khởi động Backend (port 8000)...
+REM ============================================================
+REM STEP 2: CLEAN PYCACHE
+REM ============================================================
+echo [2/5] Cleaning __pycache__...
 
-REM Kiểm tra .venv
-if exist ".venv\Scripts\python.exe" (
-    set PYTHON=.venv\Scripts\python.exe
-) else if exist "backend\.venv\Scripts\python.exe" (
-    set PYTHON=backend\.venv\Scripts\python.exe
+for /d /r "%ROOT%" %%D in (__pycache__) do (
+    if exist "%%D" rd /s /q "%%D" >nul 2>&1
+)
+echo       OK - Cache cleared.
+echo.
+
+REM ============================================================
+REM STEP 3: ACTIVATE VENV & INSTALL DEPENDENCIES
+REM ============================================================
+echo [3/5] Installing Python dependencies...
+
+if exist "%ROOT%.venv\Scripts\activate.bat" (
+    call "%ROOT%.venv\Scripts\activate.bat"
 ) else (
-    set PYTHON=python
+    echo       WARNING: .venv not found. Using system Python.
 )
 
-start "Word2LaTeX Backend" cmd /c "cd /d %ROOT%backend && %ROOT%%PYTHON% -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir . --reload-dir %ROOT%src"
-
-REM Đợi backend khởi động
-timeout /t 3 /nobreak >nul
-
-REM ============================================
-REM 2. Khởi động Frontend (Vite Dev Server)
-REM ============================================
-echo [2/3] Đang khởi động Frontend (port 5173)...
-
-REM Kiểm tra node_modules
-if not exist "frontend\node_modules" (
-    echo     Đang cài đặt dependencies frontend...
-    cd /d "%ROOT%frontend"
-    call npm install
-    cd /d "%ROOT%"
+pip install -r "%ROOT%requirements.txt" --quiet --disable-pip-version-check
+if %ERRORLEVEL% NEQ 0 (
+    echo       ERROR: pip install failed. Check your Python environment.
+    pause
+    exit /b 1
 )
+echo       OK - Dependencies ready.
+echo.
 
-start "Word2LaTeX Frontend" cmd /c "cd /d %ROOT%frontend && npm run dev"
+REM ============================================================
+REM STEP 4: START BACKEND in a new window
+REM ============================================================
+echo [4/5] Starting Backend (FastAPI on :8000)...
 
-REM Đợi frontend khởi động
+start "Word2LaTeX Backend" cmd /k ^
+    "chcp 65001 >nul ^& ^
+     cd /d "%ROOT%backend" ^& ^
+     call "%ROOT%.venv\Scripts\activate.bat" ^& ^
+     echo [Backend] Starting... ^& ^
+     uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+
 timeout /t 3 /nobreak >nul
-
-REM ============================================
-REM 3. Mở trình duyệt
-REM ============================================
-echo [3/3] Mở trình duyệt...
+echo       OK - Backend window opened.
 echo.
-echo ╔══════════════════════════════════════════╗
-echo ║  Backend:  http://localhost:8000         ║
-echo ║  Frontend: http://localhost:5173         ║
-echo ║  API Docs: http://localhost:8000/docs    ║
-echo ╚══════════════════════════════════════════╝
-echo.
-start "" "http://localhost:5173"
 
-echo Nhấn phím bất kỳ để DỪNG cả hai server...
+REM ============================================================
+REM STEP 5: START FRONTEND in a new window
+REM ============================================================
+echo [5/5] Starting Frontend (Vite on :5173)...
+
+start "Word2LaTeX Frontend" cmd /k ^
+    "chcp 65001 >nul ^& ^
+     cd /d "%ROOT%frontend" ^& ^
+     echo [Frontend] Installing packages... ^& ^
+     npm install --prefer-offline --silent ^& ^
+     echo [Frontend] Starting Vite... ^& ^
+     npm run dev"
+
+echo       OK - Frontend window opened.
+echo.
+
+REM ============================================================
+REM AUTO-OPEN BROWSER after 5 seconds
+REM ============================================================
+echo Waiting 5 seconds for servers to boot...
+timeout /t 5 /nobreak >nul
+echo Opening http://localhost:5173 in your browser...
+start http://localhost:5173
+
+echo.
+echo ============================================================
+echo   Word2LaTeX is running!
+echo.
+echo   Frontend : http://localhost:5173
+echo   Backend  : http://localhost:8000
+echo   API Docs : http://localhost:8000/docs
+echo ============================================================
+echo.
+echo   Press any key to STOP both servers and exit.
+echo.
 pause >nul
 
-REM Dừng cả hai
+REM --- Graceful shutdown on keypress ---
 echo.
-echo Đang dừng servers...
-taskkill /fi "WINDOWTITLE eq Word2LaTeX Backend" /f >nul 2>&1
+echo Stopping servers...
+taskkill /fi "WINDOWTITLE eq Word2LaTeX Backend"  /f >nul 2>&1
 taskkill /fi "WINDOWTITLE eq Word2LaTeX Frontend" /f >nul 2>&1
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":8000 " ^| findstr LISTENING') do (
-    if NOT "%%p"=="0" taskkill /PID %%p /F >nul 2>&1
+for /f "tokens=5 delims= " %%P in ('netstat -ano 2^>nul ^| findstr /R ":8000 " ^| findstr "LISTENING"') do (
+    if NOT "%%P"=="0" if NOT "%%P"=="" taskkill /PID %%P /F >nul 2>&1
 )
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":5173 " ^| findstr LISTENING') do (
-    if NOT "%%p"=="0" taskkill /PID %%p /F >nul 2>&1
+for /f "tokens=5 delims= " %%P in ('netstat -ano 2^>nul ^| findstr /R ":5173 " ^| findstr "LISTENING"') do (
+    if NOT "%%P"=="0" if NOT "%%P"=="" taskkill /PID %%P /F >nul 2>&1
 )
-echo Đã dừng. Tạm biệt!
+echo Done. Goodbye!
+

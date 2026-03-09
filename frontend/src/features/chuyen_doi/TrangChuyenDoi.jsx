@@ -25,8 +25,6 @@ import {
 import toast from 'react-hot-toast'
 import KhuVucKeoTha from './KhuVucKeoTha'
 import { NutBam } from '../../components'
-import { db, auth } from '../../services/firebaseConfig'
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { chuyenDoiFileStream, taiFileZip, layDanhSachTemplate, taiLenTemplate, xoaTemplate } from '../../services/api'
 
 // --- Sub-components ---
@@ -135,12 +133,12 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   const luuLichSuChuyenDoi = async (user, file, jobIdMoi) => {
     if (!user?.uid || !file?.name) return
     try {
-      await addDoc(collection(db, 'lich_su_chuyen_doi'), {
+      await themLichSuChuyenDoi({
         uid: user.uid,
         tenFileGoc: file.name,
-        thoiGian: serverTimestamp(),
         trangThai: 'Thành công',
-        jobId: jobIdMoi || ''
+        job_id: jobIdMoi || '',
+        templateName: loaiTemplate
       })
     } catch {
       // silent — zip still downloadable
@@ -267,7 +265,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
       setThongBaoTienTrinh('Hoàn tất!')
       toast.success('Chuyển đổi thành công!')
 
-      const userHienTai = auth.currentUser || nguoiDung
+      const userHienTai = nguoiDung
       await luuLichSuChuyenDoi(userHienTai, fileChon, apiData.jobId || '')
     } else {
       setTrangThaiXuLy('loi')
@@ -401,13 +399,13 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                       IEEE Conference
                     </button>
                     <button
-                      onClick={() => setLoaiTemplate('onecolumn')}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 text-xs ${loaiTemplate === 'onecolumn'
+                      onClick={() => setLoaiTemplate('springer_lncs')}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 text-xs ${loaiTemplate === 'springer_lncs'
                         ? 'bg-primary-500/30 border-primary-500 text-primary-300'
                         : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                     >
                       <FileCode className="w-3.5 h-3.5" />
-                      Article (1 cột)
+                      Springer LNCS
                     </button>
                   </>
                 )}
