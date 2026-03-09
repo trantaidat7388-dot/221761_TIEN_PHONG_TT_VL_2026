@@ -53,6 +53,9 @@ class TemplatePreprocessor:
             "\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n"
             "\\@ifpackageloaded{amssymb}{}{\\usepackage{amssymb}}\n"
             "\\@ifpackageloaded{xurl}{}{\\usepackage{xurl}}\n"
+            "\\@ifpackageloaded{xcolor}{}{\\usepackage[table,xcdraw]{xcolor}}\n"
+            "\\@ifpackageloaded{graphicx}{}{\\usepackage{graphicx}}\n"
+            "\\@ifpackageloaded{hyperref}{}{\\usepackage[hidelinks]{hyperref}}\n"
             "\\makeatother\n"
         )
 
