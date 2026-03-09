@@ -189,8 +189,8 @@ class TemplatePreprocessor:
         # ── MDPI ──
         # \AuthorNames{...} (redundant with \Author)
         tex = cls._remove_command(tex, r'\\AuthorNames')
-        # Correspondence, review metadata
-        for cmd in ('corres', 'firstnote', 'secondnote', 'thirdnote',
+        # Correspondence, review metadata (corres/firstnote handled in _process_authors)
+        for cmd in ('secondnote', 'thirdnote',
                      'fourthnote', 'fifthnote', 'sixthnote', 'seventhnote', 'eighthnote',
                      'institutionalreview', 'dataavailability',
                      'conflictsofinterest', 'sampleavailability',
@@ -237,6 +237,8 @@ class TemplatePreprocessor:
             r'\\institute',
             r'\\authornote',             # ACM
             r'\\orcid',                  # ACM
+            r'\\corres',                 # MDPI
+            r'\\firstnote',              # MDPI
         ]
 
         for cmd in commands_to_remove:
@@ -314,8 +316,8 @@ class TemplatePreprocessor:
             )
             return cls._process_ieee_keywords(tex)
 
-        # Pattern 2: Command form \abstract{...} (MDPI)
-        cmd_match = re.search(r'\\abstract\s*\{', tex)
+        # Pattern 2: Command form \abstract{...} (MDPI) — case-insensitive
+        cmd_match = re.search(r'(?i)\\abstract\s*\{', tex)
         if cmd_match:
             start_open = cmd_match.end() - 1
             end_close = cls._find_matching_brace(tex, start_open)
@@ -431,8 +433,8 @@ class TemplatePreprocessor:
         - \keywords{...} (Springer, ACM)
         - \keyword{...}  (MDPI, singular — negative lookahead for \keywords)
         """
-        # \keywords{...} (with 's')
-        match = re.search(r'\\keywords\s*\{', tex)
+        # \keywords{...} (with 's') — case-insensitive
+        match = re.search(r'(?i)\\keywords\s*\{', tex)
         if match:
             start_open = match.end() - 1
             end_close = cls._find_matching_brace(tex, start_open)
@@ -440,8 +442,8 @@ class TemplatePreprocessor:
                 tex = tex[:start_open + 1] + '<< metadata.keywords_str >>' + tex[end_close:]
                 return tex
 
-        # \keyword{...} (MDPI, without 's')
-        match = re.search(r'\\keyword(?!s)\s*\{', tex)
+        # \keyword{...} (MDPI, without 's') — case-insensitive
+        match = re.search(r'(?i)\\keyword(?!s)\s*\{', tex)
         if match:
             start_open = match.end() - 1
             end_close = cls._find_matching_brace(tex, start_open)
