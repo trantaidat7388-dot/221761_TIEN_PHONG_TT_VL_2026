@@ -190,7 +190,13 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
         toast.success(kq.message || 'Đã tải lên template')
         // Refresh danh sách template từ backend NGAY LẬP TỨC
         const dsKq = await layDanhSachTemplate()
-        if (dsKq.thanhCong) setDanhSachTemplate(dsKq.templates)
+        if (dsKq.thanhCong) {
+          setDanhSachTemplate(dsKq.templates)
+          // Warn if the uploaded template still doesn't appear (backend issue)
+          if (kq.template?.id && !dsKq.templates.some(t => t.id === kq.template.id)) {
+            toast.error('Template đã tải lên nhưng không xuất hiện trong danh sách — hãy thử tải lại trang')
+          }
+        }
         // Auto-select template mới (guard undefined)
         if (kq.template?.id) setLoaiTemplate(kq.template.id)
       } else {

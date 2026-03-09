@@ -240,8 +240,17 @@ def lay_danh_sach_template():
                 "kichThuoc": tpl_path.stat().st_size
             })
         elif tpl_path.is_dir():
+            # Validate: must have at least one .tex file (find_main_tex preferred,
+            # fallback to any .tex so silently-broken dirs still surface in UI)
+            has_tex = False
             try:
                 find_main_tex(str(tpl_path))
+                has_tex = True
+            except Exception:
+                has_tex = any(tpl_path.rglob("*.tex"))
+                if not has_tex:
+                    in_log_loi(f"Template thư mục không hợp lệ (không có .tex): {tpl_path.name}")
+            if has_tex:
                 kich_thuoc = sum(f.stat().st_size for f in tpl_path.rglob('*') if f.is_file())
                 templates.append({
                     "id": f"custom_{tpl_path.name}",
@@ -249,13 +258,23 @@ def lay_danh_sach_template():
                     "loai": "tuy_chinh",
                     "kichThuoc": kich_thuoc
                 })
-            except Exception:
-                pass
 
     return JSONResponse(
         content={"templates": templates},
         headers={"Cache-Control": "no-store"}
     )
+
+
+# Reserved directory names that must not be overwritten by user uploads
+_RESERVED_UPLOAD_NAMES = {
+    "IEEE-conference-template-062824",
+    "LaTeX2e_Proceedings_Templates_download__1",
+    "LaTeX2e_Proceedings_Templates_download__1_",
+    "samplepaper_springer_", "samplepaper_springer",
+    "samplepaper", "latex_template_onecolumn",
+    "elsarticle-template-harv", "elsarticle-template-num",
+    "IEEEtran", "llncs",
+}
 
 
 @app.post("/api/templates/upload")
@@ -271,6 +290,15 @@ async def tai_len_template(file: UploadFile = File(...)):
     
     safe_name = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in Path(file.filename).stem)
     safe_name = safe_name.strip('_') or "template"
+
+    # Prevent collisions with reserved/builtin names — append suffix until unique
+    if safe_name in _RESERVED_UPLOAD_NAMES:
+        counter = 2
+        candidate = f"{safe_name}_custom"
+        while (custom_template_folder / candidate).exists() or (custom_template_folder / f"{candidate}.tex").exists():
+            candidate = f"{safe_name}_custom{counter}"
+            counter += 1
+        safe_name = candidate
     
     if not is_zip:
         text = contents.decode('utf-8', errors='ignore')
