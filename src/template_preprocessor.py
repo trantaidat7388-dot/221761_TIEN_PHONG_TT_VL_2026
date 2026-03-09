@@ -48,6 +48,19 @@ class TemplatePreprocessor:
             "\\makeatother\n"
         )
 
+        # XeLaTeX Unicode fix: T1/OT1 fontenc is pdfLaTeX-only; replace with fontspec
+        # so Vietnamese (and other Unicode) characters render correctly under XeLaTeX.
+        for old_enc in (
+            '\\usepackage[T1]{fontenc}',
+            '\\usepackage[OT1]{fontenc}',
+        ):
+            if old_enc in tex:
+                tex = tex.replace(
+                    old_enc,
+                    '\\usepackage{fontspec}  % XeLaTeX: Unicode font support (tiếng Việt)'
+                )
+                break  # only one encoding package is expected
+
         # Skip if already injected
         if '@ifpackageloaded{amsmath}' in tex:
             return tex

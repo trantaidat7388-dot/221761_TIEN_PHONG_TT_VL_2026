@@ -4,10 +4,8 @@
 %
 \documentclass[runningheads]{llncs}
 %
-\usepackage[T1]{fontenc}
-% T1 fonts will be used to generate the final print and online PDFs,
-% so please use T1 fonts in your manuscript whenever possible.
-% Other font encondings may result in incorrect characters.
+% \usepackage[T1]{fontenc}  % Disabled: incompatible with XeLaTeX Unicode (Vietnamese)
+\usepackage{fontspec}         % XeLaTeX Unicode font support (Vietnamese, CJK, etc.)
 %
 \usepackage{graphicx}
 % Used for displaying a sample figure. If possible, figure files should
