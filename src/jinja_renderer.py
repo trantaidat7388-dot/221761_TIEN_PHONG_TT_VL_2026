@@ -294,38 +294,129 @@ class JinjaLaTeXRenderer:
 
     @staticmethod
     def _generate_elsevier_author_block(authors: list) -> str:
-        """Generate author block in Elsevier format (\\author + \\affiliation)."""
+        """Generate author block in Elsevier format (\\author + \\affiliation).
+
+        Uses the key-value affiliation syntax required by elsarticle.cls:
+        ``\\affiliation{organization={...}, city={...}, country={...}}``.
+        """
         parts = []
         for author in authors:
             parts.append(f"\\author{{{author['name']}}}")
             for aff in author.get('affiliations', []):
-                parts.append(f"\\affiliation{{{aff}}}")
+                aff_clean = aff.strip()
+                lines = [s.strip() for s in aff_clean.split('\n') if s.strip()]
+                email_line = None
+                plain_lines = []
+                for line in lines:
+                    if '@' in line:
+                        email_line = line
+                    else:
+                        plain_lines.append(line)
+                org = plain_lines[0] if plain_lines else aff_clean
+                city = plain_lines[1] if len(plain_lines) > 1 else ''
+                country = plain_lines[2] if len(plain_lines) > 2 else ''
+                kv_parts = [f"organization={{{org}}}"]
+                if city:
+                    kv_parts.append(f"city={{{city}}}")
+                if country:
+                    kv_parts.append(f"country={{{country}}}")
+                parts.append("\\affiliation{" + ",\n            ".join(kv_parts) + "}")
+                if email_line:
+                    parts.append(f"\\ead{{{email_line}}}")
         return "\n".join(parts)
 
     @staticmethod
     def _generate_acm_author_block(authors: list) -> str:
-        """Generate author block in ACM format."""
+        """Generate author block in ACM format.
+
+        ACM strictly requires \\institution{}, \\city{}, and \\country{} inside
+        each \\affiliation{} block.
+        """
         parts = []
         for author in authors:
             parts.append(f"\\author{{{author['name']}}}")
-            for aff in author.get('affiliations', []):
-                parts.append(f"\\affiliation{{\\institution{{{aff}}}}}")
+            affs = author.get('affiliations', [])
+            if affs:
+                for aff in affs:
+                    aff_clean = aff.strip()
+                    # Separate email from affiliation text
+                    lines = [s.strip() for s in aff_clean.split('\n') if s.strip()]
+                    email_line = None
+                    plain_lines = []
+                    for line in lines:
+                        if '@' in line:
+                            email_line = line
+                        else:
+                            plain_lines.append(line)
+
+                    # Respect explicit ACM fields if they already exist in input.
+                    institution_match = re.search(r'\\institution\{([^}]*)\}', aff_clean)
+                    city_match = re.search(r'\\city\{([^}]*)\}', aff_clean)
+                    country_match = re.search(r'\\country\{([^}]*)\}', aff_clean)
+
+                    institution = (
+                        institution_match.group(1).strip()
+                        if institution_match and institution_match.group(1).strip()
+                        else (plain_lines[0] if plain_lines else 'University')
+                    )
+                    city = (
+                        city_match.group(1).strip()
+                        if city_match and city_match.group(1).strip()
+                        else (plain_lines[1] if len(plain_lines) > 1 else 'Your City')
+                    )
+                    country = (
+                        country_match.group(1).strip()
+                        if country_match and country_match.group(1).strip()
+                        else 'Vietnam'
+                    )
+
+                    aff_block = (
+                        "\\affiliation{%\n"
+                        f"  \\institution{{{institution}}}\n"
+                        f"  \\city{{{city}}}\n"
+                        f"  \\country{{{country}}}\n"
+                        "}"
+                    )
+                    parts.append(aff_block)
+                    if email_line:
+                        parts.append(f"\\email{{{email_line}}}")
+            else:
+                parts.append(
+                    "\\affiliation{%\n"
+                    "  \\institution{University}\n"
+                    "  \\city{Your City}\n"
+                    "  \\country{Vietnam}\n"
+                    "}"
+                )
         return "\n".join(parts)
 
     @staticmethod
     def _generate_mdpi_author_block(authors: list) -> str:
         r"""Generate author block in MDPI format (\Author + \address).
 
-        MDPI uses custom commands: \Author{Name1 $^{1}$, Name2 $^{2}$}
-        and \address{$^{1}$ \quad Affil1 \\ $^{2}$ \quad Affil2}.
+        MDPI strictly requires:
+          \Author{Name1 $^{1}$, Name2 $^{2}$}
+          \address{$^{1}$ \quad Affil 1; email1 \\
+          $^{2}$ \quad Affil 2; email2}
         """
-        # Collect unique affiliations
-        affil_map = {}  # affiliation text -> superscript number
+        # Collect unique affiliations and per-affiliation emails
+        affil_map = {}    # affiliation text (no email) -> number
+        affil_emails = {}  # affiliation text (no email) -> email string
         for author in authors:
             for aff in author.get('affiliations', []):
-                clean = aff.strip()
-                if clean and clean not in affil_map:
-                    affil_map[clean] = len(affil_map) + 1
+                lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
+                email_parts = []
+                inst_parts = []
+                for line in lines:
+                    if '@' in line:
+                        email_parts.append(line)
+                    else:
+                        inst_parts.append(line)
+                key = ', '.join(inst_parts) if inst_parts else aff.strip()
+                if key and key not in affil_map:
+                    affil_map[key] = len(affil_map) + 1
+                    if email_parts:
+                        affil_emails[key] = '; '.join(email_parts)
 
         # Build \Author{...}
         author_parts = []
@@ -333,9 +424,11 @@ class JinjaLaTeXRenderer:
             name = author['name']
             insts = []
             for aff in author.get('affiliations', []):
-                clean = aff.strip()
-                if clean in affil_map:
-                    insts.append(str(affil_map[clean]))
+                lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
+                inst_parts = [l for l in lines if '@' not in l]
+                key = ', '.join(inst_parts) if inst_parts else aff.strip()
+                if key in affil_map:
+                    insts.append(str(affil_map[key]))
             if insts:
                 name += " $^{" + ",".join(insts) + "}$"
             author_parts.append(name)
@@ -345,12 +438,19 @@ class JinjaLaTeXRenderer:
         plain_names = [a['name'] for a in authors]
         block += "\n\\AuthorNames{" + ", ".join(plain_names) + "}"
 
-        # Build \address{...}
+        # Build \address{...} with emails appended per affiliation
+        # MDPI cls ALWAYS reads \@address at \begin{document}; must emit \address{} to avoid undefined
         if affil_map:
             addr_parts = []
             for aff_text, num in affil_map.items():
-                addr_parts.append(f"$^{{{num}}}$ \\quad {aff_text}")
+                entry = f"$^{{{num}}}$ \\quad {aff_text}"
+                email = affil_emails.get(aff_text)
+                if email:
+                    entry += f"; {email}"
+                addr_parts.append(entry)
             block += "\n\\address{" + " \\\\\n".join(addr_parts) + "}"
+        else:
+            block += "\n\\address{~}"
 
         return block
 

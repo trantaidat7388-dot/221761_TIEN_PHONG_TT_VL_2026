@@ -2052,23 +2052,3 @@ class ChuyenDoiWordSangLatex:
 
         print(f"[*] Hoàn tất chuyển đổi: {self.duong_dan_dau_ra}")
         return self.duong_dan_dau_ra
-
-def main():
-    duong_dan_word = 'input_data/asn-manuscript-template.docx'
-    duong_dan_template = 'input_data/IEEE-conference-template-062824.tex'
-    duong_dan_dau_ra = 'output/ket_qua_asn.tex'
-    thu_muc_anh = 'output/images'
-    mode = 'demo'
-
-    chuyen_doi = ChuyenDoiWordSangLatex(
-        duong_dan_word,
-        duong_dan_template,
-        duong_dan_dau_ra,
-        thu_muc_anh,
-        mode,
-    )
-    chuyen_doi.chuyen_doi()
-    print("Chuyển đổi hoàn tất rùi! \n")
-
-if __name__ == "__main__":
-    main()

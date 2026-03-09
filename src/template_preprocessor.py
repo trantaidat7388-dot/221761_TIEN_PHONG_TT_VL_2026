@@ -45,7 +45,11 @@ class TemplatePreprocessor:
         multi_brace: if True, consume additional {...} groups after the first.
         """
         pattern = cmd_regex + r'\s*(?:\[[^\]]*\])?\s*\{'
+        _failsafe = 0
         while True:
+            _failsafe += 1
+            if _failsafe > 200:
+                break
             match = re.search(pattern, tex)
             if not match:
                 break
@@ -75,79 +79,110 @@ class TemplatePreprocessor:
             tex = tex[:start] + tex[remove_end:]
         return tex
 
+    @staticmethod
+    def _is_commented(tex: str, pos: int) -> bool:
+        """Return True if *pos* falls on a line whose first non-space character is %."""
+        line_start = tex.rfind('\n', 0, pos) + 1   # 0 if no newline found
+        before = tex[line_start:pos]
+        return '%' in before
+
     # ── Phase 1: Essential packages ───────────────────────────────
 
     @classmethod
     def _ensure_essential_packages(cls, tex: str) -> str:
         r"""
-        Ensure essential packages for XeLaTeX compilation.
+        Ensure essential packages for LaTeX compilation.
 
         Strategy:
         1. \PassOptionsToPackage{table,xcdraw}{xcolor} BEFORE \documentclass
            — prevents option clash with cls files (MDPI, ACM) that load xcolor internally.
-        2. Remove pdftex/pdflatex driver hints from \documentclass options
-           — XeLaTeX auto-detects the correct driver; leftover hints cause errors.
-        3. Replace T1/OT1 fontenc with fontspec; comment out inputenc.
-        4. Inject @ifpackageloaded guards before \begin{document}.
-           Package options are pre-set via \PassOptionsToPackage so the guards
-           use bare \usepackage{pkg} — no option clash regardless of loading order.
+        2. Detect engine: nếu template dùng pdftex + tikz/pgf → giữ nguyên cho pdflatex.
+           Ngược lại → chuẩn bị cho XeLaTeX (xóa pdftex, thay fontenc→fontspec).
+        3. Inject @ifpackageloaded guards before \begin{document}.
         """
-        # Skip if already injected
-        if '\\PassOptionsToPackage{table,xcdraw}{xcolor}' in tex:
-            return tex
+        # ── Detect if template needs pdflatex (pdftex option + tikz/pgf) ──
+        dc_opts_match = re.search(r'\\documentclass\s*\[([^\]]*)\]', tex)
+        dc_opts_str = dc_opts_match.group(1) if dc_opts_match else ''
+        has_pdftex = any(o.strip().lower() in ('pdftex', 'pdflatex') for o in dc_opts_str.split(','))
+        # Detect tikz/pgf in template body or cls path (MDPI etc.)
+        has_pgf = bool(re.search(r'tikz|pgf|mdpi', tex[:3000], re.IGNORECASE))
+        use_pdflatex = has_pdftex and has_pgf
 
         # ── Before \documentclass ──
-        PASS_OPTIONS = "\\PassOptionsToPackage{table,xcdraw}{xcolor}\n"
+        PASS_XCOLOR = "\\PassOptionsToPackage{table,xcdraw}{xcolor}\n"
+        PASS_HYPERREF = "\\PassOptionsToPackage{hidelinks}{hyperref}\n"
         dc_match = re.search(r'^[ \t]*\\documentclass', tex, re.MULTILINE)
         if dc_match:
-            tex = tex[:dc_match.start()] + PASS_OPTIONS + tex[dc_match.start():]
+            inject_before_dc = ""
+            if PASS_XCOLOR.strip() not in tex:
+                inject_before_dc += PASS_XCOLOR
+            if PASS_HYPERREF.strip() not in tex:
+                inject_before_dc += PASS_HYPERREF
+            if inject_before_dc:
+                tex = tex[:dc_match.start()] + inject_before_dc + tex[dc_match.start():]
 
-        # Remove pdftex/pdflatex from \documentclass options (XeLaTeX does not need driver hints)
-        dc_opts = re.search(r'(\\documentclass\s*\[)([^\]]*)(\])', tex)
-        if dc_opts:
-            opts = dc_opts.group(2)
-            opt_list = [o.strip() for o in opts.split(',')]
-            opt_list = [o for o in opt_list if o.lower() not in ('pdftex', 'pdflatex')]
-            new_opts = ', '.join(opt_list)
-            tex = tex[:dc_opts.start(2)] + new_opts + tex[dc_opts.end(2):]
+        if not use_pdflatex:
+            # ── XeLaTeX mode: remove pdftex, replace fontenc ──
+            dc_opts = re.search(r'(\\documentclass\s*\[)([^\]]*)(\])', tex)
+            if dc_opts:
+                opts = dc_opts.group(2)
+                opt_list = [o.strip() for o in opts.split(',')]
+                opt_list = [o for o in opt_list if o.lower() not in ('pdftex', 'pdflatex')]
+                new_opts = ', '.join(opt_list)
+                tex = tex[:dc_opts.start(2)] + new_opts + tex[dc_opts.end(2):]
 
-        # ── fontenc / inputenc handling ──
-        for old_enc in (
-            '\\usepackage[T1]{fontenc}',
-            '\\usepackage[OT1]{fontenc}',
-        ):
-            if old_enc in tex:
-                tex = tex.replace(
-                    old_enc,
-                    '\\usepackage{fontspec}  % XeLaTeX: Unicode font support',
-                )
-                break
+            for old_enc in (
+                '\\usepackage[T1]{fontenc}',
+                '\\usepackage[OT1]{fontenc}',
+            ):
+                if old_enc in tex:
+                    tex = tex.replace(
+                        old_enc,
+                        '\\usepackage{fontspec}  % XeLaTeX: Unicode font support',
+                    )
+                    break
 
-        tex = re.sub(
-            r'^([ \t]*)(\\usepackage\[[^\]]*\]\{inputenc\})',
-            r'\1% \2  % Removed: XeLaTeX handles UTF-8 natively',
-            tex,
-            flags=re.MULTILINE,
-        )
+            tex = re.sub(
+                r'^([ \t]*)(\\usepackage\[[^\]]*\]\{inputenc\})',
+                r'\1% \2  % Removed: XeLaTeX handles UTF-8 natively',
+                tex,
+                flags=re.MULTILINE,
+            )
 
         # ── Package injection before \begin{document} ──
-        # Options for xcolor are pre-set above via \PassOptionsToPackage,
-        # so the guard here uses bare \usepackage{xcolor}.
-        # hyperref: no forced options — let each template decide its own style.
+        # xcolor & hyperref options are already handled via \PassOptionsToPackage before
+        # \documentclass, so we only need bare \usepackage guards here.
+        # hyperref is NOT force-loaded: many publisher classes (MDPI, ACM, Springer)
+        # load it themselves with specific options; forcing it causes option clashes.
+        # fontspec is NOT injected here: classes that use fontenc (MDPI, etc.) conflict
+        # with fontspec's TU encoding. The fontenc→fontspec replacement in the preamble
+        # (above) already handles templates that explicitly load fontenc in their body.
         INJECT_BLOCK = (
             "\\makeatletter\n"
-            "\\@ifpackageloaded{fontspec}{}{\\usepackage{fontspec}}\n"
             "\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n"
             "\\@ifpackageloaded{amssymb}{}{\\usepackage{amssymb}}\n"
             "\\@ifpackageloaded{xurl}{}{\\usepackage{xurl}}\n"
             "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
             "\\@ifpackageloaded{graphicx}{}{\\usepackage{graphicx}}\n"
-            "\\@ifpackageloaded{hyperref}{}{\\usepackage[hidelinks]{hyperref}}\n"
             "\\makeatother\n"
         )
 
         if '@ifpackageloaded{amsmath}' in tex:
-            return tex
+            # Preamble was already processed before; still guarantee xcolor is ensured.
+            has_xcolor_guard = '@ifpackageloaded{xcolor}' in tex
+            has_xcolor_pkg = re.search(r'\\usepackage(?:\[[^\]]*\])?\{xcolor\}', tex) is not None
+            if has_xcolor_guard or has_xcolor_pkg:
+                return tex
+            doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
+            if not doc_match:
+                return tex
+            xcolor_block = (
+                "\\makeatletter\n"
+                "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
+                "\\makeatother\n"
+            )
+            pos = doc_match.start()
+            return tex[:pos] + xcolor_block + tex[pos:]
 
         # Match only non-commented \begin{document} (avoid % comment matches)
         doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
@@ -198,6 +233,49 @@ class TemplatePreprocessor:
                      'abbreviations', 'appendixtitles'):
             tex = cls._remove_command(tex, r'\\' + cmd)
 
+        # ── Elsevier (elsarticle) ──
+        # The authoryear option enables natbib author-year mode, which requires
+        # \bibitem[Author(Year)]{key} format.  Our renderer generates plain
+        # \bibitem{key} (numeric), so switch to numbered citations.
+        if re.search(r'\\documentclass\b[^}]*\{elsarticle\}', tex):
+            # Only touch the first uncommented \documentclass line
+            tex = re.sub(
+                r'^([^%\n]*\\documentclass\s*\[)([^\]]*)\]',
+                lambda m: m.group(1) + m.group(2).replace('authoryear', 'number') + ']',
+                tex, count=1, flags=re.MULTILINE,
+            )
+            # Also switch harv bibliography style to numeric
+            tex = re.sub(
+                r'(\\bibliographystyle\{)elsarticle-harv(\})',
+                r'\1elsarticle-num\2',
+                tex,
+            )
+            # Remove \journal{...} — not populated from Word
+            tex = cls._remove_command(tex, r'\\journal')
+            # Remove Elsevier-specific frontmatter elements not populated from Word
+            for cmd in ('tnotetext', 'fntext', 'cortext', 'ead'):
+                tex = cls._remove_command(tex, r'\\' + cmd)
+            # Remove graphicalabstract and highlights environments
+            tex = re.sub(
+                r'[ \t]*\\begin\{graphicalabstract\}.*?\\end\{graphicalabstract\}\s*',
+                '', tex, flags=re.DOTALL,
+            )
+            tex = re.sub(
+                r'[ \t]*\\begin\{highlights\}.*?\\end\{highlights\}\s*',
+                '', tex, flags=re.DOTALL,
+            )
+
+        # ── MDPI first‑page left‑column overlap fix ──
+        # In submit mode the class places dates + copyright as a marginnote on
+        # page 1.  With long body text the note overlaps content.
+        # Fix: redefine \contentleftcolumn to empty so the marginnote is blank.
+        if re.search(r'\\documentclass[^}]*\{Definitions/mdpi\}', tex):
+            doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
+            if doc_match:
+                override = "\\makeatletter\\renewcommand{\\contentleftcolumn}{}\\makeatother\n"
+                if override.strip() not in tex:
+                    tex = tex[:doc_match.start()] + override + tex[doc_match.start():]
+
         return tex
 
     # ── Phase 3: Title ──────────────────────────────────────────
@@ -208,9 +286,12 @@ class TemplatePreprocessor:
         Replace content of \title{...} or \Title{...} with << metadata.title >>.
         Case-insensitive to support MDPI's \Title{} and standard \title{}.
         Handles optional args: \title[short title]{full title}.
+        Skips commented-out occurrences.
         """
-        match_iter = re.finditer(r'(?i)\\title\s*(?:\[[^\]]*\])?\s*\{', tex)
+        match_iter = re.finditer(r'(?i)\\title\s*(?:\[\[^\]]*\])?\s*\{', tex)
         for match in match_iter:
+            if cls._is_commented(tex, match.start()):
+                continue
             start_open = match.end() - 1
             end_close = cls._find_matching_brace(tex, start_open)
             if end_close != -1:
@@ -242,13 +323,23 @@ class TemplatePreprocessor:
         ]
 
         for cmd in commands_to_remove:
+            _failsafe = 0
+            search_start = 0
             while True:
+                _failsafe += 1
+                if _failsafe > 50:
+                    break
                 pattern = cmd + r'\s*(?:\[[^\]]*\])?\s*\{'
-                match = re.search(pattern, tex)
+                match = re.search(pattern, tex[search_start:])
                 if not match:
                     break
-                start_match = match.start()
-                start_open = match.end() - 1
+                abs_start = search_start + match.start()
+                # Skip matches inside comment lines
+                if cls._is_commented(tex, abs_start):
+                    search_start = search_start + match.end()
+                    continue
+                start_match = abs_start
+                start_open = search_start + match.end() - 1
                 end_close = cls._find_matching_brace(tex, start_open)
                 if end_close != -1:
                     remove_end = end_close + 1
@@ -257,6 +348,7 @@ class TemplatePreprocessor:
                     if remove_end < len(tex) and tex[remove_end] == '\n':
                         remove_end += 1
                     tex = tex[:start_match] + tex[remove_end:]
+                    search_start = 0  # reset — tex was modified
                 else:
                     break
 
@@ -267,9 +359,11 @@ class TemplatePreprocessor:
         if '<< metadata.author_block >>' not in tex:
             insert_pos = -1
 
-            # Try: after \title{...}
-            match_iter = re.finditer(r'(?i)\\title\s*(?:\[[^\]]*\])?\s*\{', tex)
+            # Try: after \title{...} (skip commented lines)
+            match_iter = re.finditer(r'(?i)\\title\s*(?:\[\[^\]]*\])?\s*\{', tex)
             for match in match_iter:
+                if cls._is_commented(tex, match.start()):
+                    continue
                 start_open = match.end() - 1
                 end_close = cls._find_matching_brace(tex, start_open)
                 if end_close != -1:
@@ -354,6 +448,21 @@ class TemplatePreprocessor:
 
     # ── Phase 7: Body ────────────────────────────────────────────
 
+    @staticmethod
+    def _verbatim_ranges(tex: str) -> list:
+        """Return list of (start, end) char ranges that are inside verbatim contexts.
+
+        Covers \\verb|...|  (any delimiter) and \\begin{verbatim}...\\end{verbatim}.
+        """
+        ranges = []
+        # \verb<delim>...<delim>
+        for m in re.finditer(r'\\verb(.)(.*?)\1', tex, re.DOTALL):
+            ranges.append((m.start(), m.end()))
+        # \begin{verbatim}...\end{verbatim}
+        for m in re.finditer(r'\\begin\{verbatim\}.*?\\end\{verbatim\}', tex, re.DOTALL):
+            ranges.append((m.start(), m.end()))
+        return ranges
+
     @classmethod
     def _process_body(cls, tex: str) -> str:
         """
@@ -366,6 +475,11 @@ class TemplatePreprocessor:
         - Elsevier (end frontmatter)
         - Generic (falls back to begin document if no other marker found)
         """
+        verb_ranges = cls._verbatim_ranges(tex)
+
+        def _in_verbatim(pos):
+            return any(s <= pos < e for s, e in verb_ranges)
+
         # Tìm điểm BẮT ĐẦU: lấy vị trí xa nhất (cuối cùng) trong các mốc
         start_search_patterns = [
             r'\\maketitle',
@@ -377,7 +491,7 @@ class TemplatePreprocessor:
         
         body_start = -1
         for p in start_search_patterns:
-            matches = list(re.finditer(p, tex))
+            matches = [m for m in re.finditer(p, tex) if not _in_verbatim(m.start())]
             if matches:
                 pos = matches[-1].end()
                 if pos > body_start:
@@ -402,13 +516,24 @@ class TemplatePreprocessor:
 
         body_end = len(tex)
         for p in end_search_patterns:
-            match = re.search(p, tex)
-            if match:
-                pos = match.start()
+            for m in re.finditer(p, tex):
+                if _in_verbatim(m.start()):
+                    continue
+                pos = m.start()
                 if pos < body_end and pos > body_start:
                     body_end = pos
+                    break  # first non-verbatim match for this pattern
 
         if body_start != -1 and body_start < body_end:
+            # MDPI wraps bibliography in \begin{adjustwidth} — preserve it.
+            # Find the LAST \begin{adjustwidth} before body_end.
+            region = tex[body_start:body_end]
+            adj_matches = list(re.finditer(
+                r'(?:^[ \t]*%[^\n]*\n)*^[ \t]*\\begin\{adjustwidth\}[^\n]*\n',
+                region, re.MULTILINE
+            ))
+            if adj_matches:
+                body_end = body_start + adj_matches[-1].start()
             # XÓA SẠCH toàn bộ dummy text mẫu giữa 2 điểm, chèn << body >>
             tex = tex[:body_start] + "\n\n<< body >>\n\n" + tex[body_end:]
         elif body_start != -1:
@@ -432,7 +557,18 @@ class TemplatePreprocessor:
         Supports:
         - \keywords{...} (Springer, ACM)
         - \keyword{...}  (MDPI, singular — negative lookahead for \keywords)
+        - \begin{keyword}...\end{keyword} (Elsevier environment form)
         """
+        # \begin{keyword}...\end{keyword} (Elsevier environment)
+        env_match = re.search(r'\\begin\{keyword\}(.*?)\\end\{keyword\}', tex, re.DOTALL)
+        if env_match:
+            tex = (tex[:env_match.start()]
+                   + r'\begin{keyword}' + '\n'
+                   + '<< metadata.keywords_str >>'  + '\n'
+                   + r'\end{keyword}'
+                   + tex[env_match.end():])
+            return tex
+
         # \keywords{...} (with 's') — case-insensitive
         match = re.search(r'(?i)\\keywords\s*\{', tex)
         if match:
@@ -458,11 +594,61 @@ class TemplatePreprocessor:
     def _process_references(cls, tex: str) -> str:
         r"""Replace toàn bộ phần references (thebibliography hoặc \section*{References}) và
         xóa sạch dummy text mẫu còn sót, chỉ giữ << references_block >>."""
-        # Bước 1: Thay thế \begin{thebibliography}...\end{thebibliography}
+        # Bước 1: Thay thế tất cả \begin{thebibliography}...\end{thebibliography}
+        # Giữ lại block đầu tiên (thay bằng << references_block >>), xóa các block còn lại
         pattern = r'\\begin\{thebibliography\}.*?\\end\{thebibliography\}'
-        match = re.search(pattern, tex, re.DOTALL)
-        if match:
-            tex = tex[:match.start()] + '<< references_block >>' + tex[match.end():]
+        first_replaced = False
+        while True:
+            match = re.search(pattern, tex, re.DOTALL)
+            if not match:
+                break
+            if not first_replaced:
+                tex = tex[:match.start()] + '<< references_block >>' + tex[match.end():]
+                first_replaced = True
+            else:
+                # Remove subsequent bibliography blocks (template samples)
+                tex = tex[:match.start()] + tex[match.end():]
+
+        # Bước 1b: MDPI templates wrap bibliography in conditional macros
+        # (\isAPAandChicago, \isChicagoStyle, \isAPAStyle).
+        # These macros read the bibliography as a TeX parameter which breaks
+        # with large reference lists. Strip the wrapping and keep << references_block >> bare.
+        for mdpi_cmd in (r'\\isAPAandChicago', r'\\isChicagoStyle', r'\\isAPAStyle'):
+            # Pattern: \macro{...}{...} — two brace groups
+            cmd_pattern = mdpi_cmd + r'\s*'
+            while True:
+                m = re.search(cmd_pattern + r'\{', tex)
+                if not m:
+                    break
+                brace1_start = m.end() - 1
+                brace1_end = cls._find_matching_brace(tex, brace1_start)
+                if brace1_end == -1:
+                    break
+                # Look for optional second brace group
+                rest = tex[brace1_end + 1:]
+                rest_stripped = rest.lstrip()
+                if rest_stripped and rest_stripped[0] == '{':
+                    offset = brace1_end + 1 + (len(rest) - len(rest_stripped))
+                    brace2_end = cls._find_matching_brace(tex, offset)
+                    if brace2_end == -1:
+                        brace2_end = brace1_end  # no second group
+                    end_pos = brace2_end + 1
+                else:
+                    end_pos = brace1_end + 1
+                # Extract inner content of the group that has << references_block >>
+                inner1 = tex[brace1_start + 1:brace1_end]
+                if '<< references_block >>' in inner1:
+                    # Keep the references block, remove everything else of this macro
+                    tex = tex[:m.start()] + '<< references_block >>' + tex[end_pos:]
+                elif rest_stripped and rest_stripped[0] == '{':
+                    inner2 = tex[offset + 1:brace2_end] if brace2_end > offset else ''
+                    if '<< references_block >>' in inner2:
+                        tex = tex[:m.start()] + '<< references_block >>' + tex[end_pos:]
+                    else:
+                        # Neither group has references — remove entire macro call
+                        tex = tex[:m.start()] + tex[end_pos:]
+                else:
+                    tex = tex[:m.start()] + tex[end_pos:]
 
         # Bước 2: Nếu có \section*{References}, xóa TOÀN BỘ nội dung từ đó đến \end{document}
         # (bao gồm dummy guidance text, \color{red} warning, v.v.) và chỉ giữ references_block
@@ -471,33 +657,27 @@ class TemplatePreprocessor:
         if ref_match and end_doc_match and ref_match.start() < end_doc_match.start():
             tex = tex[:ref_match.start()] + '\n<< references_block >>\n\n' + tex[end_doc_match.start():]
 
-        # Bước 3: Comment out \bibliographystyle{} and \bibliography{} since we use thebibliography
-        tex = re.sub(r'^(\s*)(\\bibliographystyle\{[^}]*\})', r'\1% \2', tex, flags=re.MULTILINE)
-        tex = re.sub(r'^(\s*)(\\bibliography\{[^}]*\})', r'\1% \2', tex, flags=re.MULTILINE)
+        # Bước 3: Handle \bibliographystyle{} and \bibliography{} (BibTeX-based templates like ACM)
+        # If no << references_block >> was created by steps 1-2, replace everything from
+        # the LAST \bibliographystyle (or \bibliography) through \end{document} to ensure
+        # references_block exists and leftover template content (e.g. appendix) is removed.
+        # Use LAST matches to skip documentation text / verbatim examples.
+        if '<< references_block >>' not in tex:
+            end_docs = list(re.finditer(r'\\end\{document\}', tex))
+            end_doc = end_docs[-1] if end_docs else None
+            if end_doc:
+                bib_styles = [m for m in re.finditer(r'^[ \t]*\\bibliographystyle\{', tex, re.MULTILINE)
+                              if m.start() < end_doc.start()]
+                bib_cmds = [m for m in re.finditer(r'^[ \t]*\\bibliography\{', tex, re.MULTILINE)
+                            if m.start() < end_doc.start()]
+                bib_style = bib_styles[-1] if bib_styles else None
+                bib_cmd = bib_cmds[-1] if bib_cmds else None
+                start = bib_style.start() if bib_style else (bib_cmd.start() if bib_cmd else None)
+                if start is not None:
+                    tex = tex[:start] + '\n<< references_block >>\n\n' + tex[end_doc.start():]
+        else:
+            # references_block already exists — just comment out the commands
+            tex = re.sub(r'^(\s*)(\\bibliographystyle\{[^}]*\})', r'\1% \2', tex, flags=re.MULTILINE)
+            tex = re.sub(r'^(\s*)(\\bibliography\{[^}]*\})', r'\1% \2', tex, flags=re.MULTILINE)
 
         return tex
-
-if __name__ == "__main__":
-    # Test quickly
-    sample = r'''
-    \documentclass{IEEEtran}
-    \title{This is a fake title \thanks{Sponsor A}}
-    \author{\IEEEauthorblockN{Alice} \and \IEEEauthorblockN{Bob}}
-    \begin{document}
-    \maketitle
-    \begin{abstract}
-    This is old abstract text that will be deleted.
-    \end{abstract}
-    \begin{IEEEkeywords}
-    Key, Words
-    \end{IEEEkeywords}
-    \section{Intro}
-    Blah blah
-    \begin{thebibliography}{1}
-    \bibitem{a} ref a
-    \end{thebibliography}
-    \end{document}
-    '''
-    
-    print("BEFORE:\n", sample)
-    print("\nAFTER:\n", TemplatePreprocessor.auto_tag(sample))

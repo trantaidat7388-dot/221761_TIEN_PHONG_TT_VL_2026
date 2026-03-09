@@ -391,10 +391,10 @@ class WordASTParser:
                 if state == "pre_title":
                     if style_cmd == r"\title" or self._is_title_paragraph(element, idx):
                         state = "title"
-                    elif self._is_authors_label(text) or style_cmd == r"\author" or prediction == "AUTHOR" or style_name == "Authors":
-                        state = "authors"
                     elif self._is_abstract_label(text) or prediction == "ABSTRACT" or style_name == "Abstract":
                         state = "abstract"
+                    elif self._is_authors_label(text) or style_cmd == r"\author" or prediction == "AUTHOR" or style_name == "Authors":
+                        state = "authors"
                     elif self._is_body_label(text) or prediction == "HEADING" or style_name.startswith("Heading"):
                         state = "body"
                 
@@ -402,12 +402,12 @@ class WordASTParser:
                 if state == "title":
                     if style_name == "Subtitle" or style_name == "subtitle":
                         state = "title"
-                    elif (len(text) > 250 or prediction == "AUTHOR" or style_name in ("Authors", "AuthorsBlock", "Author") or self._is_authors_label(text)):
-                        state = "authors"
                     elif self._is_abstract_label(text) or prediction == "ABSTRACT" or style_name == "Abstract":
                         state = "abstract"
                     elif self._is_body_label(text) or prediction == "HEADING" or style_name.startswith("Heading"):
                         state = "body"
+                    elif (len(text) > 250 or prediction == "AUTHOR" or style_name in ("Authors", "AuthorsBlock", "Author") or self._is_authors_label(text)):
+                        state = "authors"
                         
                 elif state == "authors":
                     if (self._is_abstract_label(text) or prediction == "ABSTRACT" or style_name == "Abstract" or
@@ -790,7 +790,7 @@ class WordASTParser:
         text = ""
         has_math = False
         
-        # print(f"      [DEBUG] _parse_paragraph XML: {p._p.xml[:100]}...") # Too noisy but can be enabled
+
         
         style_name = p.style.name if p.style else ""
         from config import MAP_STYLE

@@ -48,16 +48,3 @@ def parse_latex_log(log_text: str) -> dict:
             loi["ngu_canh"] = loi["ngu_canh"][:97] + "..."
             
     return loi
-    
-if __name__ == "__main__":
-    test_log = '''
-This is XeTeX, Version 3.141592653-2.6-0.999993 (TeX Live 2021) (preloaded format=xelatex)
- restricted \write18 enabled.
-entering extended mode
-! Undefined control sequence.
-l.125 \missingmacro
-                   {Some text here}
-? 
-! Emergency stop.
-    '''
-    print(parse_latex_log(test_log))

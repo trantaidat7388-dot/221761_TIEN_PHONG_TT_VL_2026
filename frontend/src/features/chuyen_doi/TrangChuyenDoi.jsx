@@ -638,7 +638,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-white font-medium text-sm truncate">{ketQuaChuyenDoi.tenFileZip || 'output.zip'}</p>
-                          <p className="text-white/50 text-xs">
+                          <p className="text-white/50 text-xs truncate">
                             {ketQuaChuyenDoi.tenFileLatex || 'output.tex'} + PDF + images/
                           </p>
                         </div>

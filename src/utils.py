@@ -185,16 +185,38 @@ def xoa_file_an_toan(duong_dan_file: str, so_lan_thu: int = 3, thoi_gian_cho_ms:
             return False
     return False
 
-def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None) -> tuple[bool, str]:
-    # Biên dịch file .tex bằng XeLaTeX, trả về (thành_công, thông_báo_lỗi)
-    # thu_muc_bien_dich: tùy chọn override thư mục cwd cho xelatex (quan trọng cho ZIP template)
+def phat_hien_engine(duong_dan_tex: str) -> str:
+    """Phát hiện LaTeX engine phù hợp dựa trên nội dung file .tex.
+    
+    Trả về 'pdflatex' nếu template còn giữ pdftex trong documentclass (MDPI, etc.).
+    Trả về 'xelatex' cho các trường hợp còn lại (hỗ trợ Unicode tốt hơn).
+    """
+    try:
+        with open(duong_dan_tex, 'r', encoding='utf-8', errors='ignore') as f:
+            noi_dung = f.read(3000)
+        if re.search(r'^[^%]*\\documentclass\[.*?pdftex', noi_dung, re.MULTILINE):
+            return 'pdflatex'
+    except Exception:
+        pass
+    return 'xelatex'
+
+
+def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine: str = None) -> tuple[bool, str]:
+    """Biên dịch file .tex, trả về (thành_công, thông_báo_lỗi).
+    
+    engine: 'xelatex' hoặc 'pdflatex'. Nếu None sẽ tự phát hiện.
+    thu_muc_bien_dich: override thư mục cwd (quan trọng cho ZIP template).
+    """
     ten_file = os.path.basename(duong_dan_dau_ra)
     thu_muc = thu_muc_bien_dich or os.path.dirname(duong_dan_dau_ra)
+    
+    if engine is None:
+        engine = phat_hien_engine(duong_dan_dau_ra)
 
-    print(f"\nBắt đầu biên dịch XeLaTeX: {ten_file} (cwd={thu_muc})")
+    print(f"\nBắt đầu biên dịch {engine}: {ten_file} (cwd={thu_muc})")
     try:
         ket_qua = subprocess.run(
-            ['xelatex', '-interaction=nonstopmode', f"./{ten_file}"],
+            [engine, '-interaction=nonstopmode', f"./{ten_file}"],
             cwd=thu_muc if thu_muc else '.',
             capture_output=True,
             text=True,
@@ -203,8 +225,15 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None) -> tup
             timeout=120,
         )
 
+        # Kiểm tra PDF tồn tại (nonstopmode có thể tạo PDF dù có lỗi nhỏ)
+        pdf_path = os.path.join(thu_muc, ten_file.replace('.tex', '.pdf'))
+        pdf_exists = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+
         if ket_qua.returncode == 0:
             print(f" Biên dịch thành công: {ten_file.replace('.tex', '.pdf')}")
+            return True, ""
+        elif pdf_exists:
+            print(f" Biên dịch có cảnh báo nhưng PDF đã tạo: {ten_file.replace('.tex', '.pdf')}")
             return True, ""
         else:
             print(f" Biên dịch thất bại (exit code: {ket_qua.returncode})")
@@ -213,7 +242,7 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None) -> tup
                 print(f"Lỗi: {ket_qua.stderr[:500]}")
             return False, error_msg
     except FileNotFoundError:
-        msg = "Không tìm thấy xelatex. Vui lòng cài đặt TeX Live hoặc MiKTeX."
+        msg = f"Không tìm thấy {engine}. Vui lòng cài đặt TeX Live hoặc MiKTeX."
         print(f" {msg}")
         return False, msg
     except subprocess.TimeoutExpired:
@@ -349,8 +378,8 @@ def package_output_directory(work_dir: str, output_zip_path: str,
         # Font files (for custom templates with bundled fonts)
         '.ttf', '.otf', '.woff', '.woff2', '.pfb', '.tfm',
     }
-    # Cho phép thư mục con phổ biến
-    ALLOWED_SUBDIRS = {'images', 'figures', 'fig', 'figs', 'fonts', 'imgs'}
+    # Cho phép thư mục con phổ biến và các thư mục template thường gặp
+    ALLOWED_SUBDIRS = {'images', 'figures', 'fig', 'figs', 'fonts', 'imgs', 'definitions', 'styles', 'bib', 'bst', 'acm'}
     # File không có extension nhưng cần thiết cho Overleaf
     ALLOWED_NOEXT_FILES = {'latexmkrc', 'makefile', 'Makefile'}
 
@@ -358,40 +387,75 @@ def package_output_directory(work_dir: str, output_zip_path: str,
 
     generated_pdf_name = generated_tex_name.replace('.tex', '.pdf') if generated_tex_name else None
 
+    # Detect which .bst is actually used in the generated .tex
+    used_bst = set()
+    if generated_tex_name:
+        gen_tex_path = os.path.join(work_dir, generated_tex_name)
+        if os.path.isfile(gen_tex_path):
+            try:
+                with open(gen_tex_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    for m in re.finditer(r'\\bibliographystyle\{([^}]+)\}', f.read()):
+                        used_bst.add(m.group(1) + '.bst')
+            except Exception:
+                pass  # If can't read, include all .bst
+
     with zipfile.ZipFile(output_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for item_name in os.listdir(work_dir):
-            item_path = os.path.join(work_dir, item_name)
-
-            # Bỏ qua chính file ZIP đầu ra
-            if os.path.abspath(item_path) == abs_zip:
+        for dirpath, _dirnames, filenames in os.walk(work_dir):
+            rel_dir = os.path.relpath(dirpath, work_dir)
+            # Skip temp_jobs / nested job folders that sometimes leak in
+            if 'temp_jobs' in rel_dir or 'job_' in rel_dir:
                 continue
-                
-            # Tránh lỗi clashing với compiler Overleaf (This compile didn't produce a PDF ... output.pdf)
-            if item_name.lower() == "output.pdf":
-                continue
+            # Restrict sub-directories to the whitelist
+            if rel_dir not in ('', '.'):
+                top_dir = rel_dir.split(os.sep)[0].lower()
+                if top_dir not in ALLOWED_SUBDIRS:
+                    continue
+            for fname in filenames:
+                fpath = os.path.join(dirpath, fname)
 
-            if os.path.isfile(item_path):
-                _, ext = os.path.splitext(item_name)
-                # Allow files with known extensions OR specific no-extension files (latexmkrc)
-                if ext.lower() in ALLOWED_EXTENSIONS or item_name in ALLOWED_NOEXT_FILES:
-                    arcname = item_name
-                    if generated_tex_name:
-                        if item_name == generated_tex_name:
-                            arcname = "main.tex"
-                        elif item_name == generated_pdf_name:
-                            arcname = "main.pdf"
-                        elif item_name == "main.tex":
-                            arcname = "template_main.tex"  # Tránh trùng tên
-                        elif item_name == "main.pdf":
-                            arcname = "template_main.pdf"
+                # Bỏ qua chính file ZIP đầu ra
+                if os.path.abspath(fpath) == abs_zip:
+                    continue
 
-                    zf.write(item_path, arcname)
-            elif os.path.isdir(item_path) and item_name.lower() in ALLOWED_SUBDIRS:
-                # Đệ quy gom thư mục images/
-                for dirpath, _dirnames, filenames in os.walk(item_path):
-                    for fname in filenames:
-                        fpath = os.path.join(dirpath, fname)
-                        arcname = os.path.relpath(fpath, work_dir)
-                        zf.write(fpath, arcname)
+                # Tránh lỗi clashing với compiler Overleaf (This compile didn't produce a PDF ... output.pdf)
+                if fname.lower() == "output.pdf":
+                    continue
+
+                _, ext = os.path.splitext(fname)
+                if ext.lower() not in ALLOWED_EXTENSIONS and fname not in ALLOWED_NOEXT_FILES:
+                    continue
+
+                # At root level, skip template variant / sample files
+                if rel_dir in ('', '.'):
+                    # Only keep the generated .tex (skip template variant .tex)
+                    if ext.lower() == '.tex':
+                        if generated_tex_name and fname != generated_tex_name:
+                            continue
+                    # Only keep references.bib (skip template sample .bib)
+                    if ext.lower() == '.bib' and fname.lower() != 'references.bib':
+                        continue
+                    # Only keep the generated .pdf (skip template sample .pdf)
+                    if ext.lower() == '.pdf':
+                        if generated_pdf_name and fname != generated_pdf_name:
+                            continue
+                    # Only keep the .bst referenced in the output (skip unused variants)
+                    if ext.lower() == '.bst' and used_bst and fname not in used_bst:
+                        continue
+
+                rel_path = os.path.relpath(fpath, work_dir)
+                arcname = rel_path
+
+                # Chỉ rename file sinh ra ở root để tránh đổi nhầm file trùng tên trong subdir
+                if generated_tex_name and os.path.dirname(rel_path) in ('', '.'):
+                    if fname == generated_tex_name:
+                        arcname = "main.tex"
+                    elif fname == generated_pdf_name:
+                        arcname = "main.pdf"
+                    elif fname == "main.tex":
+                        arcname = "template_main.tex"  # Tránh trùng tên
+                    elif fname == "main.pdf":
+                        arcname = "template_main.pdf"
+
+                zf.write(fpath, arcname)
 
     return output_zip_path

@@ -457,7 +457,7 @@ async def chuyen_doi_file(
             template_tex_dir = template_path.parent
             if template_tex_dir != job_folder:
                 print(f"[INFO] File .tex chính nằm trong thư mục con: {template_tex_dir.relative_to(job_folder)}")
-                dep_extensions = {'.cls', '.sty', '.bst', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib'}
+                dep_extensions = {'.cls', '.sty', '.bst', '.tex', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib'}
                 for item in template_tex_dir.rglob("*"):
                     if item.is_file() and item.suffix.lower() in dep_extensions:
                         target_file = job_folder / item.relative_to(template_tex_dir)
@@ -500,27 +500,23 @@ async def chuyen_doi_file(
                 detail=f"Template không tồn tại hoặc lỗi cấu trúc thư mục."
             )
         
-        # Copy các file dependencies (.cls, .sty, .bst, fonts, images, etc.) sang thư mục job_folder
-        _DEP_EXTENSIONS = {
-            '.cls', '.sty', '.bst', '.bib', '.bbx', '.cbx', '.lbx', '.dbx',
-            '.fd', '.cfg', '.def',
-            '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.gif', '.svg',
-            '.ttf', '.otf', '.pfb', '.tfm',
-        }
+        # Copy toàn bộ thư mục template (bao gồm Definitions/, fonts/, v.v.) sang job_folder
+        # dùng copytree dirs_exist_ok=True để đảm bảo KHÔNG bỏ sót bất kỳ subdir nào
         template_dir_actual = template_path.parent
-        for item in template_dir_actual.rglob("*"):
-            if item.is_file() and item.suffix.lower() in _DEP_EXTENSIONS:
-                try:
-                    target_file = job_folder / item.relative_to(template_dir_actual)
-                    target_file.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(item, target_file)
-                except Exception as e:
-                    print(f"[WARN] Lỗi khi copy dependency {item.name}: {e}")
-        
-        # Copy template .tex sang job_folder để chuyen_doi sinh .j2 trong job folder (không ô nhiễm custom_templates/)
+        try:
+            shutil.copytree(str(template_dir_actual), str(job_folder), dirs_exist_ok=True)
+        except Exception as e:
+            print(f"[WARN] copytree thất bại, fallback rglob: {e}")
+            for item in template_dir_actual.rglob("*"):
+                if item.is_file():
+                    try:
+                        target_file = job_folder / item.relative_to(template_dir_actual)
+                        target_file.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(item, target_file)
+                    except Exception as e2:
+                        print(f"[WARN] Không thể copy {item.name}: {e2}")
+
         template_dest = job_folder / template_path.name
-        if not template_dest.exists():
-            shutil.copy2(template_path, template_dest)
         template_path = template_dest
 
     zip_filename = output_filename.replace('.tex', '.zip')
@@ -776,7 +772,7 @@ async def chuyen_doi_file_stream(
                         return
                     template_tex_dir = template_path.parent
                     if template_tex_dir != job_folder:
-                        dep_extensions = {'.cls', '.sty', '.bst', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib'}
+                        dep_extensions = {'.cls', '.sty', '.bst', '.tex', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib'}
                         for item in template_tex_dir.rglob("*"):
                             if item.is_file() and item.suffix.lower() in dep_extensions:
                                 target_file = job_folder / item.relative_to(template_tex_dir)
@@ -810,24 +806,22 @@ async def chuyen_doi_file_stream(
                     yield sse_event(-1, "Template không tồn tại", error=True)
                     return
 
+                # Copy toàn bộ thư mục template (bao gồm Definitions/, fonts/, v.v.) sang job_folder
                 template_dir_actual = template_path.parent
-                _DEP_EXTENSIONS = {
-                    '.cls', '.sty', '.bst', '.bib', '.bbx', '.cbx', '.lbx', '.dbx',
-                    '.fd', '.cfg', '.def',
-                    '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.gif', '.svg',
-                    '.ttf', '.otf', '.pfb', '.tfm',
-                }
-                for item in template_dir_actual.rglob("*"):
-                    if item.is_file() and item.suffix.lower() in _DEP_EXTENSIONS:
-                        try:
-                            target_file = job_folder / item.relative_to(template_dir_actual)
-                            target_file.parent.mkdir(parents=True, exist_ok=True)
-                            shutil.copy2(item, target_file)
-                        except Exception:
-                            pass
+                try:
+                    shutil.copytree(str(template_dir_actual), str(job_folder), dirs_exist_ok=True)
+                except Exception as e:
+                    print(f"[WARN] SSE copytree thất bại, fallback rglob: {e}")
+                    for item in template_dir_actual.rglob("*"):
+                        if item.is_file():
+                            try:
+                                target_file = job_folder / item.relative_to(template_dir_actual)
+                                target_file.parent.mkdir(parents=True, exist_ok=True)
+                                shutil.copy2(item, target_file)
+                            except Exception as e2:
+                                print(f"[WARN] Không thể copy {item.name}: {e2}")
+
                 template_dest = job_folder / template_path.name
-                if not template_dest.exists():
-                    shutil.copy2(template_path, template_dest)
                 template_path = template_dest
 
             yield sse_event(2, "Đang xây dựng cây AST & Phân tích ngữ nghĩa...")
@@ -911,8 +905,8 @@ async def chuyen_doi_file_stream(
             don_dep_file_rac(str(output_path))
 
             tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
-            so_hinh_anh = len(re.findall(r'\\includegraphics', tex_raw))
-            so_bang = len(re.findall(r'\\begin\{table', tex_raw))
+            so_hinh_anh = len(re.findall(r'^[^%\n]*\\includegraphics', tex_raw, re.MULTILINE))
+            so_bang = len(re.findall(r'^[^%\n]*\\begin\{table', tex_raw, re.MULTILINE))
 
             # Ưu tiên dùng total_formulas từ AST IR (chính xác hơn regex)
             ir = getattr(bo_chuyen_doi, 'ir', None)

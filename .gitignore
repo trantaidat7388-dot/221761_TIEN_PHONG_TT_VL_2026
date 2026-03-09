@@ -50,10 +50,8 @@ env/
 Thumbs.db
 
 # Output files (generated)
-output/*.pdf
-output/*.aux
-output/*.log
-output/*.synctex.gz
+output/
+images/
 
 # Temporary files
 temp/
@@ -83,9 +81,6 @@ temp_jobs/
 
 # Generated conversion output archives (root-level)
 outputs/
-
-# Helper scripts
-_write_readme.py
 
 # Firebase config (sensitive)
 frontend/src/services/firebaseConfig.js
