@@ -82,12 +82,7 @@ REM ============================================================
 echo [5/5] Starting Frontend (Vite on :5173)...
 
 start "Word2LaTeX Frontend" cmd /k ^
-    "chcp 65001 >nul ^& ^
-     cd /d "%ROOT%frontend" ^& ^
-     echo [Frontend] Installing packages... ^& ^
-     npm install --prefer-offline --silent ^& ^
-     echo [Frontend] Starting Vite... ^& ^
-     npm run dev"
+    "chcp 65001 >nul & cd /d "%ROOT%frontend" & if not exist "node_modules" (npm install --prefer-offline) & npm run dev"
 
 echo       OK - Frontend window opened.
 echo.
@@ -95,8 +90,8 @@ echo.
 REM ============================================================
 REM AUTO-OPEN BROWSER after 5 seconds
 REM ============================================================
-echo Waiting 8 seconds for servers to boot...
-timeout /t 8 /nobreak >nul
+echo Waiting 12 seconds for servers to boot...
+timeout /t 12 /nobreak >nul
 echo Opening http://localhost:5173 in your browser...
 start "" http://localhost:5173
 
