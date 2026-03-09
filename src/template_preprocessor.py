@@ -2,14 +2,16 @@ import re
 
 class TemplatePreprocessor:
     """
-    Tự động xử lý một file mẫu LaTeX (.tex) tải từ internet (IEEE, ACM, Springer, v.v...)
-    bằng cách tiêm các biến Jinja2 (ví dụ: {{ metadata.title }}, {{ body }})
-    để tương thích với JinjaLaTeXRenderer.
+    Universal LaTeX template preprocessor for Jinja2 tagging.
+    Supports: IEEE, ACM, Springer (LLNCS), Elsevier, MDPI, and generic templates.
+    Injects Jinja2 variables (e.g. << metadata.title >>, << body >>)
+    using custom delimiters << >> to avoid { } conflict.
     """
 
     @classmethod
     def auto_tag(cls, tex_content: str) -> str:
         tex = cls._ensure_essential_packages(tex_content)
+        tex = cls._cleanup_publisher_metadata(tex)
         tex = cls._process_title(tex)
         tex = cls._process_authors(tex)
         tex = cls._process_abstract(tex)
@@ -17,6 +19,8 @@ class TemplatePreprocessor:
         tex = cls._process_references(tex)
         tex = cls._process_body(tex)
         return tex
+
+    # ── Utilities ──────────────────────────────────────────────────
 
     @classmethod
     def _find_matching_brace(cls, text: str, start_index: int) -> int:
@@ -34,33 +38,80 @@ class TemplatePreprocessor:
         return -1
 
     @classmethod
+    def _remove_command(cls, tex: str, cmd_regex: str, *, multi_brace: bool = False) -> str:
+        """Remove all occurrences of a LaTeX command with its balanced brace arguments.
+
+        cmd_regex: regex matching the command (e.g. r'\\\\author').
+        multi_brace: if True, consume additional {...} groups after the first.
+        """
+        pattern = cmd_regex + r'\s*(?:\[[^\]]*\])?\s*\{'
+        while True:
+            match = re.search(pattern, tex)
+            if not match:
+                break
+            start = match.start()
+            brace_start = match.end() - 1
+            brace_end = cls._find_matching_brace(tex, brace_start)
+            if brace_end == -1:
+                break
+            end = brace_end
+            if multi_brace:
+                while end + 1 < len(tex):
+                    rest = tex[end + 1:].lstrip()
+                    if rest and rest[0] == '{':
+                        next_brace = tex.index('{', end + 1)
+                        next_end = cls._find_matching_brace(tex, next_brace)
+                        if next_end == -1:
+                            break
+                        end = next_end
+                    else:
+                        break
+            # Remove including trailing whitespace + newline
+            remove_end = end + 1
+            while remove_end < len(tex) and tex[remove_end] in (' ', '\t'):
+                remove_end += 1
+            if remove_end < len(tex) and tex[remove_end] == '\n':
+                remove_end += 1
+            tex = tex[:start] + tex[remove_end:]
+        return tex
+
+    # ── Phase 1: Essential packages ───────────────────────────────
+
+    @classmethod
     def _ensure_essential_packages(cls, tex: str) -> str:
         r"""
-        FORCE FIX: Chèn block @ifpackageloaded ngay trước \begin{document}.
-        Không dùng regex dò tìm. Để LaTeX tự quyết định nạp package hay không.
-        Cách này chuẩn xác 100%, không bao giờ gây xung đột.
+        Ensure essential packages for XeLaTeX compilation.
 
-        Universal compatibility:
-        - fontspec: required for XeLaTeX Unicode support (Vietnamese, CJK, etc.)
-        - amsmath/amssymb: math packages
-        - xurl: URL line-breaking
-        - Removes inputenc (pdfLaTeX-only, conflicts with XeLaTeX)
-        - Replaces T1/OT1 fontenc with fontspec
+        Strategy:
+        1. \PassOptionsToPackage{table,xcdraw}{xcolor} BEFORE \documentclass
+           — prevents option clash with cls files (MDPI, ACM) that load xcolor internally.
+        2. Remove pdftex/pdflatex driver hints from \documentclass options
+           — XeLaTeX auto-detects the correct driver; leftover hints cause errors.
+        3. Replace T1/OT1 fontenc with fontspec; comment out inputenc.
+        4. Inject @ifpackageloaded guards before \begin{document}.
+           Package options are pre-set via \PassOptionsToPackage so the guards
+           use bare \usepackage{pkg} — no option clash regardless of loading order.
         """
-        INJECT_BLOCK = (
-            "\\makeatletter\n"
-            "\\@ifpackageloaded{fontspec}{}{\\usepackage{fontspec}}\n"
-            "\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n"
-            "\\@ifpackageloaded{amssymb}{}{\\usepackage{amssymb}}\n"
-            "\\@ifpackageloaded{xurl}{}{\\usepackage{xurl}}\n"
-            "\\@ifpackageloaded{xcolor}{}{\\usepackage[table,xcdraw]{xcolor}}\n"
-            "\\@ifpackageloaded{graphicx}{}{\\usepackage{graphicx}}\n"
-            "\\@ifpackageloaded{hyperref}{}{\\usepackage[hidelinks]{hyperref}}\n"
-            "\\makeatother\n"
-        )
+        # Skip if already injected
+        if '\\PassOptionsToPackage{table,xcdraw}{xcolor}' in tex:
+            return tex
 
-        # XeLaTeX Unicode fix: T1/OT1 fontenc is pdfLaTeX-only; replace with fontspec
-        # so Vietnamese (and other Unicode) characters render correctly under XeLaTeX.
+        # ── Before \documentclass ──
+        PASS_OPTIONS = "\\PassOptionsToPackage{table,xcdraw}{xcolor}\n"
+        dc_match = re.search(r'^[ \t]*\\documentclass', tex, re.MULTILINE)
+        if dc_match:
+            tex = tex[:dc_match.start()] + PASS_OPTIONS + tex[dc_match.start():]
+
+        # Remove pdftex/pdflatex from \documentclass options (XeLaTeX does not need driver hints)
+        dc_opts = re.search(r'(\\documentclass\s*\[)([^\]]*)(\])', tex)
+        if dc_opts:
+            opts = dc_opts.group(2)
+            opt_list = [o.strip() for o in opts.split(',')]
+            opt_list = [o for o in opt_list if o.lower() not in ('pdftex', 'pdflatex')]
+            new_opts = ', '.join(opt_list)
+            tex = tex[:dc_opts.start(2)] + new_opts + tex[dc_opts.end(2):]
+
+        # ── fontenc / inputenc handling ──
         for old_enc in (
             '\\usepackage[T1]{fontenc}',
             '\\usepackage[OT1]{fontenc}',
@@ -68,131 +119,228 @@ class TemplatePreprocessor:
             if old_enc in tex:
                 tex = tex.replace(
                     old_enc,
-                    '\\usepackage{fontspec}  % XeLaTeX: Unicode font support (tiếng Việt)'
+                    '\\usepackage{fontspec}  % XeLaTeX: Unicode font support',
                 )
-                break  # only one encoding package is expected
+                break
 
-        # Remove inputenc variants — pdfLaTeX-only, not needed (and sometimes harmful) under XeLaTeX
         tex = re.sub(
-            r'^[ \t]*\\usepackage\[[^\]]*\]\{inputenc\}.*$',
-            r'% \g<0>  % Removed: XeLaTeX handles UTF-8 natively',
+            r'^([ \t]*)(\\usepackage\[[^\]]*\]\{inputenc\})',
+            r'\1% \2  % Removed: XeLaTeX handles UTF-8 natively',
             tex,
             flags=re.MULTILINE,
         )
 
-        # Skip if already injected
+        # ── Package injection before \begin{document} ──
+        # Options for xcolor are pre-set above via \PassOptionsToPackage,
+        # so the guard here uses bare \usepackage{xcolor}.
+        # hyperref: no forced options — let each template decide its own style.
+        INJECT_BLOCK = (
+            "\\makeatletter\n"
+            "\\@ifpackageloaded{fontspec}{}{\\usepackage{fontspec}}\n"
+            "\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n"
+            "\\@ifpackageloaded{amssymb}{}{\\usepackage{amssymb}}\n"
+            "\\@ifpackageloaded{xurl}{}{\\usepackage{xurl}}\n"
+            "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
+            "\\@ifpackageloaded{graphicx}{}{\\usepackage{graphicx}}\n"
+            "\\@ifpackageloaded{hyperref}{}{\\usepackage[hidelinks]{hyperref}}\n"
+            "\\makeatother\n"
+        )
+
         if '@ifpackageloaded{amsmath}' in tex:
             return tex
 
-        target = '\\begin{document}'
-        if target not in tex:
+        # Match only non-commented \begin{document} (avoid % comment matches)
+        doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
+        if not doc_match:
             return tex
 
-        return tex.replace(target, INJECT_BLOCK + target, 1)
+        pos = doc_match.start()
+        return tex[:pos] + INJECT_BLOCK + tex[pos:]
+
+    # ── Phase 2: Publisher metadata cleanup ───────────────────────
+
+    @classmethod
+    def _cleanup_publisher_metadata(cls, tex: str) -> str:
+        """Remove publisher-specific metadata that won't be populated from Word input."""
+        # ── ACM ──
+        # CCSXML block
+        tex = re.sub(
+            r'\\begin\{CCSXML\}.*?\\end\{CCSXML\}\s*\n?',
+            '', tex, flags=re.DOTALL,
+        )
+        # \ccsdesc[...]{...}
+        tex = cls._remove_command(tex, r'\\ccsdesc')
+        # Publisher metadata commands (multi-arg: \acmConference[...]{...}{...}{...})
+        for cmd in ('acmConference', 'acmBooktitle', 'acmDOI', 'acmYear',
+                     'acmISBN', 'acmPrice', 'acmSubmissionID',
+                     'setcopyright', 'copyrightyear'):
+            tex = cls._remove_command(tex, r'\\' + cmd, multi_brace=True)
+        # \begin{teaserfigure}...\end{teaserfigure}
+        tex = re.sub(
+            r'\\begin\{teaserfigure\}.*?\\end\{teaserfigure\}\s*\n?',
+            '', tex, flags=re.DOTALL,
+        )
+        # \renewcommand{\shortauthors}{...}
+        tex = re.sub(
+            r'^[ \t]*\\renewcommand\s*\{\\shortauthors\}\s*\{[^}]*\}.*$\n?',
+            '', tex, flags=re.MULTILINE,
+        )
+
+        # ── MDPI ──
+        # \AuthorNames{...} (redundant with \Author)
+        tex = cls._remove_command(tex, r'\\AuthorNames')
+        # Correspondence, review metadata
+        for cmd in ('corres', 'firstnote', 'secondnote', 'thirdnote',
+                     'fourthnote', 'fifthnote', 'sixthnote', 'seventhnote', 'eighthnote',
+                     'institutionalreview', 'dataavailability',
+                     'conflictsofinterest', 'sampleavailability',
+                     'authorcontributions', 'funding',
+                     'abbreviations', 'appendixtitles'):
+            tex = cls._remove_command(tex, r'\\' + cmd)
+
+        return tex
+
+    # ── Phase 3: Title ──────────────────────────────────────────
 
     @classmethod
     def _process_title(cls, tex: str) -> str:
+        r"""
+        Replace content of \title{...} or \Title{...} with << metadata.title >>.
+        Case-insensitive to support MDPI's \Title{} and standard \title{}.
+        Handles optional args: \title[short title]{full title}.
         """
-        Tìm lệnh \title{...} và gán << metadata.title >> vào trong.
-        Hỗ trợ nhận dạng \title kể cả khi nó trải qua nhiều dòng.
-        """
-        match_iter = re.finditer(r'\\title\s*\{', tex)
+        match_iter = re.finditer(r'(?i)\\title\s*(?:\[[^\]]*\])?\s*\{', tex)
         for match in match_iter:
             start_open = match.end() - 1
             end_close = cls._find_matching_brace(tex, start_open)
             if end_close != -1:
-                # Trích xuất nội dung cần giữ lại như \thanks{} nếu có
-                old_content = tex[start_open + 1:end_close]
-                thanks_match = re.search(r'\\thanks\s*\{', old_content)
-                
-                thanks_block = ""
-                if thanks_match:
-                    thanks_start = thanks_match.start()
-                    thanks_open = thanks_start + thanks_match.group().find('{')
-                    thanks_close = cls._find_matching_brace(old_content, thanks_open)
-                    if thanks_close != -1:
-                        thanks_block = old_content[thanks_start:thanks_close + 1]
-
-                # Jinja2 in this system uses custom delimiters: << >> to avoid { } conflict
-                # Không giữ \thanks{} từ template vì nó luôn chứa dummy text mẫu
-                new_title = r"<< metadata.title >>"
-
-                # Thay thế
-                tex = tex[:start_open + 1] + new_title + tex[end_close:]
-                break # Chỉ xử lý title đầu tiên
+                tex = tex[:start_open + 1] + '<< metadata.title >>' + tex[end_close:]
+                break
         return tex
+
+    # ── Phase 4: Authors ─────────────────────────────────────────
 
     @classmethod
     def _process_authors(cls, tex: str) -> str:
         r"""
-        Xóa toàn bộ các khối lệnh tác giả hỗn tạp (\author, \affil, \address, \email, \institute, \IEEEauthorblockN)
-        Và chèn 1 dòng << metadata.author_block >> thay thế (chứa mã nguồn LaTeX hoàn chỉnh cho phần tác giả).
+        Remove all author-related commands and inject << metadata.author_block >>.
+        Supports IEEE, ACM, Springer, MDPI, Elsevier formats.
+
+        Case-insensitive for \author / \Author (MDPI) and \address / \Address.
         """
-        # Định nghĩa các regex blocks cần gỡ bỏ hoàn toàn
-        commands_to_remove = [r'\\authorrunning', r'\\titlerunning', r'\\author', r'\\affil', r'\\address', r'\\email', r'\\institute']
-        
+        commands_to_remove = [
+            r'\\authorrunning', r'\\titlerunning',
+            r'(?i)\\author(?!Names|note|mark|contributions)',  # \author/\Author but not \AuthorNames etc.
+            r'(?i)\\affil(?:iation)?',   # \affil (Springer), \affiliation (ACM)
+            r'(?i)\\address',
+            r'\\email',
+            r'\\institute',
+            r'\\authornote',             # ACM
+            r'\\orcid',                  # ACM
+        ]
+
         for cmd in commands_to_remove:
             while True:
-                # Tìm lệnh, có thể theo sau là [options] rồi {
-                pattern = cmd + r'(?:\s*\[[^\]]*\])?\s*\{'
+                pattern = cmd + r'\s*(?:\[[^\]]*\])?\s*\{'
                 match = re.search(pattern, tex)
                 if not match:
                     break
-                
                 start_match = match.start()
                 start_open = match.end() - 1
                 end_close = cls._find_matching_brace(tex, start_open)
-                
                 if end_close != -1:
-                    # Gỡ phần lệnh và nội dung đã tìm được
-                    tex = tex[:start_match] + tex[end_close + 1:]
+                    remove_end = end_close + 1
+                    while remove_end < len(tex) and tex[remove_end] in (' ', '\t'):
+                        remove_end += 1
+                    if remove_end < len(tex) and tex[remove_end] == '\n':
+                        remove_end += 1
+                    tex = tex[:start_match] + tex[remove_end:]
                 else:
                     break
-        
-        # Chèn marker author_block vào vị trí hợp lý (thường là sau \title hoặc trước \maketitle)
-        # Chỉ chèn nếu chưa có marker
+
+        # Remove commands with only optional args (no required brace): \authornotemark[1]
+        tex = re.sub(r'^[ \t]*\\authornotemark\s*\[[^\]]*\].*$\n?', '', tex, flags=re.MULTILINE)
+
+        # Inject << metadata.author_block >> after \title{...} if not already present
         if '<< metadata.author_block >>' not in tex:
-            title_end_pos = -1
-            match_iter = re.finditer(r'\\title\s*\{', tex)
+            insert_pos = -1
+
+            # Try: after \title{...}
+            match_iter = re.finditer(r'(?i)\\title\s*(?:\[[^\]]*\])?\s*\{', tex)
             for match in match_iter:
                 start_open = match.end() - 1
                 end_close = cls._find_matching_brace(tex, start_open)
                 if end_close != -1:
-                    title_end_pos = end_close + 1
+                    insert_pos = end_close + 1
                     break
-            
-            if title_end_pos != -1:
-                tex = tex[:title_end_pos] + "\n<< metadata.author_block >>\n" + tex[title_end_pos:]
-        
+
+            # Fallback: after \begin{document} (non-commented only)
+            if insert_pos == -1:
+                doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
+                if doc_match:
+                    insert_pos = doc_match.end()
+
+            if insert_pos != -1:
+                tex = tex[:insert_pos] + "\n<< metadata.author_block >>\n" + tex[insert_pos:]
+
         return tex
+
+    # ── Phase 5: Abstract ────────────────────────────────────────
 
     @classmethod
     def _process_abstract(cls, tex: str) -> str:
         r"""
-        Tìm \begin{abstract}...\end{abstract} và thay ruột bằng << metadata.abstract >>.
-        Nếu bên trong có chứa \keywords (như template Springer), ta bảo tồn lệnh này.
-        """
-        # Kiểm tra xem có \keywords bên trong abstract không
-        match = re.search(r'\\begin\{abstract\}(.*?)\\end\{abstract\}', tex, re.DOTALL)
-        has_keywords_inside = False
-        if match:
-            inner_text = match.group(1)
-            if r'\keywords' in inner_text:
-                has_keywords_inside = True
+        Replace abstract content with << metadata.abstract >>.
 
-        pattern = r'(\\begin\{abstract\}).*?(\\end\{abstract\})'
-        
-        repl = r'\g<1>\n<< metadata.abstract >>\n'
-        if has_keywords_inside:
-            repl += r'\\keywords{<< metadata.keywords_str >>}\n'
-        repl += r'\g<2>'
-        
-        tex = re.sub(
-            pattern,
-            repl,
-            tex,
-            flags=re.DOTALL,
-        )
+        Supports:
+        - \begin{abstract}...\end{abstract} (IEEE, ACM, Springer, Elsevier)
+        - \abstract{...} (MDPI command form)
+        - Fallback: inject abstract block if neither is found.
+        """
+        # Pattern 1: Environment form \begin{abstract}...\end{abstract}
+        env_match = re.search(r'\\begin\{abstract\}(.*?)\\end\{abstract\}', tex, re.DOTALL)
+        if env_match:
+            inner_text = env_match.group(1)
+            has_keywords_inside = r'\keywords' in inner_text
+
+            repl = r'\g<1>\n<< metadata.abstract >>\n'
+            if has_keywords_inside:
+                repl += r'\\keywords{<< metadata.keywords_str >>}\n'
+            repl += r'\g<2>'
+
+            tex = re.sub(
+                r'(\\begin\{abstract\}).*?(\\end\{abstract\})',
+                repl, tex, flags=re.DOTALL,
+            )
+            return cls._process_ieee_keywords(tex)
+
+        # Pattern 2: Command form \abstract{...} (MDPI)
+        cmd_match = re.search(r'\\abstract\s*\{', tex)
+        if cmd_match:
+            start_open = cmd_match.end() - 1
+            end_close = cls._find_matching_brace(tex, start_open)
+            if end_close != -1:
+                tex = tex[:start_open + 1] + '<< metadata.abstract >>' + tex[end_close:]
+                return cls._process_ieee_keywords(tex)
+
+        # Fallback: inject abstract block after author_block or after \begin{document}
+        if '<< metadata.abstract >>' not in tex:
+            ab_pos = tex.find('<< metadata.author_block >>')
+            if ab_pos != -1:
+                # Insert after the author_block line
+                nl = tex.find('\n', ab_pos + len('<< metadata.author_block >>'))
+                insert_pos = nl if nl != -1 else ab_pos + len('<< metadata.author_block >>')
+                tex = (tex[:insert_pos] +
+                       "\n\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}\n" +
+                       tex[insert_pos:])
+            else:
+                doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
+                if doc_match:
+                    insert_pos = doc_match.end()
+                    tex = (tex[:insert_pos] +
+                           "\n\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}\n" +
+                           tex[insert_pos:])
+
         return cls._process_ieee_keywords(tex)
 
     @classmethod
@@ -201,6 +349,8 @@ class TemplatePreprocessor:
         pattern = r'(\\begin\{IEEEkeywords\}).*?(\\end\{IEEEkeywords\})'
         repl = r'\g<1>\n<< metadata.keywords_str >>\n\g<2>'
         return re.sub(pattern, repl, tex, flags=re.DOTALL)
+
+    # ── Phase 7: Body ────────────────────────────────────────────
 
     @classmethod
     def _process_body(cls, tex: str) -> str:
@@ -232,9 +382,9 @@ class TemplatePreprocessor:
                     body_start = pos
 
         # FALLBACK: Nếu không tìm thấy marker nào (template đơn giản),
-        # dùng \begin{document} làm điểm bắt đầu
+        # dùng \begin{document} làm điểm bắt đầu (non-commented only)
         if body_start == -1:
-            doc_match = re.search(r'\\begin\{document\}', tex)
+            doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
             if doc_match:
                 body_start = doc_match.end()
 
@@ -270,16 +420,37 @@ class TemplatePreprocessor:
 
         return tex
 
+    # ── Phase 6: Keywords ────────────────────────────────────────
+
     @classmethod
     def _process_keywords(cls, tex: str) -> str:
-        r"""Inject << metadata.keywords_str >> into \keywords{} command (Springer format)."""
+        r"""
+        Inject << metadata.keywords_str >> into keywords command.
+
+        Supports:
+        - \keywords{...} (Springer, ACM)
+        - \keyword{...}  (MDPI, singular — negative lookahead for \keywords)
+        """
+        # \keywords{...} (with 's')
         match = re.search(r'\\keywords\s*\{', tex)
         if match:
             start_open = match.end() - 1
             end_close = cls._find_matching_brace(tex, start_open)
             if end_close != -1:
                 tex = tex[:start_open + 1] + '<< metadata.keywords_str >>' + tex[end_close:]
+                return tex
+
+        # \keyword{...} (MDPI, without 's')
+        match = re.search(r'\\keyword(?!s)\s*\{', tex)
+        if match:
+            start_open = match.end() - 1
+            end_close = cls._find_matching_brace(tex, start_open)
+            if end_close != -1:
+                tex = tex[:start_open + 1] + '<< metadata.keywords_str >>' + tex[end_close:]
+
         return tex
+
+    # ── Phase 8: References ──────────────────────────────────────
 
     @classmethod
     def _process_references(cls, tex: str) -> str:

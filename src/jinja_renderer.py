@@ -182,10 +182,11 @@ class JinjaLaTeXRenderer:
     @staticmethod
     def _detect_doc_class(template_src: str) -> str:
         """Detect document class from template source. Returns normalized class name."""
-        m = re.search(r'\\documentclass(?:\[.*?\])?\{(\w+)\}', template_src)
+        m = re.search(r'\\documentclass(?:\[.*?\])?\{([^}]+)\}', template_src)
         if not m:
             return "generic"
-        cls = m.group(1).lower()
+        # Extract basename from path-based class names (e.g. "Definitions/mdpi" -> "mdpi")
+        cls = m.group(1).rsplit('/', 1)[-1].lower()
         if cls in ('ieeetran',):
             return "ieee"
         elif cls in ('llncs', 'svjour3', 'svmono', 'svmult'):
@@ -194,9 +195,11 @@ class JinjaLaTeXRenderer:
             return "elsevier"
         elif cls in ('acmart',):
             return "acm"
+        elif cls in ('mdpi',):
+            return "mdpi"
         else:
             # Generic fallback — works for article, report, book, memoir,
-            # mdpi, revtex4, amsart, thesis, or any unknown class
+            # revtex4, amsart, thesis, or any unknown class
             return "generic"
 
     def _generate_author_block(self, authors: list, doc_class: str) -> str:
@@ -211,6 +214,8 @@ class JinjaLaTeXRenderer:
             return self._generate_elsevier_author_block(authors)
         elif doc_class == "acm":
             return self._generate_acm_author_block(authors)
+        elif doc_class == "mdpi":
+            return self._generate_mdpi_author_block(authors)
         else:
             return self._generate_generic_author_block(authors)
 
@@ -306,6 +311,48 @@ class JinjaLaTeXRenderer:
             for aff in author.get('affiliations', []):
                 parts.append(f"\\affiliation{{\\institution{{{aff}}}}}")
         return "\n".join(parts)
+
+    @staticmethod
+    def _generate_mdpi_author_block(authors: list) -> str:
+        r"""Generate author block in MDPI format (\Author + \address).
+
+        MDPI uses custom commands: \Author{Name1 $^{1}$, Name2 $^{2}$}
+        and \address{$^{1}$ \quad Affil1 \\ $^{2}$ \quad Affil2}.
+        """
+        # Collect unique affiliations
+        affil_map = {}  # affiliation text -> superscript number
+        for author in authors:
+            for aff in author.get('affiliations', []):
+                clean = aff.strip()
+                if clean and clean not in affil_map:
+                    affil_map[clean] = len(affil_map) + 1
+
+        # Build \Author{...}
+        author_parts = []
+        for author in authors:
+            name = author['name']
+            insts = []
+            for aff in author.get('affiliations', []):
+                clean = aff.strip()
+                if clean in affil_map:
+                    insts.append(str(affil_map[clean]))
+            if insts:
+                name += " $^{" + ",".join(insts) + "}$"
+            author_parts.append(name)
+        block = "\\Author{" + ", ".join(author_parts) + "}"
+
+        # Build \AuthorNames{...} (plain names without affiliations)
+        plain_names = [a['name'] for a in authors]
+        block += "\n\\AuthorNames{" + ", ".join(plain_names) + "}"
+
+        # Build \address{...}
+        if affil_map:
+            addr_parts = []
+            for aff_text, num in affil_map.items():
+                addr_parts.append(f"$^{{{num}}}$ \\quad {aff_text}")
+            block += "\n\\address{" + " \\\\\n".join(addr_parts) + "}"
+
+        return block
 
     @staticmethod
     def _generate_generic_author_block(authors: list) -> str:
