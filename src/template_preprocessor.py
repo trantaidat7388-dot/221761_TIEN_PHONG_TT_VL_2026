@@ -39,9 +39,17 @@ class TemplatePreprocessor:
         FORCE FIX: Chèn block @ifpackageloaded ngay trước \begin{document}.
         Không dùng regex dò tìm. Để LaTeX tự quyết định nạp package hay không.
         Cách này chuẩn xác 100%, không bao giờ gây xung đột.
+
+        Universal compatibility:
+        - fontspec: required for XeLaTeX Unicode support (Vietnamese, CJK, etc.)
+        - amsmath/amssymb: math packages
+        - xurl: URL line-breaking
+        - Removes inputenc (pdfLaTeX-only, conflicts with XeLaTeX)
+        - Replaces T1/OT1 fontenc with fontspec
         """
         INJECT_BLOCK = (
             "\\makeatletter\n"
+            "\\@ifpackageloaded{fontspec}{}{\\usepackage{fontspec}}\n"
             "\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n"
             "\\@ifpackageloaded{amssymb}{}{\\usepackage{amssymb}}\n"
             "\\@ifpackageloaded{xurl}{}{\\usepackage{xurl}}\n"
@@ -60,6 +68,14 @@ class TemplatePreprocessor:
                     '\\usepackage{fontspec}  % XeLaTeX: Unicode font support (tiếng Việt)'
                 )
                 break  # only one encoding package is expected
+
+        # Remove inputenc variants — pdfLaTeX-only, not needed (and sometimes harmful) under XeLaTeX
+        tex = re.sub(
+            r'^[ \t]*\\usepackage\[[^\]]*\]\{inputenc\}.*$',
+            r'% \g<0>  % Removed: XeLaTeX handles UTF-8 natively',
+            tex,
+            flags=re.MULTILINE,
+        )
 
         # Skip if already injected
         if '@ifpackageloaded{amsmath}' in tex:
@@ -188,6 +204,12 @@ class TemplatePreprocessor:
         """
         Xác định điểm bắt đầu phần thân (sau frontmatter) và kết thúc.
         XÓA SẠCH tất cả dummy text mẫu giữa 2 điểm đó rồi chèn << body >>.
+
+        Universal: works with any template structure:
+        - IEEE (maketitle + IEEEkeywords)
+        - Springer (maketitle + abstract)
+        - Elsevier (end frontmatter)
+        - Generic (falls back to begin document if no other marker found)
         """
         # Tìm điểm BẮT ĐẦU: lấy vị trí xa nhất (cuối cùng) trong các mốc
         start_search_patterns = [
@@ -205,6 +227,13 @@ class TemplatePreprocessor:
                 pos = matches[-1].end()
                 if pos > body_start:
                     body_start = pos
+
+        # FALLBACK: Nếu không tìm thấy marker nào (template đơn giản),
+        # dùng \begin{document} làm điểm bắt đầu
+        if body_start == -1:
+            doc_match = re.search(r'\\begin\{document\}', tex)
+            if doc_match:
+                body_start = doc_match.end()
 
         # Tìm điểm KẾT THÚC: ưu tiên References/bibliography, fallback \end{document}
         end_search_patterns = [

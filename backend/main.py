@@ -472,10 +472,16 @@ async def chuyen_doi_file(
                 detail=f"Template không tồn tại hoặc lỗi cấu trúc thư mục."
             )
         
-        # Copy các file dependencies (.cls, .sty, .bst, images) sang thư mục job_folder để thư mục an toàn khi run
+        # Copy các file dependencies (.cls, .sty, .bst, fonts, images, etc.) sang thư mục job_folder
+        _DEP_EXTENSIONS = {
+            '.cls', '.sty', '.bst', '.bib', '.bbx', '.cbx', '.lbx', '.dbx',
+            '.fd', '.cfg', '.def',
+            '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.gif', '.svg',
+            '.ttf', '.otf', '.pfb', '.tfm',
+        }
         template_dir_actual = template_path.parent
         for item in template_dir_actual.rglob("*"):
-            if item.is_file() and item.suffix in ['.cls', '.sty', '.bst', '.png', '.jpg', '.pdf']:
+            if item.is_file() and item.suffix.lower() in _DEP_EXTENSIONS:
                 try:
                     target_file = job_folder / item.relative_to(template_dir_actual)
                     target_file.parent.mkdir(parents=True, exist_ok=True)
@@ -777,8 +783,14 @@ async def chuyen_doi_file_stream(
                     return
 
                 template_dir_actual = template_path.parent
+                _DEP_EXTENSIONS = {
+                    '.cls', '.sty', '.bst', '.bib', '.bbx', '.cbx', '.lbx', '.dbx',
+                    '.fd', '.cfg', '.def',
+                    '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.gif', '.svg',
+                    '.ttf', '.otf', '.pfb', '.tfm',
+                }
                 for item in template_dir_actual.rglob("*"):
-                    if item.is_file() and item.suffix in ['.cls', '.sty', '.bst', '.png', '.jpg', '.pdf']:
+                    if item.is_file() and item.suffix.lower() in _DEP_EXTENSIONS:
                         try:
                             target_file = job_folder / item.relative_to(template_dir_actual)
                             target_file.parent.mkdir(parents=True, exist_ok=True)

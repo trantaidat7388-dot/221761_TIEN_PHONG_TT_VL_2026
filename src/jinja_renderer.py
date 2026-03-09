@@ -165,6 +165,20 @@ class JinjaLaTeXRenderer:
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(magic_comment + tex_content)
 
+        # Tạo latexmkrc để ÉP Overleaf dùng XeLaTeX (Overleaf bỏ qua magic comment)
+        # $pdf_mode = 5 yêu cầu latexmk >= 4.51 (TeX Live 2019+, Overleaf đều có)
+        # $pdflatex override: fallback cho latexmk cũ hơn
+        latexmkrc_path = os.path.join(os.path.dirname(output_path), 'latexmkrc')
+        if not os.path.exists(latexmkrc_path):
+            with open(latexmkrc_path, 'w', encoding='utf-8') as f:
+                f.write(
+                    "# Force XeLaTeX for full Unicode support (Vietnamese, CJK, etc.)\n"
+                    "# Required for Overleaf: default compiler is pdfLaTeX which cannot handle Unicode\n"
+                    "$pdf_mode = 5;\n"
+                    "# Fallback for older latexmk versions\n"
+                    "$pdflatex = 'xelatex -interaction=nonstopmode -synctex=1 %O %S';\n"
+                )
+
     @staticmethod
     def _detect_doc_class(template_src: str) -> str:
         """Detect document class from template source. Returns normalized class name."""
@@ -174,13 +188,15 @@ class JinjaLaTeXRenderer:
         cls = m.group(1).lower()
         if cls in ('ieeetran',):
             return "ieee"
-        elif cls in ('llncs',):
+        elif cls in ('llncs', 'svjour3', 'svmono', 'svmult'):
             return "springer"
-        elif cls in ('elsarticle',):
+        elif cls in ('elsarticle', 'cas-sc', 'cas-dc'):
             return "elsevier"
         elif cls in ('acmart',):
             return "acm"
         else:
+            # Generic fallback — works for article, report, book, memoir,
+            # mdpi, revtex4, amsart, thesis, or any unknown class
             return "generic"
 
     def _generate_author_block(self, authors: list, doc_class: str) -> str:
@@ -293,18 +309,24 @@ class JinjaLaTeXRenderer:
 
     @staticmethod
     def _generate_generic_author_block(authors: list) -> str:
-        """Generate a generic \\author{} block with simple \\and separation."""
-        names = [a['name'] for a in authors]
-        block = "\\author{" + " \\and ".join(names) + "}"
-        # Add affiliations as footnotes or separate block
+        """Generate a generic \\author{} block with simple \\and separation.
+        Uses only standard LaTeX commands (\\author, \\and, \\thanks) that work
+        with article, report, book, memoir, and virtually any document class."""
+        # Collect unique affiliations for \thanks footnotes
         affils = []
         for a in authors:
             for aff in a.get('affiliations', []):
                 if aff.strip() and aff.strip() not in affils:
                     affils.append(aff.strip())
+        affil_note = ""
         if affils:
-            block += "\n\\date{}"
-            block += "\n\\thanks{" + "; ".join(affils) + "}"
+            affil_note = "\\thanks{" + "; ".join(affils) + "}"
+        # Build \author{Name1 \and Name2 \thanks{...}}
+        names = [a['name'] for a in authors]
+        block = "\\author{" + " \\and ".join(names)
+        if affil_note:
+            block += " " + affil_note
+        block += "}"
         return block
 
     def _generate_thebibliography(self, references: list) -> str:

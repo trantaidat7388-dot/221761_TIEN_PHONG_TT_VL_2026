@@ -344,9 +344,15 @@ def package_output_directory(work_dir: str, output_zip_path: str,
     ALLOWED_EXTENSIONS = {
         '.tex', '.pdf', '.bib', '.cls', '.sty', '.bst',
         '.png', '.jpg', '.jpeg', '.eps', '.gif', '.svg', '.tif', '.tiff',
+        # Biblatex styles & font definitions
+        '.bbx', '.cbx', '.lbx', '.dbx', '.fd', '.cfg', '.def',
+        # Font files (for custom templates with bundled fonts)
+        '.ttf', '.otf', '.woff', '.woff2', '.pfb', '.tfm',
     }
-    # Chỉ cho phép thư mục con này (images)
-    ALLOWED_SUBDIRS = {'images'}
+    # Cho phép thư mục con phổ biến
+    ALLOWED_SUBDIRS = {'images', 'figures', 'fig', 'figs', 'fonts', 'imgs'}
+    # File không có extension nhưng cần thiết cho Overleaf
+    ALLOWED_NOEXT_FILES = {'latexmkrc', 'makefile', 'Makefile'}
 
     abs_zip = os.path.abspath(output_zip_path)
 
@@ -366,7 +372,8 @@ def package_output_directory(work_dir: str, output_zip_path: str,
 
             if os.path.isfile(item_path):
                 _, ext = os.path.splitext(item_name)
-                if ext.lower() in ALLOWED_EXTENSIONS:
+                # Allow files with known extensions OR specific no-extension files (latexmkrc)
+                if ext.lower() in ALLOWED_EXTENSIONS or item_name in ALLOWED_NOEXT_FILES:
                     arcname = item_name
                     if generated_tex_name:
                         if item_name == generated_tex_name:
