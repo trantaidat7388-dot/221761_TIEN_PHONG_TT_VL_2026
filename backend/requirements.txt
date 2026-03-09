@@ -5,7 +5,15 @@ fastapi==0.115.0
 uvicorn[standard]==0.32.0
 python-multipart==0.0.12
 
-# Word processing (từ requirements.txt gốc)
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
+# Database
+sqlalchemy==2.0.36
+
+# Word processing
 python-docx==1.1.0
 lxml>=4.9.0
 Pillow>=10.4.0

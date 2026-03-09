@@ -51,7 +51,7 @@ if exist "%ROOT%.venv\Scripts\activate.bat" (
     echo       WARNING: .venv not found. Using system Python.
 )
 
-pip install -r "%ROOT%requirements.txt" --quiet --disable-pip-version-check
+pip install -r "%ROOT%backend\requirements.txt" --quiet --disable-pip-version-check
 if %ERRORLEVEL% NEQ 0 (
     echo       ERROR: pip install failed. Check your Python environment.
     pause
@@ -95,10 +95,10 @@ echo.
 REM ============================================================
 REM AUTO-OPEN BROWSER after 5 seconds
 REM ============================================================
-echo Waiting 5 seconds for servers to boot...
-timeout /t 5 /nobreak >nul
+echo Waiting 8 seconds for servers to boot...
+timeout /t 8 /nobreak >nul
 echo Opening http://localhost:5173 in your browser...
-start http://localhost:5173
+start "" http://localhost:5173
 
 echo.
 echo ============================================================
