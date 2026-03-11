@@ -9,9 +9,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-import models
-from database import get_db
-
+from . import models
+from .database import get_db
 # ── CONFIG ──────────────────────────────────────────────────────────────────
 SECRET_KEY = "word2latex-super-secret-key-change-in-production-2026"
 ALGORITHM = "HS256"

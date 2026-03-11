@@ -127,8 +127,7 @@ Nhấn phím bất kỳ trong cửa sổ `start.bat` để dừng cả hai serve
 
 **Backend:**
 ```bash
-cd backend
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 **Frontend:**
@@ -203,35 +202,39 @@ Swagger UI tương tác: `http://localhost:8000/docs`
 ```
 Word2Latex/
 ├── start.bat                        # Trình khởi động 1-click (Windows)
-├── requirements.txt                 # Thư viện Python (core)
-│
-├── backend/                         # Ứng dụng FastAPI
-│   ├── main.py                      # API routes (chuyển đổi, template, xác thực, lịch sử)
-│   ├── auth.py                      # JWT token (HS256, python-jose + passlib + bcrypt)
-│   ├── models.py                    # SQLAlchemy models (User, ConversionHistory)
-│   ├── database.py                  # SQLite engine + session factory
-│   ├── requirements.txt             # Thư viện Python (backend đầy đủ)
-│   └── custom_templates/            # 5 mẫu tích hợp sẵn + mẫu do người dùng tải lên
-│       ├── IEEE_Conference_Template/
-│       ├── Springer_Lecture_Notes_in_Computer_Science/
-│       ├── Association_for_Computing_Machinery__ACM__…/
-│       ├── MDPI_Article_Template__1/
-│       └── Elsevier_Article__elsarticle__Template/     (*)
-│
-├── src/                             # Engine chuyển đổi cốt lõi (Python thuần)
-│   ├── chuyen_doi.py                # Lớp điều phối ChuyenDoiWordSangLatex
-│   ├── ast_parser.py                # WordASTParser: XML Word → IR (JSON)
-│   ├── semantic_parser.py           # Bộ phân loại ngữ nghĩa heuristic (không ML)
-│   ├── template_preprocessor.py     # Inject tag Jinja2 vào mẫu LaTeX
-│   ├── jinja_renderer.py            # JinjaLaTeXRenderer: IR + template → .tex
-│   ├── xu_ly_toan.py                # OMML → LaTeX (XSLT / Pandoc / manual parser)
-│   ├── xu_ly_ole_equation.py        # OLE Equation Editor 3.0 (MTEF binary) → LaTeX
-│   ├── xu_ly_anh.py                 # Lọc ảnh thông minh (entropy, cạnh, histogram)
-│   ├── xu_ly_bang.py                # Xử lý bảng (multirow, multicolumn, TOC filter)
-│   ├── utils.py                     # Biên dịch LaTeX, đóng gói ZIP, dọn dẹp
-│   ├── tex_log_parser.py            # Phân tích log LaTeX → lỗi có cấu trúc
-│   ├── config.py                    # Hằng số, namespace XML, bảng ánh xạ style/ký tự
-│   └── OMML2MML.XSL                # XSLT stylesheet (OMML → MathML)
+├── backend/                         # Source code Backend
+│   ├── app/                         # Lớp Web API (FastAPI)
+│   │   ├── main.py                  # Entry point, cấu hình CORS, ghép Router
+│   │   ├── config.py                # Cấu hình biến môi trường, đường dẫn
+│   │   ├── database.py              # Khởi tạo SQLite engine
+│   │   ├── models.py                # Các Model dữ liệu SQLAlchemy
+│   │   ├── auth.py                  # Helper functions xử lý JWT auth
+│   │   ├── routers/                 # Quản lý các endpoint riêng biệt
+│   │   │   ├── auth_routes.py       # API Đăng nhập, Đăng ký, Lịch sử
+│   │   │   ├── chuyen_doi.py        # API Xử lý Word → LaTeX (Stream/Upload)
+│   │   │   └── templates.py         # API Quản lý mẫu LaTeX
+│   │   └── utils/                   # Hàm phụ trợ riêng cho Web API
+│   │
+│   ├── core_engine/                 # Engine chuyển đổi cốt lõi (Python thuần)
+│   │   ├── chuyen_doi.py            # Lớp điều phối ChuyenDoiWordSangLatex
+│   │   ├── ast_parser.py            # WordASTParser: XML Word → IR (JSON)
+│   │   ├── semantic_parser.py       # Bộ phân loại ngữ nghĩa heuristic (không ML)
+│   │   ├── template_preprocessor.py # Inject tag Jinja2 vào mẫu LaTeX
+│   │   ├── jinja_renderer.py        # JinjaLaTeXRenderer: IR + template → .tex
+│   │   ├── xu_ly_toan.py            # OMML → LaTeX (XSLT / Pandoc / manual parser)
+│   │   ├── xu_ly_ole_equation.py    # OLE Equation Editor 3.0 (MTEF binary) → LaTeX
+│   │   ├── xu_ly_anh.py             # Lọc ảnh thông minh (entropy, cạnh, histogram)
+│   │   ├── xu_ly_bang.py            # Xử lý bảng (multirow, multicolumn, TOC filter)
+│   │   ├── utils.py                 # Biên dịch LaTeX, đóng gói ZIP
+│   │   ├── tex_log_parser.py        # Phân tích log LaTeX → lỗi có cấu trúc
+│   │   ├── config.py                # Hằng số, namespace XML, Regex engine
+│   │   └── OMML2MML.XSL             # XSLT stylesheet (OMML → MathML)
+│   │
+│   ├── storage/                     # Thư mục dữ liệu
+│   │   ├── custom_templates/        # Mẫu hệ thống + người dùng tải lên
+│   │   └── temp_jobs/               # Nơi chứa các thư mục job đang chạy
+│   │
+│   └── requirements.txt             # Thư viện Python (backend)
 │
 └── frontend/                        # React 18 + Vite 5 SPA
     ├── package.json
@@ -242,7 +245,7 @@ Word2Latex/
         └── services/                # api.js — SSE streaming client
 ```
 
-(*) Mẫu Elsevier được lưu dưới dạng tên tùy chỉnh trong `custom_templates/`.
+(*) Mẫu Elsevier được lưu dưới dạng tên tùy chỉnh trong `backend/storage/custom_templates/`.
 
 ---
 

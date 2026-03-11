@@ -6,9 +6,9 @@ import re
 from docx.table import Table
 from docx.oxml.ns import qn
 
-from config import OMML_NAMESPACE, W_NAMESPACE, OLE_NAMESPACE, VML_NAMESPACE, R_NAMESPACE, A_NAMESPACE, REL_NAMESPACE
-from utils import loc_ky_tu
-from xu_ly_ole_equation import ole_equation_to_latex
+from .config import OMML_NAMESPACE, W_NAMESPACE, OLE_NAMESPACE, VML_NAMESPACE, R_NAMESPACE, A_NAMESPACE, REL_NAMESPACE
+from .utils import loc_ky_tu
+from .xu_ly_ole_equation import ole_equation_to_latex
 
 
 class BoXuLyBang:

@@ -1,7 +1,7 @@
 import jinja2
 import os
 import re
-from utils import loc_ky_tu
+from .utils import loc_ky_tu
 
 class JinjaLaTeXRenderer:
     """

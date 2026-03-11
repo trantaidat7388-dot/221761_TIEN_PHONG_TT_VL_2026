@@ -65,7 +65,7 @@ REM STEP 4: START BACKEND in a new window
 REM ============================================================
 echo [4/5] Starting Backend (FastAPI on :8000)...
 
-start "Word2LaTeX Backend" cmd /k "chcp 65001 >nul & cd /d %ROOT%backend & call %ROOT%.venv\Scripts\activate.bat & uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+start "Word2LaTeX Backend" cmd /k "chcp 65001 >nul & cd /d %ROOT% & call %ROOT%.venv\Scripts\activate.bat & uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload"
 
 timeout /t 3 /nobreak >nul
 echo       OK - Backend window opened.

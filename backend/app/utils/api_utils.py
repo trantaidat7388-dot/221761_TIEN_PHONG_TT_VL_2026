@@ -1,0 +1,111 @@
+"""
+api_utils.py
+Các hàm tiện ích cho riêng Web API.
+"""
+
+import shutil
+import asyncio
+import time
+from pathlib import Path
+
+from ..config import CUSTOM_TEMPLATE_FOLDER, TEMPLATE_FOLDER, TEMP_FOLDER
+
+def in_log_loi(thong_diep: str, loi: Exception = None):
+    """In log lỗi ra console để developer dễ debug."""
+    if loi is not None:
+        print(f"[LOI] {thong_diep}: {loi}")
+    else:
+        print(f"[LOI] {thong_diep}")
+
+def doc_noi_dung_tex_an_toan(duong_dan: Path) -> str:
+    """Đọc nội dung .tex an toàn với fallback encoding."""
+    if not duong_dan.exists():
+        return ''
+
+    for enc in ['utf-8', 'utf-16', 'latin-1']:
+        try:
+            noi_dung = duong_dan.read_text(encoding=enc, errors='ignore')
+            if noi_dung and noi_dung.strip():
+                return noi_dung
+        except Exception as loi:
+            in_log_loi(f"Không thể đọc tex bằng encoding={enc}: {duong_dan}", loi)
+    return ''
+
+def xoa_thu_muc_an_toan(duong_dan: Path):
+    """Xóa thư mục an toàn và không làm crash server nếu có lỗi."""
+    try:
+        if duong_dan.exists():
+            shutil.rmtree(duong_dan, ignore_errors=True)
+    except Exception as loi:
+        in_log_loi(f"Không thể xóa thư mục: {duong_dan}", loi)
+
+async def don_dep_sau_thoi_gian(duong_dan: Path, giay: int = 3600):
+    """Dọn dẹp thư mục job sau TTL (mặc định 1 giờ) để user có thời gian tải ZIP."""
+    try:
+        await asyncio.sleep(giay)
+    except Exception as loi:
+        in_log_loi(f"Lỗi sleep cleanup: {duong_dan}", loi)
+    xoa_thu_muc_an_toan(duong_dan)
+
+async def don_dep_sau_15_phut(duong_dan: Path):
+    """Alias backward-compatible cho tác vụ dọn dẹp hệ thống cũ (15 phút)."""
+    await don_dep_sau_thoi_gian(duong_dan, 900)
+
+def quet_xoa_thu_muc_mo_coi(thu_muc_goc: Path, so_gio_ton_tai_toi_da: int):
+    """Quét và xóa các thư mục/file cũ còn tồn đọng để tránh tràn ổ đĩa."""
+    if not thu_muc_goc.exists():
+        return
+    now = time.time()
+    ttl_seconds = max(1, so_gio_ton_tai_toi_da) * 3600
+
+    try:
+        for item in thu_muc_goc.iterdir():
+            try:
+                mtime = item.stat().st_mtime
+                if now - mtime < ttl_seconds:
+                    continue
+                if item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
+                else:
+                    item.unlink(missing_ok=True)
+            except Exception as loi_item:
+                in_log_loi(f"Không thể dọn item mồ côi: {item}", loi_item)
+    except Exception as loi:
+        in_log_loi(f"Không thể quét dọn thư mục: {thu_muc_goc}", loi)
+
+_BUILTIN_TEMPLATE_MAP = {
+    "ieee_conference":  "IEEE-conference-template-062824",
+    "twocolumn":        "IEEE-conference-template-062824",
+    "springer_lncs":    "LaTeX2e_Proceedings_Templates_download__1",
+    "onecolumn":        "latex_template_onecolumn.tex",
+    "elsarticle":       "elsarticle-template-harv.tex",
+}
+
+def _resolve_template_path(template_type: str) -> Path | None:
+    """Resolve a built-in template type → absolute path of the main .tex file."""
+    # Nhập `find_main_tex` từ core engine tại đây để tránh vòng lặp logic
+    from backend.core_engine.utils import find_main_tex
+    
+    tpl_name = _BUILTIN_TEMPLATE_MAP.get(template_type)
+    if not tpl_name:
+        return None
+    if tpl_name.endswith(".tex"):
+        # Legacy flat-file template
+        for probe in (CUSTOM_TEMPLATE_FOLDER / tpl_name, TEMPLATE_FOLDER / tpl_name):
+            if probe.exists():
+                return probe
+        return None
+        
+    # Directory-based template
+    dir_path = CUSTOM_TEMPLATE_FOLDER / tpl_name
+    if dir_path.is_dir():
+        try:
+            return Path(find_main_tex(str(dir_path)))
+        except FileNotFoundError:
+            return next(dir_path.rglob("*.tex"), None)
+            
+    # Fallback: try flat .tex with the same stem
+    for probe in (CUSTOM_TEMPLATE_FOLDER / f"{tpl_name}.tex", TEMPLATE_FOLDER / f"{tpl_name}.tex"):
+        if probe.exists():
+            return probe
+    return None

@@ -17,9 +17,9 @@ import tempfile
 from copy import deepcopy
 from lxml import etree
 
-from utils import loc_ky_tu
+from .utils import loc_ky_tu
 
-from config import (
+from .config import (
     OMML_NAMESPACE, W_NAMESPACE,
     OMML_CHAR_MAP, NARY_SYMBOL_MAP, DELIMITER_MAP,
     ACCENT_MAP, FUNC_NAME_MAP,

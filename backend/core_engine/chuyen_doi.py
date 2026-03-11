@@ -63,27 +63,27 @@ Paragraph.text = get_full_text
 Paragraph.runs = get_all_runs
 # -------------------------
 
-from config import (
+from .config import (
     OMML_NAMESPACE, W_NAMESPACE, OLE_NAMESPACE, VML_NAMESPACE,
     R_NAMESPACE, A_NAMESPACE, REL_NAMESPACE,
     WP_NAMESPACE, WP14_NAMESPACE,
     MAP_STYLE, HEADING_PATTERNS, DEFAULT_OMML2MML_XSL,
 )
-from xu_ly_anh import BoLocAnh
-from xu_ly_bang import BoXuLyBang
-from xu_ly_toan import BoXuLyToan
-from xu_ly_ole_equation import ole_equation_to_latex
-from utils import loc_ky_tu, bien_dich_latex, don_dep_file_rac, extract_zip_template, find_main_tex
-from ast_parser import WordASTParser
-from jinja_renderer import JinjaLaTeXRenderer
-from template_preprocessor import TemplatePreprocessor
+from .xu_ly_anh import BoLocAnh
+from .xu_ly_bang import BoXuLyBang
+from .xu_ly_toan import BoXuLyToan
+from .xu_ly_ole_equation import ole_equation_to_latex
+from .utils import loc_ky_tu, bien_dich_latex, don_dep_file_rac, extract_zip_template, find_main_tex
+from .ast_parser import WordASTParser
+from .jinja_renderer import JinjaLaTeXRenderer
+from .template_preprocessor import TemplatePreprocessor
 
 
 def chuyen_docm_sang_docx(duong_dan_docm: str) -> str:
     """Chuyển file .docm (macro-enabled) thành .docx bằng cách loại bỏ VBA macros.
     Sử dụng logic dùng chung từ utils.py để đảm bảo sạch triệt để các relationship.
     """
-    from utils import fix_macro_enabled_docx
+    from .utils import fix_macro_enabled_docx
     duong_dan_docx = duong_dan_docm.rsplit('.', 1)[0] + '_converted.docx'
     
     # Copy file gốc sang tên mới trước khi fix
@@ -225,7 +225,7 @@ class ChuyenDoiWordSangLatex:
                 raise RuntimeError(f"Lỗi chuyển đổi .docm sang .docx: {e}")
 
         try:
-            from utils import fix_macro_enabled_docx
+            from .utils import fix_macro_enabled_docx
             fix_macro_enabled_docx(duong_dan_thuc)
             import time
             time.sleep(0.1)

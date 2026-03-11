@@ -8,12 +8,12 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
-from config import MAP_STYLE, HEADING_PATTERNS, A_NAMESPACE, REL_NAMESPACE
+from .config import MAP_STYLE, HEADING_PATTERNS, A_NAMESPACE, REL_NAMESPACE
 from docx.oxml.ns import qn
-from utils import loc_ky_tu
-from xu_ly_toan import BoXuLyToan
-from xu_ly_ole_equation import ole_equation_to_latex
-from semantic_parser import predict_node_type
+from .utils import loc_ky_tu
+from .xu_ly_toan import BoXuLyToan
+from .xu_ly_ole_equation import ole_equation_to_latex
+from .semantic_parser import predict_node_type
 
 class WordASTParser:
     """
@@ -44,7 +44,7 @@ class WordASTParser:
         
     def parse(self) -> Dict[str, Any]:
         """Main entry point to parse the document."""
-        from utils import fix_macro_enabled_docx
+        from .utils import fix_macro_enabled_docx
         
         try:
             fix_macro_enabled_docx(self.doc_path)
@@ -793,7 +793,7 @@ class WordASTParser:
 
         
         style_name = p.style.name if p.style else ""
-        from config import MAP_STYLE
+        from .config import MAP_STYLE
         style_cmd = MAP_STYLE.get(style_name, "")
         
         # Level detection for sections
