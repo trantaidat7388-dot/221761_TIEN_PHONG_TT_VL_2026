@@ -639,13 +639,13 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                     tongBuoc={TONG_BUOC}
                   />
                   
-                  <div className="flex items-center justify-center gap-4 py-2 bg-white/5 rounded-xl border border-white/10">
-                    <div className="flex items-center gap-2 text-primary-400">
+                  <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 py-2 px-3 bg-white/5 rounded-xl border border-white/10">
+                    <div className="flex items-center gap-2 text-primary-400 shrink-0">
                       <Clock className="w-4 h-4" />
                       <span className="text-xl font-mono font-bold">{thoiGianChay}s</span>
                     </div>
-                    <div className="h-4 w-px bg-white/10" />
-                    <p className="text-white/40 text-xs italic">
+                    <div className="hidden sm:block h-4 w-px bg-white/10" />
+                    <p className="text-white/40 text-[10px] sm:text-xs italic text-center">
                       Lưu ý: Đừng F5 hoặc đóng tab lúc này
                     </p>
                   </div>
@@ -693,7 +693,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                     </div>
 
                     {/* Stats grid */}
-                    <div className="grid grid-cols-5 gap-3 mb-5">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-5">
                       {[
                         { icon: FileCode, value: pdfKetQua?.soTrang || ketQuaChuyenDoi?.soTrang || '—', label: 'Trang', color: 'text-primary-400' },
                         { icon: FileText, value: ketQuaChuyenDoi.soCongThuc, label: 'Công thức', color: 'text-purple-400' },
