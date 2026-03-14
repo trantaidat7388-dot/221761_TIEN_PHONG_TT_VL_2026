@@ -465,21 +465,23 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                   <>
                     <button
                       onClick={() => setLoaiTemplate('ieee_conference')}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 text-xs ${loaiTemplate === 'ieee_conference'
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 text-xs max-w-[200px] ${loaiTemplate === 'ieee_conference'
                         ? 'bg-primary-500/30 border-primary-500 text-primary-300'
                         : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
+                      title="IEEE Conference"
                     >
-                      <FileCode className="w-3.5 h-3.5" />
-                      IEEE Conference
+                      <FileCode className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">IEEE Conference</span>
                     </button>
                     <button
                       onClick={() => setLoaiTemplate('springer_lncs')}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 text-xs ${loaiTemplate === 'springer_lncs'
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 text-xs max-w-[200px] ${loaiTemplate === 'springer_lncs'
                         ? 'bg-primary-500/30 border-primary-500 text-primary-300'
                         : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
+                      title="Springer LNCS"
                     >
-                      <FileCode className="w-3.5 h-3.5" />
-                      Springer LNCS
+                      <FileCode className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Springer LNCS</span>
                     </button>
                   </>
                 )}
@@ -488,24 +490,26 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                   <button
                     key={t.id}
                     onClick={() => setLoaiTemplate(t.id)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 text-xs ${loaiTemplate === t.id
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 text-xs max-w-[200px] ${loaiTemplate === t.id
                       ? 'bg-primary-500/30 border-primary-500 text-primary-300'
                       : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
+                    title={t.ten}
                   >
-                    <FileCode className="w-3.5 h-3.5" />
-                    {t.ten}
+                    <FileCode className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{t.ten}</span>
                   </button>
                 ))}
                 {templateTuyChinh.map(t => (
                   <button
                     key={t.id}
                     onClick={() => setLoaiTemplate(t.id)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 text-xs ${loaiTemplate === t.id
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 text-xs max-w-[200px] ${loaiTemplate === t.id
                       ? 'bg-purple-500/30 border-purple-500 text-purple-300'
                       : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
+                    title={t.ten}
                   >
-                    <FileCode className="w-3.5 h-3.5" />
-                    {t.ten}
+                    <FileCode className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{t.ten}</span>
                   </button>
                 ))}
               </div>
