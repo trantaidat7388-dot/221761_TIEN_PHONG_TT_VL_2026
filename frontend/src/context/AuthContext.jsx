@@ -43,9 +43,13 @@ export const AuthProvider = ({ children }) => {
                 return
             }
             try {
+                const controller = new AbortController()
+                const timeoutId = setTimeout(() => controller.abort(), 5000)
                 const resp = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                    headers: { 'Authorization': `Bearer ${savedToken}` }
+                    headers: { 'Authorization': `Bearer ${savedToken}` },
+                    signal: controller.signal
                 })
+                clearTimeout(timeoutId)
                 if (resp.ok) {
                     const userData = await resp.json()
                     saveSession(savedToken, userData)
@@ -89,7 +93,11 @@ export const AuthProvider = ({ children }) => {
     }
 
     if (loading) {
-        return null // or a loading spinner
+        return (
+            <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+                <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        )
     }
 
     return (

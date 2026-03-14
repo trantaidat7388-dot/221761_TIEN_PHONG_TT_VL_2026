@@ -29,8 +29,8 @@ const TrangLichSu = ({ nguoiDung }) => {
     try {
       const ketQua = await layLichSuChuyenDoi()   // không cần uid — JWT xử lý
       if (ketQua.thanhCong) {
-        setDanhSachLichSu(ketQua.danhSach)
-        setDanhSachLoc(ketQua.danhSach)
+        setDanhSachLichSu(ketQua.danhSach || [])
+        setDanhSachLoc(ketQua.danhSach || [])
       } else {
         toast.error(ketQua.loiMessage || 'Không thể tải lịch sử')
       }
@@ -54,7 +54,7 @@ const TrangLichSu = ({ nguoiDung }) => {
     if (tuKhoaTimKiem.trim()) {
       const tuKhoa = tuKhoaTimKiem.toLowerCase()
       ketQua = ketQua.filter(item =>
-        item.tenFileGoc.toLowerCase().includes(tuKhoa)
+        (item?.tenFileGoc || '').toLowerCase().includes(tuKhoa)
       )
     }
 
@@ -66,11 +66,12 @@ const TrangLichSu = ({ nguoiDung }) => {
     setDanhSachLoc(ketQua)
   }, [tuKhoaTimKiem, boLocTrangThai, danhSachLichSu])
 
+  const ls = danhSachLichSu || []
   const thongKe = {
-    tongSo: danhSachLichSu.length,
-    thanhCong: danhSachLichSu.filter(i => i.trangThai === 'Thành công').length,
-    thatBai: danhSachLichSu.filter(i => i.trangThai === 'Thất bại').length,
-    dangXuLy: danhSachLichSu.filter(i => i.trangThai === 'Đang xử lý').length,
+    tongSo: ls.length,
+    thanhCong: ls.filter(i => i?.trangThai === 'Thành công').length,
+    thatBai: ls.filter(i => i?.trangThai === 'Thất bại').length,
+    dangXuLy: ls.filter(i => i?.trangThai === 'Đang xử lý').length,
   }
 
   // Animation variants
@@ -202,7 +203,7 @@ const TrangLichSu = ({ nguoiDung }) => {
         {/* Table */}
         <motion.div variants={itemVariants}>
           <BangLichSu
-            danhSach={danhSachLoc}
+            danhSach={danhSachLoc || []}
             dangTai={dangTai}
             onCapNhat={taiLichSu}
           />
