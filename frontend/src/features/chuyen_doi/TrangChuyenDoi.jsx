@@ -25,7 +25,7 @@ import {
 import toast from 'react-hot-toast'
 import KhuVucKeoTha from './KhuVucKeoTha'
 import { NutBam } from '../../components'
-import { chuyenDoiFileStream, taiFileZip, layDanhSachTemplate, taiLenTemplate, xoaTemplate } from '../../services/api'
+import { chuyenDoiFileStream, taiFileZip, bienDichPDF, taiFilePDF, layDanhSachTemplate, taiLenTemplate, xoaTemplate } from '../../services/api'
 
 // --- Sub-components ---
 
@@ -125,8 +125,13 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   const [hienThiQuanLyTemplate, setHienThiQuanLyTemplate] = useState(false)
   const [dangTaiTemplate, setDangTaiTemplate] = useState(false)
   const templateInputRef = useRef(null)
+  // PDF compilation (step 2)
+  const [dangBienDichPDF, setDangBienDichPDF] = useState(false)
+  const [pdfKetQua, setPdfKetQua] = useState(null)   // { soTrang, pdfUrl, tenFilePDF }
+  const [pdfLoi, setPdfLoi] = useState(null)
+  const [thoiGianChay, setThoiGianChay] = useState(0)
 
-  const TONG_BUOC = 6
+  const TONG_BUOC = 5
 
   // --- Helpers ---
 
@@ -179,6 +184,33 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
     }
     taiTemplates()
   }, [])
+
+  // --- Real-time timer & Refresh warning ---
+  useEffect(() => {
+    let interval = null
+    const dangChay = trangThaiXuLy === 'dang_xu_ly' || dangBienDichPDF
+    
+    if (dangChay) {
+      setThoiGianChay(0)
+      interval = setInterval(() => {
+        setThoiGianChay(prev => prev + 1)
+      }, 1000)
+
+      // Cảnh báo F5
+      const xuLyBeforeUnload = (e) => {
+        e.preventDefault()
+        e.returnValue = 'Quá trình đang diễn ra, nếu bạn tải lại trang sẽ mất kết nối với backend.'
+        return e.returnValue
+      }
+      window.addEventListener('beforeunload', xuLyBeforeUnload)
+      return () => {
+        clearInterval(interval)
+        window.removeEventListener('beforeunload', xuLyBeforeUnload)
+      }
+    } else {
+      clearInterval(interval)
+    }
+  }, [trangThaiXuLy, dangBienDichPDF])
 
   const xuLyTaiLenTemplate = async (e) => {
     const file = e.target.files?.[0]
@@ -312,6 +344,42 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
     setJobId('')
     setHienThiMaLatex(false)
     setLoiValidation(null)
+    setPdfKetQua(null)
+    setPdfLoi(null)
+    setDangBienDichPDF(false)
+  }
+
+  // --- PDF Compilation (Step 2) ---
+  const xuLyBienDichPDF = async () => {
+    const currentJobId = jobId || ketQuaChuyenDoi?.jobId
+    if (!currentJobId) { toast.error('Không tìm thấy Job ID'); return }
+    setDangBienDichPDF(true)
+    setPdfLoi(null)
+    setPdfKetQua(null)
+    try {
+      const kq = await bienDichPDF(currentJobId)
+      if (kq.thanhCong) {
+        setPdfKetQua({ soTrang: kq.soTrang, pdfUrl: kq.pdfUrl, tenFilePDF: kq.tenFilePDF })
+        toast.success(`Biên dịch PDF thành công! (${kq.soTrang ?? '?'} trang)`)
+      } else {
+        setPdfLoi(kq.loiMessage || 'Biên dịch thất bại')
+        toast.error(kq.loiMessage || 'Biên dịch PDF thất bại')
+      }
+    } catch (err) {
+      setPdfLoi(err.message || 'Lỗi không xác định')
+      toast.error(err.message || 'Lỗi biên dịch PDF')
+    } finally {
+      setDangBienDichPDF(false)
+    }
+  }
+
+  const xuLyTaiPDF = async () => {
+    const currentJobId = jobId || ketQuaChuyenDoi?.jobId
+    if (!currentJobId) return
+    toast.loading('Đang tải PDF...', { id: 'pdf-download' })
+    const kq = await taiFilePDF(currentJobId)
+    if (kq.thanhCong) toast.success('Tải PDF thành công!', { id: 'pdf-download' })
+    else toast.error(kq.loiMessage || 'Không thể tải PDF', { id: 'pdf-download' })
   }
 
   const xuLyXoaFile = () => {
@@ -570,6 +638,17 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                     buocHienTai={buocHienTai}
                     tongBuoc={TONG_BUOC}
                   />
+                  
+                  <div className="flex items-center justify-center gap-4 py-2 bg-white/5 rounded-xl border border-white/10">
+                    <div className="flex items-center gap-2 text-primary-400">
+                      <Clock className="w-4 h-4" />
+                      <span className="text-xl font-mono font-bold">{thoiGianChay}s</span>
+                    </div>
+                    <div className="h-4 w-px bg-white/10" />
+                    <p className="text-white/40 text-xs italic">
+                      Lưu ý: Đừng F5 hoặc đóng tab lúc này
+                    </p>
+                  </div>
                   {/* Step log */}
                   <div className="space-y-1">
                     {Array.from({ length: buocHienTai }, (_, i) => (
@@ -616,7 +695,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                     {/* Stats grid */}
                     <div className="grid grid-cols-5 gap-3 mb-5">
                       {[
-                        { icon: FileCode, value: ketQuaChuyenDoi.soTrang, label: 'Trang', color: 'text-primary-400' },
+                        { icon: FileCode, value: pdfKetQua?.soTrang || ketQuaChuyenDoi?.soTrang || '—', label: 'Trang', color: 'text-primary-400' },
                         { icon: FileText, value: ketQuaChuyenDoi.soCongThuc, label: 'Công thức', color: 'text-purple-400' },
                         { icon: Table2, value: ketQuaChuyenDoi.soBang, label: 'Bảng', color: 'text-orange-400' },
                         { icon: Image, value: ketQuaChuyenDoi.soHinhAnh, label: 'Hình ảnh', color: 'text-green-400' },
@@ -639,7 +718,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                         <div className="flex-1 min-w-0">
                           <p className="text-white font-medium text-sm truncate">{ketQuaChuyenDoi.tenFileZip || 'output.zip'}</p>
                           <p className="text-white/50 text-xs truncate">
-                            {ketQuaChuyenDoi.tenFileLatex || 'output.tex'} + PDF + images/
+                            {ketQuaChuyenDoi.tenFileLatex || 'output.tex'} + images/
                           </p>
                         </div>
                       </div>
@@ -648,8 +727,53 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                     {/* Actions */}
                     <div className="flex flex-col sm:flex-row gap-2">
                       <NutBam onClick={xuLyTaiVe} icon={Download} className="flex-1" kichThuoc="md">
-                        Tải xuống (.zip)
+                        Tải LaTeX Source (.zip)
                       </NutBam>
+                      {!pdfKetQua ? (
+                        <div className="flex flex-col gap-2 flex-1">
+                          <NutBam
+                            onClick={xuLyBienDichPDF}
+                            bienThe="secondary"
+                            icon={FileText}
+                            className="w-full"
+                            kichThuoc="md"
+                            disabled={dangBienDichPDF}
+                            dangTai={dangBienDichPDF}
+                          >
+                            {dangBienDichPDF ? 'Đang biên dịch...' : 'Biên dịch PDF'}
+                          </NutBam>
+                          {dangBienDichPDF && (
+                            <div className="flex items-center justify-center gap-2 text-primary-400 text-xs font-mono">
+                              <Clock className="w-3 h-3" />
+                              <span>{thoiGianChay}s</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <NutBam onClick={xuLyTaiPDF} icon={Download} className="flex-1" kichThuoc="md">
+                          Tải PDF ({pdfKetQua.soTrang ?? '?'} trang)
+                        </NutBam>
+                      )}
+                    </div>
+                    {pdfKetQua?.pdfUrl && (
+                      <div className="mt-2 flex gap-2">
+                        <NutBam
+                          onClick={() => window.open(pdfKetQua.pdfUrl, '_blank')}
+                          bienThe="secondary"
+                          icon={Eye}
+                          kichThuoc="md"
+                          className="flex-1"
+                        >
+                          Xem PDF trong trình duyệt
+                        </NutBam>
+                      </div>
+                    )}
+                    {pdfLoi && (
+                      <p className="text-red-300/80 bg-red-500/10 p-3 rounded-lg text-sm border border-red-500/20 mt-2">
+                        ⚠ Lỗi biên dịch: {pdfLoi}
+                      </p>
+                    )}
+                    <div className="flex flex-col sm:flex-row gap-2 mt-1">
                       <NutBam onClick={() => setHienThiMaLatex(!hienThiMaLatex)} bienThe="secondary" icon={Eye} className="flex-1" kichThuoc="md">
                         {hienThiMaLatex ? 'Ẩn mã LaTeX' : 'Xem mã LaTeX'}
                       </NutBam>

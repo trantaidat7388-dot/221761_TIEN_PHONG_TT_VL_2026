@@ -14,6 +14,7 @@ import re
 from fastapi import APIRouter, File, UploadFile, HTTPException, Query, BackgroundTasks, Request, Depends
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ..config import TEMP_FOLDER, OUTPUTS_FOLDER
 from ..utils.api_utils import xoa_thu_muc_an_toan, don_dep_sau_15_phut, don_dep_sau_thoi_gian, _resolve_template_path
@@ -92,7 +93,10 @@ async def chuyen_doi_file(
 
             template_tex_dir = template_path.parent
             if template_tex_dir != job_folder:
-                dep_extensions = {'.cls', '.sty', '.bst', '.tex', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib'}
+                dep_extensions = {
+                    '.cls', '.sty', '.bst', '.tex', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib',
+                    '.bbx', '.cbx', '.lbx', '.dbx', '.fd', '.cfg', '.def', '.ttf', '.otf'
+                }
                 for item in template_tex_dir.rglob("*"):
                     if item.is_file() and item.suffix.lower() in dep_extensions:
                         target_file = job_folder / item.relative_to(template_tex_dir)
@@ -137,7 +141,7 @@ async def chuyen_doi_file(
             thu_muc_anh=str(images_folder),
             mode='demo'
         )
-        bo_chuyen_doi.chuyen_doi()
+        await run_in_threadpool(bo_chuyen_doi.chuyen_doi)
 
         try:
             tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
@@ -152,34 +156,7 @@ async def chuyen_doi_file(
             output_path.write_text(tex_raw, encoding='utf-8')
         except Exception: pass
 
-        thanh_cong, thong_bao_loi = bien_dich_latex(str(output_path))
-        if not thanh_cong:
-            missing_file_match = re.search(r"! LaTeX Error: File `(.*?)' not found.", thong_bao_loi)
-            if missing_file_match:
-                raise Exception(f"Thiếu thư viện cấu trúc LaTeX: '{missing_file_match.group(1)}'.")
-            chi_tiet_loi = parse_latex_log(thong_bao_loi)
-            raise HTTPException(status_code=422, detail=json.dumps(chi_tiet_loi, ensure_ascii=False))
-
-        so_trang = None
-        try:
-            log_path = output_path.with_suffix('.log')
-            if log_path.exists():
-                log_text = log_path.read_text(encoding='utf-8', errors='ignore')
-                match = re.search(r'Output written on .*?\((\d+) pages?[,\)]', log_text, re.DOTALL)
-                if match: so_trang = int(match.group(1))
-        except Exception: pass
-
-        pdf_path = output_path.with_suffix('.pdf')
-        if so_trang is None and pdf_path.exists():
-            so_trang = 1
-            try:
-                import re as regex_pdf
-                with open(pdf_path, 'rb') as f:
-                    pages_found = len(regex_pdf.findall(b'/Type\\s*/Page\\b', f.read()))
-                    if pages_found > 0: so_trang = pages_found
-            except: pass
-
-        don_dep_file_rac(str(output_path))
+        # SKIP PDF compilation — only convert Word → LaTeX
         if not output_path.exists(): raise Exception("Không tạo được file .tex đầu ra")
 
         tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
@@ -209,7 +186,7 @@ async def chuyen_doi_file(
             "ten_file_zip": zip_filename,
             "ten_file_latex": output_filename,
             "metadata": {
-                "so_trang": so_trang,
+                "so_trang": None,
                 "so_hinh_anh": so_hinh_anh,
                 "so_cong_thuc": so_cong_thuc,
                 "so_bang": so_bang,
@@ -296,7 +273,10 @@ async def chuyen_doi_file_stream(
                     template_tex_dir = template_path.parent
                     if template_tex_dir != job_folder:
                         for item in template_tex_dir.rglob("*"):
-                            if item.is_file() and item.suffix.lower() in {'.cls', '.sty', '.bst', '.tex', '.png', '.jpg', '.pdf', '.bib'}:
+                            if item.is_file() and item.suffix.lower() in {
+                                '.cls', '.sty', '.bst', '.tex', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib',
+                                '.bbx', '.cbx', '.lbx', '.dbx', '.fd', '.cfg', '.def', '.ttf', '.otf'
+                            }:
                                 target_file = job_folder / item.relative_to(template_tex_dir)
                                 target_file.parent.mkdir(parents=True, exist_ok=True)
                                 if not target_file.exists(): shutil.copy2(item, target_file)
@@ -333,7 +313,7 @@ async def chuyen_doi_file_stream(
             )
 
             yield sse_event(3, "Đang nạp dữ liệu vào template Jinja2...")
-            bo_chuyen_doi.chuyen_doi()
+            await run_in_threadpool(bo_chuyen_doi.chuyen_doi)
 
             try:
                 tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
@@ -348,34 +328,11 @@ async def chuyen_doi_file_stream(
                 output_path.write_text(tex_raw, encoding='utf-8')
             except Exception: pass
 
-            yield sse_event(4, "Đang biên dịch XeLaTeX (Sẽ mất vài giây)...")
-            thanh_cong, thong_bao_loi = bien_dich_latex(str(output_path))
-            if not thanh_cong:
-                missing_file_match = re.search(r"! LaTeX Error: File `(.*?)' not found.", thong_bao_loi)
-                if missing_file_match:
-                    yield sse_event(-1, f"Thiếu thư viện: '{missing_file_match.group(1)}'", error=True); return
-                chi_tiet_loi = parse_latex_log(thong_bao_loi)
-                yield sse_event(-1, chi_tiet_loi.get("thong_diep", "Biên dịch thất bại"), error=True, details=chi_tiet_loi); return
+            # SKIP PDF compilation — only convert Word → LaTeX
+            if not output_path.exists():
+                yield sse_event(-1, "Không tạo được file .tex đầu ra", error=True); return
 
-            yield sse_event(5, "Đang đóng gói kết quả...")
-            so_trang = None
-            try:
-                log_path = output_path.with_suffix('.log')
-                if log_path.exists():
-                    match = re.search(r'Output written on .*?\((\d+) pages?[,\)]', log_path.read_text('utf-8', 'ignore'), re.DOTALL)
-                    if match: so_trang = int(match.group(1))
-            except Exception: pass
-
-            pdf_path = output_path.with_suffix('.pdf')
-            if so_trang is None and pdf_path.exists():
-                so_trang = 1
-                try:
-                    with open(pdf_path, 'rb') as f:
-                        pages_found = len(re.findall(b'/Type\\s*/Page\\b', f.read()))
-                        if pages_found > 0: so_trang = pages_found
-                except Exception: pass
-
-            don_dep_file_rac(str(output_path))
+            yield sse_event(4, "Đang đóng gói kết quả...")
             tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
             so_hinh_anh = len(re.findall(r'^[^%\n]*\\includegraphics', tex_raw, re.MULTILINE))
             so_bang = len(re.findall(r'^[^%\n]*\\begin\{table', tex_raw, re.MULTILINE))
@@ -410,9 +367,9 @@ async def chuyen_doi_file_stream(
                     db.commit()
                 except Exception as hist_err: print(f"[WARN] Không thể lưu lịch sử: {hist_err}")
 
-            yield sse_event(6, "Hoàn tất!", done=True, job_id=job_id, ten_file_zip=zip_filename,
+            yield sse_event(5, "Hoàn tất!", done=True, job_id=job_id, ten_file_zip=zip_filename,
                             ten_file_latex=output_filename, tex_content=tex_raw,
-                            metadata={"so_trang": so_trang, "so_hinh_anh": so_hinh_anh, "so_cong_thuc": so_cong_thuc,
+                            metadata={"so_trang": None, "so_hinh_anh": so_hinh_anh, "so_cong_thuc": so_cong_thuc,
                                       "so_bang": so_bang, "thoi_gian_xu_ly_giay": round(thoi_gian_xu_ly_giay, 2)})
         except Exception as loi:
             yield sse_event(-1, str(loi) or "Lỗi không xác định", error=True)
@@ -459,4 +416,88 @@ def tai_ve_theo_job(job_id: str, db: Session = Depends(get_db), current_user: mo
     return FileResponse(
         path=str(zip_path), filename=zip_path.name, media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename={zip_path.name}", "Access-Control-Expose-Headers": "Content-Disposition"}
+    )
+
+
+@router.post("/compile-pdf/{job_id}")
+async def bien_dich_pdf_theo_job(job_id: str):
+    """Biên dịch PDF từ file .tex đã tạo (step 2 — tách riêng khỏi conversion)."""
+    job_folder = TEMP_FOLDER / f"job_{job_id}"
+    if not job_folder.exists() or not job_folder.is_dir():
+        raise HTTPException(status_code=404, detail="Job không tồn tại hoặc đã bị dọn")
+
+    # Tìm file .tex đã sinh ra (file mới nhất, loại trừ template gốc)
+    danh_sach_tex = sorted(job_folder.glob('*.tex'), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not danh_sach_tex:
+        raise HTTPException(status_code=404, detail="Không tìm thấy file .tex trong job")
+    tex_path = danh_sach_tex[0]
+
+    try:
+        thanh_cong, thong_bao_loi = await run_in_threadpool(bien_dich_latex, str(tex_path))
+        if not thanh_cong:
+            missing_file_match = re.search(r"! LaTeX Error: File `(.*?)' not found.", thong_bao_loi)
+            if missing_file_match:
+                return JSONResponse(status_code=422, content={
+                    "thanh_cong": False,
+                    "loi": f"Thiếu thư viện: '{missing_file_match.group(1)}'",
+                })
+            chi_tiet_loi = parse_latex_log(thong_bao_loi)
+            return JSONResponse(status_code=422, content={
+                "thanh_cong": False,
+                "loi": chi_tiet_loi.get("thong_diep", "Biên dịch thất bại"),
+                "chi_tiet": chi_tiet_loi,
+            })
+
+        # Trích xuất số trang từ log
+        so_trang = None
+        try:
+            log_path = tex_path.with_suffix('.log')
+            if log_path.exists():
+                match = re.search(
+                    r'Output written on .*?\((\d+) pages?[,\)]',
+                    log_path.read_text('utf-8', 'ignore'), re.DOTALL
+                )
+                if match:
+                    so_trang = int(match.group(1))
+        except Exception:
+            pass
+
+        pdf_path = tex_path.with_suffix('.pdf')
+        if not pdf_path.exists():
+            return JSONResponse(status_code=500, content={
+                "thanh_cong": False,
+                "loi": "Biên dịch không tạo được file PDF",
+            })
+
+        # Dọn file rác biên dịch
+        don_dep_file_rac(str(tex_path))
+
+        return JSONResponse(status_code=200, content={
+            "thanh_cong": True,
+            "so_trang": so_trang,
+            "ten_file_pdf": pdf_path.name,
+            "pdf_url": f"/api/tai-ve-pdf/{job_id}",
+        })
+    except Exception as loi:
+        return JSONResponse(status_code=500, content={
+            "thanh_cong": False,
+            "loi": str(loi) or "Lỗi biên dịch không xác định",
+        })
+
+
+@router.get("/tai-ve-pdf/{job_id}")
+def tai_ve_pdf_theo_job(job_id: str):
+    """Tải file PDF đã biên dịch từ job folder."""
+    job_folder = TEMP_FOLDER / f"job_{job_id}"
+    if not job_folder.exists() or not job_folder.is_dir():
+        raise HTTPException(status_code=404, detail="Job không tồn tại hoặc đã bị dọn")
+
+    danh_sach_pdf = sorted(job_folder.glob('*.pdf'), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not danh_sach_pdf:
+        raise HTTPException(status_code=404, detail="Không tìm thấy file PDF — hãy biên dịch trước")
+
+    pdf_path = danh_sach_pdf[0]
+    return FileResponse(
+        path=str(pdf_path), filename=pdf_path.name, media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename={pdf_path.name}", "Access-Control-Expose-Headers": "Content-Disposition"}
     )

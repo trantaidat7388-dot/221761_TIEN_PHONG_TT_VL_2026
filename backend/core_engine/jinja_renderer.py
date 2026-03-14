@@ -238,7 +238,7 @@ class JinjaLaTeXRenderer:
                 affil_text = " \\\\ ".join(affil_lines)
                 auth_str += f"\n\\IEEEauthorblockA{{{affil_text}}}"
             parts.append(auth_str)
-        block += "\n\\and\n".join(parts)
+        block += " \\and\n".join(parts)
         block += "\n}"
         return block
 
@@ -266,7 +266,7 @@ class JinjaLaTeXRenderer:
                 name += f"\\inst{{{','.join(insts)}}}"
             author_parts.append(name)
 
-        author_block = "\\author{" + " \\and\n".join(author_parts) + "}"
+        author_block = "\\author{" + " \\and ".join(author_parts) + "}"
 
         # Build \institute{...} block
         if affil_map:
@@ -285,7 +285,7 @@ class JinjaLaTeXRenderer:
                 if email_parts:
                     entry += f"\\\\\n\\email{{{', '.join(email_parts)}}}"
                 inst_parts.append(entry)
-            author_block += "\n\\institute{" + " \\and\n".join(inst_parts) + "}"
+            author_block += "\n\\institute{" + " \\and ".join(inst_parts) + "}"
         else:
             # FIX 5: Graceful fallback when no affiliations were parsed (avoids "No Institute Given")
             author_block += "\n\\institute{Institution not specified}"
@@ -456,8 +456,8 @@ class JinjaLaTeXRenderer:
 
     @staticmethod
     def _generate_generic_author_block(authors: list) -> str:
-        """Generate a generic \\author{} block with simple \\and separation.
-        Uses only standard LaTeX commands (\\author, \\and, \\thanks) that work
+        """Generate a generic \\author{} block with simple ,  separation.
+        Uses only standard LaTeX commands (\\author, , , \\thanks) that work
         with article, report, book, memoir, and virtually any document class."""
         # Collect unique affiliations for \thanks footnotes
         affils = []
@@ -468,9 +468,9 @@ class JinjaLaTeXRenderer:
         affil_note = ""
         if affils:
             affil_note = "\\thanks{" + "; ".join(affils) + "}"
-        # Build \author{Name1 \and Name2 \thanks{...}}
+        # Build \author{Name1 ,  Name2 \thanks{...}}
         names = [a['name'] for a in authors]
-        block = "\\author{" + " \\and ".join(names)
+        block = "\\author{" + ", ".join(names)
         if affil_note:
             block += " " + affil_note
         block += "}"

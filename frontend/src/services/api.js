@@ -153,6 +153,61 @@ export const taiFileZip = async (jobId, tenFileZipFallback = '') => {
   }
 }
 
+// ── COMPILE PDF (Step 2) ──────────────────────────────────────────────────────
+
+export const bienDichPDF = async (jobId) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 35000) // 35s frontend timeout
+
+  try {
+    if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
+    const response = await fetch(`${API_BASE_URL}/api/compile-pdf/${jobId}`, {
+      method: 'POST',
+      headers: authHeaders(),
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+    const data = await response.json()
+    if (!response.ok || !data.thanh_cong) {
+      return {
+        thanhCong: false,
+        loiMessage: data.loi || 'Biên dịch PDF thất bại',
+        chiTiet: data.chi_tiet || null,
+      }
+    }
+    return {
+      thanhCong: true,
+      soTrang: data.so_trang,
+      tenFilePDF: data.ten_file_pdf,
+      pdfUrl: `${API_BASE_URL}${data.pdf_url}`,
+    }
+  } catch (loi) {
+    clearTimeout(timeoutId)
+    if (loi.name === 'AbortError') {
+      return { thanhCong: false, loiMessage: 'Biên dịch PDF quá lâu (>35s). Vui lòng kiểm tra lại mã LaTeX.' }
+    }
+    return { thanhCong: false, loiMessage: loi.message || 'Không thể kết nối server để biên dịch' }
+  }
+}
+
+export const taiFilePDF = async (jobId) => {
+  try {
+    if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
+    const response = await fetch(`${API_BASE_URL}/api/tai-ve-pdf/${jobId}`, {
+      headers: authHeaders(),
+    })
+    if (!response.ok) throw new Error('Không thể tải file PDF')
+    const blob = await response.blob()
+    const contentDisposition = response.headers.get('content-disposition') || ''
+    const match = contentDisposition.match(/filename=([^;]+)/i)
+    const tenFile = match?.[1]?.replace(/"/g, '') || `${jobId}.pdf`
+    luuBlobThanhFile(blob, tenFile)
+    return { thanhCong: true }
+  } catch (loi) {
+    return { thanhCong: false, loiMessage: loi.message || 'Không thể tải file PDF' }
+  }
+}
+
 // ── TEMPLATES ─────────────────────────────────────────────────────────────────
 
 export const layDanhSachTemplate = async () => {
@@ -295,6 +350,8 @@ export default {
   luuBlobThanhFile,
   taiFile,
   taiFileZip,
+  bienDichPDF,
+  taiFilePDF,
   layDanhSachTemplate,
   taiLenTemplate,
   xoaTemplate,

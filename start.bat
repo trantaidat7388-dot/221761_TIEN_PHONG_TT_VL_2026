@@ -4,7 +4,7 @@ title Word2LaTeX - Launcher
 
 echo.
 echo ============================================================
-echo   Word2LaTeX Converter  ^|  1-Click Launcher
+echo   Word2LaTeX Converter  ^|  1-Click Launcher (Auto Reset)
 echo ============================================================
 echo.
 
@@ -12,25 +12,31 @@ set "ROOT=%~dp0"
 cd /d "%ROOT%"
 
 REM ============================================================
-REM STEP 1: KILL GHOST PROCESSES (ports 8000 and 5173)
+REM STEP 1: DON DEP SERVER CU (AUTO RESET)
 REM ============================================================
-echo [1/5] Freeing ports 8000 and 5173...
+echo [1/5] Freeing ports 3000, 5173, 8000 and killing Node...
 
-taskkill /fi "WINDOWTITLE eq Word2LaTeX Backend"  /f >nul 2>&1
-taskkill /fi "WINDOWTITLE eq Word2LaTeX Frontend" /f >nul 2>&1
+REM Tat cac cua so CMD cu
+taskkill /fi "WINDOWTITLE eq Word2LaTeX*" /f >nul 2>&1
 
-for /f "tokens=5 delims= " %%P in ('netstat -ano 2^>nul ^| findstr /R ":8000 " ^| findstr "LISTENING"') do (
-    if NOT "%%P"=="0" if NOT "%%P"=="" taskkill /PID %%P /F >nul 2>&1
-)
-for /f "tokens=5 delims= " %%P in ('netstat -ano 2^>nul ^| findstr /R ":5173 " ^| findstr "LISTENING"') do (
-    if NOT "%%P"=="0" if NOT "%%P"=="" taskkill /PID %%P /F >nul 2>&1
+REM Ban rung Node.js (Thu pham chinh gay ket port 5173 cua Vite)
+taskkill /F /IM node.exe >nul 2>&1
+
+REM San lung tien trinh ngam dang chiem port
+for %%T in (8000 5173 3000) do (
+    for /f "tokens=5 delims= " %%P in ('netstat -ano 2^>nul ^| findstr /R ":%%T " ^| findstr "LISTENING"') do (
+        if NOT "%%P"=="0" if NOT "%%P"=="" (
+            echo       - Da diet tien trinh PID %%P tai Port %%T
+            taskkill /PID %%P /F >nul 2>&1
+        )
+    )
 )
 timeout /t 1 /nobreak >nul
 echo       OK - Ports cleared.
 echo.
 
 REM ============================================================
-REM STEP 2: CLEAN PYCACHE
+REM STEP 2: CLEAN PYCACHE (EP PYTHON NHAN CODE MOI)
 REM ============================================================
 echo [2/5] Cleaning __pycache__...
 
@@ -61,18 +67,18 @@ echo       OK - Dependencies ready.
 echo.
 
 REM ============================================================
-REM STEP 4: START BACKEND in a new window
+REM STEP 4: START BACKEND
 REM ============================================================
 echo [4/5] Starting Backend (FastAPI on :8000)...
 
-start "Word2LaTeX Backend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%"" & call "".venv\Scripts\activate.bat"" & python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload"
+start "Word2LaTeX Backend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%"" & call "".venv\Scripts\activate.bat"" & python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir backend/app"
 
 timeout /t 3 /nobreak >nul
 echo       OK - Backend window opened.
 echo.
 
 REM ============================================================
-REM STEP 5: START FRONTEND in a new window
+REM STEP 5: START FRONTEND
 REM ============================================================
 echo [5/5] Starting Frontend (Vite on :5173)...
 
@@ -82,36 +88,13 @@ echo       OK - Frontend window opened.
 echo.
 
 REM ============================================================
-REM AUTO-OPEN BROWSER after 5 seconds
+REM AUTO-OPEN BROWSER 
 REM ============================================================
-echo Waiting 12 seconds for servers to boot...
-timeout /t 12 /nobreak >nul
+echo Waiting 8 seconds for servers to boot...
+timeout /t 8 /nobreak >nul
 echo Opening http://localhost:5173 in your browser...
 start "" http://localhost:5173
 
 echo.
-echo ============================================================
-echo   Word2LaTeX is running!
-echo.
-echo   Frontend : http://localhost:5173
-echo   Backend  : http://localhost:8000
-echo   API Docs : http://localhost:8000/docs
-echo ============================================================
-echo.
-echo   Press any key to STOP both servers and exit.
-echo.
-pause >nul
-
-REM --- Graceful shutdown on keypress ---
-echo.
-echo Stopping servers...
-taskkill /fi "WINDOWTITLE eq Word2LaTeX Backend"  /f >nul 2>&1
-taskkill /fi "WINDOWTITLE eq Word2LaTeX Frontend" /f >nul 2>&1
-for /f "tokens=5 delims= " %%P in ('netstat -ano 2^>nul ^| findstr /R ":8000 " ^| findstr "LISTENING"') do (
-    if NOT "%%P"=="0" if NOT "%%P"=="" taskkill /PID %%P /F >nul 2>&1
-)
-for /f "tokens=5 delims= " %%P in ('netstat -ano 2^>nul ^| findstr /R ":5173 " ^| findstr "LISTENING"') do (
-    if NOT "%%P"=="0" if NOT "%%P"=="" taskkill /PID %%P /F >nul 2>&1
-)
-echo Done. Goodbye!
-
+echo HOAN TAT! Ban co the thu nho cua so nay lai.
+exit

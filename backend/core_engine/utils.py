@@ -222,7 +222,7 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
             text=True,
             encoding='utf-8',
             errors='ignore',
-            timeout=120,
+            timeout=25,
         )
 
         # Kiểm tra PDF tồn tại (nonstopmode có thể tạo PDF dù có lỗi nhỏ)
@@ -246,7 +246,7 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
         print(f" {msg}")
         return False, msg
     except subprocess.TimeoutExpired:
-        msg = "Biên dịch quá thời gian (>120s)"
+        msg = "Biên dịch quá thời gian (>25s)"
         print(f" {msg}")
         return False, msg
     except Exception as e:
@@ -378,8 +378,8 @@ def package_output_directory(work_dir: str, output_zip_path: str,
         # Font files (for custom templates with bundled fonts)
         '.ttf', '.otf', '.woff', '.woff2', '.pfb', '.tfm',
     }
-    # Cho phép thư mục con phổ biến và các thư mục template thường gặp
-    ALLOWED_SUBDIRS = {'images', 'figures', 'fig', 'figs', 'fonts', 'imgs', 'definitions', 'styles', 'bib', 'bst', 'acm'}
+    # Danh sách các thư mục rác cần loại bỏ (Blacklist)
+    EXCLUDE_DIRS = {'.git', '.svn', '.hg', '__pycache__', '.venv', 'node_modules', '.idea', '.vscode', 'temp_jobs', 'outputs'}
     # File không có extension nhưng cần thiết cho Overleaf
     ALLOWED_NOEXT_FILES = {'latexmkrc', 'makefile', 'Makefile'}
 
@@ -408,7 +408,7 @@ def package_output_directory(work_dir: str, output_zip_path: str,
             # Restrict sub-directories to the whitelist
             if rel_dir not in ('', '.'):
                 top_dir = rel_dir.split(os.sep)[0].lower()
-                if top_dir not in ALLOWED_SUBDIRS:
+                if top_dir in EXCLUDE_DIRS:
                     continue
             for fname in filenames:
                 fpath = os.path.join(dirpath, fname)

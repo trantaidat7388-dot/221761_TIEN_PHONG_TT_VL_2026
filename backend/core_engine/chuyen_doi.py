@@ -1562,7 +1562,7 @@ class ChuyenDoiWordSangLatex:
                 template = template[:match_springer.start()] + template[match_springer.end():]
             else:
                 kw_list = [k.strip() for k in keywords.split(',') if k.strip()]
-                kw_formatted = ' \\and '.join(kw_list)
+                kw_formatted = ', '.join(kw_list)
                 template = (
                     template[:match_springer.start(1)]
                     + kw_formatted
@@ -1643,7 +1643,7 @@ class ChuyenDoiWordSangLatex:
            pass
 
         # Trường hợp 1: Template IEEE (1 \author chứa nhiều \IEEEauthorblockN phân tách bởi \and)
-        if '\\IEEEauthorblockN' in template:
+        if '\\IEEEauthorblockN' in template and 'JAISD' not in template:
             match_author = re.search(r'\\author\s*\{', template)
             if match_author:
                 vi_tri_mo = match_author.end() - 1
@@ -1659,7 +1659,7 @@ class ChuyenDoiWordSangLatex:
                             block += rf'\IEEEauthorblockA{{\textit{{{affil_str}}}}}' + '\n'
                         blocks_moi.append(block)
                         
-                    noi_dung_moi = '\n\\and\n'.join(blocks_moi)
+                    noi_dung_moi = ' \\and\n'.join(blocks_moi)
                     template = template[:vi_tri_mo+1] + '\n' + noi_dung_moi + '\n' + template[vi_tri_dong:]
                     return template
 
@@ -1668,7 +1668,13 @@ class ChuyenDoiWordSangLatex:
         if len(matches) > 1 or (len(matches) == 1 and '\\and' not in template) or '\\institute' in template:
             is_elsarticle = 'elsarticle' in template
             is_acm = '\\affiliation' in template and not is_elsarticle
-            is_springer = '\\institute' in template
+            is_springer = '\\institute' in template and any(cls in template for cls in ('llncs', 'svjour', 'svmono', 'svmult', 'Springer'))
+            
+            # Khóa cứng: Template JAISD không bao giờ dùng \and
+            if 'JAISD' in template:
+                is_springer = False
+                is_acm = False # JAISD có thể có cấu trúc giống ACM nhưng dùng dấu phẩy
+
             
             # Xoá TẤT CẢ các thẻ tác giả cũ (bao gồm cả các thẻ của ACM/Springer)
             while True:
@@ -1693,69 +1699,59 @@ class ChuyenDoiWordSangLatex:
                 return template
                 
             # Tạo block mới
-            if is_springer:
-                # Format kiểu Springer LNCS: \author{A \and B} \institute{U1 \and U2}
-                names = [auth["name"] for auth in author_list]
-                block_moi = rf'\author{{{ " \\and ".join(names) }}}' + '\n'
+            # Luôn gom authors/institutes theo cách thống nhất để linh hoạt
+            springer_authors = []
+            unique_institutes = []
+            
+            for auth_data in author_list:
+                ten_tac_gia = auth_data["name"]
+                inst_indices = []
                 
-                # Gom nhóm tất cả affil duy nhất
-                all_affils = []
-                for auth in author_list:
-                    for aff in auth['affil']:
-                        if aff not in all_affils:
-                            all_affils.append(aff)
-                if all_affils:
-                    block_moi += rf'\institute{{{ " \\and ".join(all_affils) }}}' + '\n'
+                for aff in auth_data['affil']:
+                    if aff not in unique_institutes:
+                        unique_institutes.append(aff)
+                    inst_idx = unique_institutes.index(aff) + 1
+                    inst_indices.append(str(inst_idx))
+                
+                if inst_indices:
+                    inst_str = ",".join(inst_indices)
+                    springer_authors.append(rf'{ten_tac_gia}\inst{{{inst_str}}}')
+                else:
+                    springer_authors.append(ten_tac_gia)
+            
+            # Strict Context-Aware Author Separator
+            if is_springer:
+                author_block = " \\and ".join(springer_authors)
+                institute_block = " \\and ".join(unique_institutes)
             else:
-                block_moi = ""
-                for auth in author_list:
-                    block_moi += rf'\author{{{auth["name"]}}}' + '\n'
-                    for aff in auth['affil']:
-                        if is_elsarticle:
-                            block_moi += rf'\affiliation{{organization={{{aff}}}}}' + '\n'
-                        elif is_acm:
-                            block_moi += rf'\affiliation{{ \institution{{{aff}}} }}' + '\n'
-                        else:
-                            block_moi += rf'\affil{{{aff}}}' + '\n'
-                            
-            if is_springer:
-                # Springer/LNCS format:
-                # \author{First Author\inst{1} \and Second Author\inst{2}}
-                # \institute{Inst 1 \and Inst 2}
-                
-                # Biến đổi dictionaries thành Springer authors
-                springer_authors = []
-                unique_institutes = []
-                
-                for auth_data in author_list:
-                    ten_tac_gia = auth_data["name"]
-                    inst_indices = []
-                    
-                    for aff in auth_data['affil']:
-                        if aff not in unique_institutes:
-                            unique_institutes.append(aff)
-                        inst_idx = unique_institutes.index(aff) + 1
-                        inst_indices.append(str(inst_idx))
-                    
-                    if inst_indices:
-                        inst_str = ",".join(inst_indices)
-                        springer_authors.append(rf'{ten_tac_gia}\inst{{{inst_str}}}')
-                    else:
-                        springer_authors.append(ten_tac_gia)
-                
-                author_block = " \\and \n".join(springer_authors)
-                institute_block = " \\and \n".join(unique_institutes)
-                
-                block_moi = rf'\author{{{author_block}}}' + '\n'
-                if institute_block:
+                author_block = ", ".join(springer_authors)
+                institute_block = ", ".join(unique_institutes)
+            
+            block_moi = rf'\author{{{author_block}}}' + '\n'
+            if institute_block:
+                if is_springer:
                     block_moi += rf'\institute{{{institute_block}}}' + '\n'
+                else:
+                    # Generic fallback: just list institutes as a comment or formatted if needed
+                    # For JAISD and others, we avoid \institute if doc class doesn't support it
+                    block_moi += f"% {institute_block}\n"
 
             template = template[:diem_chen] + block_moi + '\n' + template[diem_chen:]
             return template
 
         # Fallback (chẳng hạn nếu fallback 1 cục): xử lý như cũ (trường hợp template không định dạng)
         noi_dung_author_parts = [loc_ky_tu(info).strip() for info in authors]
-        noi_dung_author = ' \\\\\n'.join(noi_dung_author_parts)
+        
+        is_ieee = 'IEEEtran' in template or '\\IEEEauthorblockN' in template
+        # Improved Springer detection: only if common Springer classes are present
+        is_springer = '\\institute' in template and any(cls in template for cls in ('llncs', 'svjour', 'svmono', 'svmult', 'Springer'))
+        
+        if (is_ieee or is_springer) and 'JAISD' not in template:
+            separator = ' \\and '
+        else:
+            separator = ', '
+            
+        noi_dung_author = (separator + '\n').join(noi_dung_author_parts)
         
         vi_tri_dau_tien = None
         while True:

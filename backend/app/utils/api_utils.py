@@ -79,13 +79,33 @@ _BUILTIN_TEMPLATE_MAP = {
     "springer_lncs":    "LaTeX2e_Proceedings_Templates_download__1",
     "onecolumn":        "latex_template_onecolumn.tex",
     "elsarticle":       "elsarticle-template-harv.tex",
+    "rho_article":      "Rho_Class_Extracted",
 }
 
 def _resolve_template_path(template_type: str) -> Path | None:
-    """Resolve a built-in template type → absolute path of the main .tex file."""
+    """Resolve a built-in OR custom template type → absolute path of the main .tex file."""
     # Nhập `find_main_tex` từ core engine tại đây để tránh vòng lặp logic
     from backend.core_engine.utils import find_main_tex
-    
+
+    # ── Handle custom_* template IDs ──
+    if template_type.startswith("custom_"):
+        custom_name = template_type[len("custom_"):]  # strip 'custom_' prefix
+        # Try directory-based custom template
+        dir_path = CUSTOM_TEMPLATE_FOLDER / custom_name
+        if dir_path.is_dir():
+            try:
+                return Path(find_main_tex(str(dir_path)))
+            except FileNotFoundError:
+                # Fallback: first .tex found
+                first_tex = next(dir_path.rglob("*.tex"), None)
+                return first_tex
+        # Try flat .tex file
+        tex_path = CUSTOM_TEMPLATE_FOLDER / f"{custom_name}.tex"
+        if tex_path.exists():
+            return tex_path
+        return None
+
+    # ── Built-in template map ──
     tpl_name = _BUILTIN_TEMPLATE_MAP.get(template_type)
     if not tpl_name:
         return None
