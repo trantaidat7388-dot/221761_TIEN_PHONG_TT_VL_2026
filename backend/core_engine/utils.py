@@ -221,11 +221,12 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
     if engine is None:
         engine = phat_hien_engine(duong_dan_dau_ra)
 
-    print(f"\n--- [LATEX] STARTING {engine}: {ten_file} (cwd={thu_muc}) ---")
+    print(f"\n--- [LATEX] START: {engine} (file={ten_file}, cwd={thu_muc}) ---")
     cmd = [engine, '-interaction=nonstopmode', '-halt-on-error', '-quiet', f"./{ten_file}"]
-    print(f"--- [LATEX] CMD: {' '.join(cmd)} ---")
+    print(f"[LATEX] CMD: {' '.join(cmd)}")
     
     try:
+        t_start = time.time()
         ket_qua = subprocess.run(
             cmd,
             cwd=thu_muc if thu_muc else '.',
@@ -234,9 +235,10 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
             text=True,
             encoding='utf-8',
             errors='ignore',
-            timeout=35,
+            timeout=30, # ⏱️ Backend timeout: 30s
         )
-        print("--- [LATEX] FINISHED ---")
+        duration = time.time() - t_start
+        print(f"--- [LATEX] FINISHED in {duration:.2f}s (Exit code: {ket_qua.returncode}) ---")
 
         # Kiểm tra PDF tồn tại (nonstopmode có thể tạo PDF dù có lỗi nhỏ)
         pdf_path = os.path.join(thu_muc, ten_file.replace('.tex', '.pdf'))
@@ -247,36 +249,38 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
         log_path = os.path.join(thu_muc, ten_file.replace('.tex', '.log'))
 
         if ket_qua.returncode == 0:
-            print(f" Biên dịch thành công: {ten_file.replace('.tex', '.pdf')}")
+            print(f"[LATEX] SUCCESS: {ten_file.replace('.tex', '.pdf')}")
             return True, ""
         elif pdf_exists:
-            print(f" Biên dịch có cảnh báo nhưng PDF đã tạo: {ten_file.replace('.tex', '.pdf')}")
+            print(f"[LATEX] WARNING: PDF created with minor errors.")
             return True, ""
         else:
-            print(f" Biên dịch thất bại (exit code: {ket_qua.returncode})")
+            print(f"[LATEX] FAILED: {ten_file} (exit code: {ket_qua.returncode})")
             if os.path.exists(log_path):
                 try:
                     with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        error_msg = f.read()
+                        lines = f.readlines()
+                        # Chỉ lấy 1000 dòng cuối để tránh memory crash nếu log quá lớn
+                        error_msg = "".join(lines[-1000:])
                 except Exception as e:
                     error_msg = f"Không thể đọc file log: {e}"
             else:
-                error_msg = "Không tìm thấy file .log để lấy thông tin lỗi."
+                error_msg = "Không tìm thấy file .log"
             
             if error_msg:
-                print(f"Lỗi: {error_msg[:500]}")
+                print(f"[LATEX] Error Snippet (last lines): ... {error_msg[-300:]}")
             return False, error_msg
     except FileNotFoundError:
         msg = f"Không tìm thấy {engine}. Vui lòng cài đặt TeX Live hoặc MiKTeX."
-        print(f" {msg}")
+        print(f"[LATEX] ERROR: {msg}")
         return False, msg
     except subprocess.TimeoutExpired:
-        msg = "Biên dịch quá thời gian (>35s)"
-        print(f" {msg}")
+        msg = "Biên dịch quá thời gian (>30s) - Server đã ngắt tiến trình."
+        print(f"[LATEX] TIMEOUT: {msg}")
         return False, msg
     except Exception as e:
         msg = f"Lỗi hệ thống: {e}"
-        print(f" {msg}")
+        print(f"[LATEX] CRASH: {msg}")
         return False, msg
 
 

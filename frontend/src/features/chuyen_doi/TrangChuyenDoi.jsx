@@ -130,12 +130,14 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   const [pdfKetQua, setPdfKetQua] = useState(null)   // { soTrang, pdfUrl, tenFilePDF }
   const [pdfLoi, setPdfLoi] = useState(null)
   const [thoiGianChay, setThoiGianChay] = useState(0)
+  const [pdfAbortController, setPdfAbortController] = useState(null) // 🧊 Quản lý việc ngắt request biên dịch PDF
   
   // Tự động reset trạng thái khi đổi template hoặc file mới để người dùng bấm "Bắt đầu" lại được luôn
   useEffect(() => {
     const shouldReset = trangThaiXuLy !== 'cho' || jobId !== '' || ketQuaChuyenDoi !== null
     if (shouldReset) {
-      console.log("[*] Resetting state due to template or file change...")
+      console.log("[*] Resetting state and aborting pending PDF jobs...")
+      if (pdfAbortController) pdfAbortController.abort() // 🛑 Ngắt request cũ ngay lập tức
       setTrangThaiXuLy('cho')
       setKetQuaChuyenDoi(null)
       setError(null)
@@ -145,8 +147,19 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
       setJobId('')
       setBuocHienTai(0)
       setTienTrinh(0)
+      setDangBienDichPDF(false)
     }
   }, [loaiTemplate, fileChon])
+  
+  // Cleanup khi unmount: Hủy mọi request PDF đang treo
+  useEffect(() => {
+    return () => {
+      if (pdfAbortController) {
+        console.log("[*] Component unmounting, aborting pending jobs...")
+        pdfAbortController.abort()
+      }
+    }
+  }, [pdfAbortController])
 
   const TONG_BUOC = 5
 
@@ -374,20 +387,31 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
     setDangBienDichPDF(true)
     setPdfLoi(null)
     setPdfKetQua(null)
+    
+    // 🧊 Khởi tạo controller mới cho request này
+    const controller = new AbortController()
+    setPdfAbortController(controller)
+
     try {
-      const kq = await bienDichPDF(currentJobId)
+      const kq = await bienDichPDF(currentJobId, controller.signal)
       if (kq.thanhCong) {
         setPdfKetQua({ soTrang: kq.soTrang, pdfUrl: kq.pdfUrl, tenFilePDF: kq.tenFilePDF })
         toast.success(`Biên dịch PDF thành công! (${kq.soTrang ?? '?'} trang)`)
       } else {
-        setPdfLoi(kq.loiMessage || 'Biên dịch thất bại')
-        toast.error(kq.loiMessage || 'Biên dịch PDF thất bại')
+        // Chỉ hiện lỗi nếu không phải do chủ động abort
+        if (kq.loiMessage && !kq.loiMessage.includes('abort')) {
+          setPdfLoi(kq.loiMessage || 'Biên dịch thất bại')
+          toast.error(kq.loiMessage || 'Biên dịch PDF thất bại')
+        }
       }
     } catch (err) {
-      setPdfLoi(err.message || 'Lỗi không xác định')
-      toast.error(err.message || 'Lỗi biên dịch PDF')
+      if (err.name !== 'AbortError') {
+        setPdfLoi(err.message || 'Lỗi không xác định')
+        toast.error(err.message || 'Lỗi biên dịch PDF')
+      }
     } finally {
       setDangBienDichPDF(false)
+      setPdfAbortController(null)
     }
   }
 

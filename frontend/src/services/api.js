@@ -155,9 +155,9 @@ export const taiFileZip = async (jobId, tenFileZipFallback = '') => {
 
 // ── COMPILE PDF (Step 2) ──────────────────────────────────────────────────────
 
-export const bienDichPDF = async (jobId) => {
+export const bienDichPDF = async (jobId, signal = null) => {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 35000) // 35s frontend timeout
+  const timeoutId = setTimeout(() => controller.abort(), 60000) // ⏱️ Frontend timeout: 60s
 
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
@@ -168,7 +168,7 @@ export const bienDichPDF = async (jobId) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({}), // Gửi body rỗng để tránh 422 trên một số cấu hình server/proxy
-      signal: controller.signal
+      signal: signal || controller.signal // 🧊 Support external cancellation
     })
     clearTimeout(timeoutId)
     const data = await response.json()

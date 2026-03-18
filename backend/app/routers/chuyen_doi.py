@@ -469,9 +469,12 @@ async def bien_dich_pdf_theo_job(job_id: str):
             "pdf_url": f"/api/tai-ve-pdf/{job_id}",
         })
     except Exception as loi:
+        import traceback
+        print(f"[ERROR] bien_dich_pdf_theo_job CRASH: {loi}")
+        traceback.print_exc()
         return JSONResponse(status_code=500, content={
             "thanh_cong": False,
-            "loi": str(loi) or "Lỗi biên dịch không xác định",
+            "loi": f"Lỗi hệ thống khi biên dịch: {str(loi)}",
         })
 
 
