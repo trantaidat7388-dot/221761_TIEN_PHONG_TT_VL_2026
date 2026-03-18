@@ -98,34 +98,38 @@ class TemplatePreprocessor:
                     except: pass
             print("[*] TexSoup deleted all legacy author/affiliation nodes.")
 
-            # 3. Xử lý Abstract
+            # 3. Xử lý Abstract (Chỉ xử lý node đầu tiên để tránh documentation examples)
             abstracts = list(soup.find_all('abstract')) + list(soup.find_all('Abstract'))
-            for ab in abstracts:
+            if abstracts:
+                ab = abstracts[0]
                 # Nếu là command \abstract{...}
                 if ab.args:
                     for arg in reversed(ab.args):
                         if hasattr(arg, 'contents'):
                             arg.contents = ['<< metadata.abstract >>']
-                            print("[*] TexSoup tagged abstract command.")
+                            print("[*] TexSoup tagged first abstract command.")
                             break
                 else:
                     # Nếu là environment \begin{abstract}...\end{abstract}
                     # Ta thay thế toàn bộ nội dung trong begin/end
                     ab.replace_with('\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}')
-                    print("[*] TexSoup tagged abstract environment.")
+                    print("[*] TexSoup tagged first abstract environment.")
 
-            # 4. Xử lý Keywords
+            # 4. Xử lý Keywords (Chỉ xử lý node đầu tiên)
             for cmd in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']:
-                for kw in soup.find_all(cmd):
+                kw_nodes = list(soup.find_all(cmd))
+                if kw_nodes:
+                    kw = kw_nodes[0]
                     if kw.args:
                         for arg in reversed(kw.args):
                             if hasattr(arg, 'contents'):
                                 arg.contents = ['<< metadata.keywords_str >>']
-                                print(f"[*] TexSoup tagged {cmd} command.")
+                                print(f"[*] TexSoup tagged first {cmd} command.")
                                 break
                     else:
                         kw.replace_with(f'\\begin{{{cmd}}}\n<< metadata.keywords_str >>\n\\end{{{cmd}}}')
-                        print(f"[*] TexSoup tagged {cmd} environment.")
+                        print(f"[*] TexSoup tagged first {cmd} environment.")
+                    break # Chỉ xử lý loại keyword đầu tiên tìm thấy
 
             tex = str(soup)
             print("[*] TexSoup tagging hoàn tất cho metadata.")
@@ -529,9 +533,10 @@ class TemplatePreprocessor:
                 repl += r'\\keywords{<< metadata.keywords_str >>}\n'
             repl += r'\g<2>'
 
+            # Sử dụng count=1 để tránh thay thế examples trong documentation (e.g. \inlinecode)
             tex = re.sub(
                 r'(\\begin\{abstract\}).*?(\\end\{abstract\})',
-                repl, tex, flags=re.DOTALL,
+                repl, tex, count=1, flags=re.DOTALL,
             )
             return cls._process_ieee_keywords(tex)
 
@@ -573,11 +578,14 @@ class TemplatePreprocessor:
 
     # ── Phase 7: Body ────────────────────────────────────────────
 
-    @staticmethod
-    def _verbatim_ranges(tex: str) -> list:
+    @classmethod
+    def _verbatim_ranges(cls, tex: str) -> list:
         """Return list of (start, end) char ranges that are inside verbatim contexts.
 
-        Covers \\verb|...|  (any delimiter) and \\begin{verbatim}...\\end{verbatim}.
+        Covers:
+        - \\verb|...|  (any delimiter)
+        - \\begin{verbatim}...\\end{verbatim}
+        - \\inlinecode{...}
         """
         ranges = []
         # \verb<delim>...<delim>
@@ -586,6 +594,12 @@ class TemplatePreprocessor:
         # \begin{verbatim}...\end{verbatim}
         for m in re.finditer(r'\\begin\{verbatim\}.*?\\end\{verbatim\}', tex, re.DOTALL):
             ranges.append((m.start(), m.end()))
+        # \inlinecode{...} (Hỗ trợ Rho-class documentation)
+        for m in re.finditer(r'\\inlinecode\s*\{', tex):
+            brace_start = m.end() - 1
+            brace_end = cls._find_matching_brace(tex, brace_start)
+            if brace_end != -1:
+                ranges.append((m.start(), brace_end + 1))
         return ranges
 
     @classmethod
