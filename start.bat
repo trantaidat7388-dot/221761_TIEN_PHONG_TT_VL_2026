@@ -52,11 +52,20 @@ REM ============================================================
 echo [3/5] Installing Python dependencies...
 
 if exist "%ROOT%.venv\Scripts\activate.bat" (
+    echo       OK - Environment activated.
     call "%ROOT%.venv\Scripts\activate.bat"
 ) else (
-    echo       WARNING: .venv not found. Using system Python.
+    echo       WARNING: .venv not found. Creating virtual environment...
+    python -m venv "%ROOT%.venv"
+    if exist "%ROOT%.venv\Scripts\activate.bat" (
+        echo       OK - .venv created successfuly.
+        call "%ROOT%.venv\Scripts\activate.bat"
+    ) else (
+        echo       ERROR: Failed to create .venv. Using system Python.
+    )
 )
 
+echo       Installing dependencies...
 pip install -r "%ROOT%backend\requirements.txt" --quiet --disable-pip-version-check
 if %ERRORLEVEL% NEQ 0 (
     echo       ERROR: pip install failed. Check your Python environment.
@@ -71,7 +80,7 @@ REM STEP 4: START BACKEND
 REM ============================================================
 echo [4/5] Starting Backend (FastAPI on :8000)...
 
-start "Word2LaTeX Backend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%"" & call "".venv\Scripts\activate.bat"" & python -m uvicorn --host 0.0.0.0 --port 8000 --reload --reload-dir backend/app --reload-exclude *storage* --reload-exclude *temp_jobs* backend.app.main:app"
+start "Word2LaTeX Backend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%"" & (if exist "".venv\Scripts\activate.bat"" call "".venv\Scripts\activate.bat"") & python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"
 
 timeout /t 3 /nobreak >nul
 echo       OK - Backend window opened.

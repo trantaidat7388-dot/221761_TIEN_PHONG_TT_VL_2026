@@ -130,14 +130,13 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   const [pdfKetQua, setPdfKetQua] = useState(null)   // { soTrang, pdfUrl, tenFilePDF }
   const [pdfLoi, setPdfLoi] = useState(null)
   const [thoiGianChay, setThoiGianChay] = useState(0)
-  const [pdfAbortController, setPdfAbortController] = useState(null) // 🧊 Quản lý việc ngắt request biên dịch PDF
+  const abortControllerRef = useRef(null) // 🧊 Quản lý việc ngắt request biên dịch PDF
   
   // Tự động reset trạng thái khi đổi template hoặc file mới để người dùng bấm "Bắt đầu" lại được luôn
   useEffect(() => {
     const shouldReset = trangThaiXuLy !== 'cho' || jobId !== '' || ketQuaChuyenDoi !== null
     if (shouldReset) {
-      console.log("[*] Resetting state and aborting pending PDF jobs...")
-      if (pdfAbortController) pdfAbortController.abort() // 🛑 Ngắt request cũ ngay lập tức
+      console.log("[*] Resetting state...")
       setTrangThaiXuLy('cho')
       setKetQuaChuyenDoi(null)
       setError(null)
@@ -151,15 +150,14 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
     }
   }, [loaiTemplate, fileChon])
   
-  // Cleanup khi unmount: Hủy mọi request PDF đang treo
   useEffect(() => {
     return () => {
-      if (pdfAbortController) {
-        console.log("[*] Component unmounting, aborting pending jobs...")
-        pdfAbortController.abort()
+      if (abortControllerRef.current) {
+        console.log("[*] Component unmounting, safely aborting jobs.")
+        abortControllerRef.current.abort()
       }
     }
-  }, [pdfAbortController])
+  }, [])
 
   const TONG_BUOC = 5
 
@@ -390,7 +388,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
     
     // 🧊 Khởi tạo controller mới cho request này
     const controller = new AbortController()
-    setPdfAbortController(controller)
+    abortControllerRef.current = controller
 
     try {
       const kq = await bienDichPDF(currentJobId, controller.signal)
@@ -411,7 +409,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
       }
     } finally {
       setDangBienDichPDF(false)
-      setPdfAbortController(null)
+      abortControllerRef.current = null
     }
   }
 

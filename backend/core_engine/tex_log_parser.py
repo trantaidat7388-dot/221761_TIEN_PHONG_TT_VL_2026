@@ -46,5 +46,12 @@ def parse_latex_log(log_text: str) -> dict:
         # Nếu dòng quá dài, chỉ cắt 100 ký tự để ném lên UI
         if len(loi["ngu_canh"]) > 100:
             loi["ngu_canh"] = loi["ngu_canh"][:97] + "..."
-            
+    else:
+        # Nếu không có pattern !, có thể đây là lỗi font hoặc fatal system crash.
+        # Ta sẽ trích xuất 15 dòng cuối để người dùng thấy log thật sự.
+        log_lines = log_text.strip().split('\n')
+        tail = "\n".join(log_lines[-15:])
+        loi["thong_diep"] = f"LỖI HỆ THỐNG (Log Tail):\n{tail}"
+        loi["loai_loi"] = "LOI_NGHIEM_TRONG"
+
     return loi
