@@ -64,13 +64,16 @@ class BoXuLyToan:
         # latex2mathml (có hàm ngược mathml→latex ở phiên bản mới)
         try:
             from latex2mathml.converter import convert as _l2m  # noqa: F401
-            # Thử hàm ngược
+            # Thử hàm ngược (chỉ có ở các bản fork hoặc repo clone hiếm gặp)
             from latex2mathml import mathml2latex as _m2l
             self._mathml_to_latex_fn = _m2l
             return
-        except Exception as e:
-            print(f'[Cảnh báo] Lỗi im lặng ở xu_ly_toan.py dòng 70: {e}')
+        except ImportError:
+            # Đây là trường hợp bình thường nếu dùng bản latex2mathml chính thức
             pass
+        except Exception as e:
+            print(f'[Cảnh báo] Lỗi khởi tạo mathml_converter: {e}')
+
         # Fallback: tự parse đơn giản qua _mathml_simple_to_latex
         self._mathml_to_latex_fn = None
 
