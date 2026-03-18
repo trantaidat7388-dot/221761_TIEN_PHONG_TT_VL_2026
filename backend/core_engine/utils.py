@@ -196,17 +196,32 @@ def xoa_file_an_toan(duong_dan_file: str, so_lan_thu: int = 3, thoi_gian_cho_ms:
 def phat_hien_engine(duong_dan_tex: str) -> str:
     """Phát hiện LaTeX engine phù hợp dựa trên nội dung file .tex.
     
-    Trả về 'pdflatex' nếu template còn giữ pdftex trong documentclass (MDPI, etc.).
-    Trả về 'xelatex' cho các trường hợp còn lại (hỗ trợ Unicode tốt hơn).
+    1. Ưu tiên 'xelatex' nếu thấy Magic Comment hoặc gói đặc thù (fontspec, polyglossia, etc.)
+    2. Trả về 'pdflatex' nếu template có tùy chọn [pdftex] trong documentclass.
+    3. Mặc định trả về 'xelatex' để hỗ trợ Unicode tốt nhất.
     """
     try:
         with open(duong_dan_tex, 'r', encoding='utf-8', errors='ignore') as f:
-            noi_dung = f.read(3000)
+            noi_dung = f.read(5000) # Đọc nhiều hơn chút để bao quát hết preamble
+        
+        # 🛡️ Ưu tiên 1: Magic comment (VD: % !TeX program = xelatex)
+        if re.search(r'^%\s*!TeX\s+program\s*=\s*(xelatex|lualatex)', noi_dung, re.IGNORECASE | re.MULTILINE):
+            return 'xelatex'
+            
+        # 🛡️ Ưu tiên 2: Các gói bắt buộc phải dùng XeLaTeX/LuaLaTeX
+        if re.search(r'\\usepackage\{fontspec\}', noi_dung) or \
+           re.search(r'\\usepackage\{unicode-math\}', noi_dung) or \
+           re.search(r'\\usepackage\{polyglossia\}', noi_dung):
+            return 'xelatex'
+            
+        # 🛡️ Ưu tiên 3: Nếu thấy tùy chọn pdftex trong documentclass (MDPI cũ, v.v.)
         if re.search(r'^[^%]*\\documentclass\[.*?pdftex', noi_dung, re.MULTILINE):
             return 'pdflatex'
+            
     except Exception:
         pass
-    return 'xelatex'
+    
+    return 'xelatex' # Mặc định an toàn cho Unicode
 
 
 def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine: str = None) -> tuple[bool, str]:
@@ -230,8 +245,8 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
         ket_qua = subprocess.run(
             cmd,
             cwd=thu_muc if thu_muc else '.',
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             encoding='utf-8',
             errors='ignore',
@@ -265,22 +280,21 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
                 except Exception as e:
                     error_msg = f"Không thể đọc file log: {e}"
             else:
-                error_msg = "Không tìm thấy file .log"
+                # Nếu không có file log, ưu tiên dùng stderr/stdout để biết tại sao (ví dụ: lệnh không tồn tại)
+                error_msg = ket_qua.stderr.strip() or ket_qua.stdout.strip() or "Không tìm thấy file .log và không có output từ compiler"
             
             if error_msg:
                 print(f"[LATEX] Error Snippet (last lines): ... {error_msg[-300:]}")
             return False, error_msg
     except FileNotFoundError:
-        msg = f"Không tìm thấy {engine}. Vui lòng cài đặt TeX Live hoặc MiKTeX."
-        print(f"[LATEX] ERROR: {msg}")
+        msg = f"LỖI: Không tìm thấy '{engine}'. Kiểm tra PATH hoặc cài đặt LaTeX."
         return False, msg
-    except subprocess.TimeoutExpired:
-        msg = "Biên dịch quá thời gian (>30s) - Server đã ngắt tiến trình."
-        print(f"[LATEX] TIMEOUT: {msg}")
+    except subprocess.TimeoutExpired as e:
+        msg = f"TIMEOUT: Quá 30s. Output log:\n{(e.stdout or '').decode('utf-8', 'ignore')}"
         return False, msg
     except Exception as e:
-        msg = f"Lỗi hệ thống: {e}"
-        print(f"[LATEX] CRASH: {msg}")
+        import traceback
+        msg = f"CRITICAL CRASH: {str(e)}\n{traceback.format_exc()}"
         return False, msg
 
 

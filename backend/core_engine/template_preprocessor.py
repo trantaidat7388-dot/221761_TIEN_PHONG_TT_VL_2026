@@ -12,15 +12,16 @@ class TemplatePreprocessor:
     def auto_tag(cls, tex_content: str) -> str:
         tex = cls._ensure_essential_packages(tex_content)
         
-        # ── Hỗ trợ Tiếng Việt (fontspec + Times New Roman cho XeLaTeX) ──
+        # ── Hỗ trợ Tiếng Việt (fontspec cho XeLaTeX - chỉ fallback nếu chưa có font) ──
         if r'\setmainfont' not in tex and r'\usepackage{fontspec}' not in tex:
-            font_patch = r"\usepackage{fontspec}" + "\n" + r"\setmainfont{Times New Roman}" + "\n"
+            # Ta dùng fontspec nhưng không ép cứng font nếu không cần thiết để tránh crash do thiếu font hệ thống
+            font_patch = r"\usepackage{fontspec}" + "\n" + r"% \setmainfont{Times New Roman} % Bỏ comment nếu muốn ép dùng font này" + "\n"
             # Chèn sau documentclass
             tex = re.sub(r'(\\documentclass\b.*?\]?\{.*?\})', r'\1' + '\n' + font_patch.replace('\\', '\\\\'), tex)
 
-        # ── Vá lỗi apacite: \onemaskedcitationmsg undefined ──
+        # ── Vá lỗi apacite: \onemaskedcitationmsg + \maskedcitationsmsg undefined ──
         if r'\onemaskedcitationmsg' not in tex:
-            patch = r"\providecommand{\onemaskedcitationmsg}[1]{}" + "\n"
+            patch = r"\providecommand{\onemaskedcitationmsg}[1]{}" + "\n" + r"\providecommand{\maskedcitationsmsg}[1]{}" + "\n"
             tex = re.sub(r'(\\begin\{document\})', patch.replace('\\', '\\\\') + r'\1', tex)
         
         # BẮT BUỘC dùng TexSoup cho các node metadata chính để tránh lỗi rớt ngoặc

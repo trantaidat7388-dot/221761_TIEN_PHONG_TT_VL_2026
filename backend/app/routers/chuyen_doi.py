@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Query, BackgroundTasks, Request, Depends
+from fastapi import APIRouter, File, UploadFile, HTTPException, Query, BackgroundTasks, Request, Depends, Body
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -410,17 +410,28 @@ def tai_ve_theo_job(job_id: str, db: Session = Depends(get_db), current_user: mo
 
 
 @router.post("/compile-pdf/{job_id}")
-async def bien_dich_pdf_theo_job(job_id: str):
+async def bien_dich_pdf_theo_job(job_id: str, request: Request):
     """Biên dịch PDF từ file .tex đã tạo (step 2 — tách riêng khỏi conversion)."""
+    print(f"[*] Triggering PDF compilation for Job ID: {job_id}")
     job_folder = TEMP_FOLDER / f"job_{job_id}"
     if not job_folder.exists() or not job_folder.is_dir():
         raise HTTPException(status_code=404, detail="Job không tồn tại hoặc đã bị dọn")
 
-    # Tìm file .tex đã sinh ra (file mới nhất, loại trừ template gốc)
     danh_sach_tex = sorted(job_folder.glob('*.tex'), key=lambda p: p.stat().st_mtime, reverse=True)
     if not danh_sach_tex:
         raise HTTPException(status_code=404, detail="Không tìm thấy file .tex trong job")
-    tex_path = danh_sach_tex[0]
+    
+    # 🛡️ Rename to safe filename (job_output.tex) to bypass MAX_PATH and special char issues
+    original_tex = danh_sach_tex[0]
+    original_tex_name = original_tex.name
+    tex_path = job_folder / "job_output.tex"
+    try:
+        if tex_path.exists(): tex_path.unlink()
+        original_tex.rename(tex_path)
+    except Exception as e:
+        print(f"[WARN] Failed to rename to safe filename: {e}")
+        tex_path = original_tex # Fallback to original if rename fails
+        original_tex_name = tex_path.name
 
     try:
         thanh_cong, thong_bao_loi = await run_in_threadpool(bien_dich_latex, str(tex_path))
@@ -451,8 +462,10 @@ async def bien_dich_pdf_theo_job(job_id: str):
                     so_trang = int(match.group(1))
         except Exception:
             pass
-
-        pdf_path = tex_path.with_suffix('.pdf')
+        # Đường dẫn PDF kết quả (sử dụng base name mới)
+        pdf_name = tex_path.with_suffix('.pdf').name
+        pdf_path = job_folder / pdf_name
+        
         if not pdf_path.exists():
             return JSONResponse(status_code=500, content={
                 "thanh_cong": False,
@@ -462,10 +475,13 @@ async def bien_dich_pdf_theo_job(job_id: str):
         # Dọn file rác biên dịch
         don_dep_file_rac(str(tex_path))
 
+        # Tên PDF đẹp (dựa vào tên file gốc)
+        ten_pdf_dep = original_tex_name.replace('.tex', '.pdf')
+
         return JSONResponse(status_code=200, content={
             "thanh_cong": True,
             "so_trang": so_trang,
-            "ten_file_pdf": pdf_path.name,
+            "ten_file_pdf": ten_pdf_dep,
             "pdf_url": f"/api/tai-ve-pdf/{job_id}",
         })
     except Exception as loi:
@@ -490,7 +506,20 @@ def tai_ve_pdf_theo_job(job_id: str):
         raise HTTPException(status_code=404, detail="Không tìm thấy file PDF — hãy biên dịch trước")
 
     pdf_path = danh_sach_pdf[0]
+    
+    # Tìm tên file gốc từ file .zip (là file có tên đẹp nhất)
+    ten_hien_thi = pdf_path.name
+    # Lấy zip mới nhất
+    danh_sach_zip = sorted(job_folder.glob('*.zip'), key=lambda p: p.stat().st_mtime, reverse=True)
+    if danh_sach_zip:
+        ten_hien_thi = danh_sach_zip[0].name.replace('.zip', '.pdf')
+    elif pdf_path.name == "job_output.pdf":
+        ten_hien_thi = "document.pdf"
+
     return FileResponse(
-        path=str(pdf_path), filename=pdf_path.name, media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename={pdf_path.name}", "Access-Control-Expose-Headers": "Content-Disposition"}
+        path=str(pdf_path), filename=ten_hien_thi, media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=\"{ten_hien_thi}\"", 
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
     )
