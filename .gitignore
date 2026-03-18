@@ -58,11 +58,7 @@ temp/
 tmp/
 *.tmp
 
-# Large test files (keep structure, ignore content)
-input_data/*.docx
-input_data/*.doc
-input_data/*.docm
-input_data/*.zip
+
 
 # Frontend build logs
 frontend/build_output*.txt
