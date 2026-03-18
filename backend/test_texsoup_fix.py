@@ -1,24 +1,53 @@
 from TexSoup import TexSoup
-import os
 
-latex_text = r"\Title{Original Title}"
-soup = TexSoup(latex_text)
-node = soup.find('Title')
+latex_sample = r"""
+\documentclass{article}
+\title{Dummy Title}
+\author{John Doe \thanks{Thanks}}
+\begin{document}
+\maketitle
+\begin{abstract}
+Old abstract.
+\end{abstract}
+Some body.
+\end{document}
+"""
 
-print(f"Original: {node}")
-print(f"Node arguments: {node.args}")
-
-# Try to change the first argument
-if node.args:
-    # TexSoup nodes represent arguments in .args
-    # node.args[0] is a TexArg object like {Original Title}
-    # We can try to replace its contents
-    arg0 = node.args[0]
-    print(f"Arg[0]: {arg0}, Type: {type(arg0)}")
+def test_mutation():
+    soup = TexSoup(latex_sample)
     
-    # In some versions of TexSoup, we can't just set .value
-    # Let's try to see what we CAN set
-    # Try replacing the whole node with a new one?
-    node.replace_with(TexSoup(fr"\Title{{<< metadata.title >>}}"))
+    # 1. Title mutation
+    titles = list(soup.find_all('title'))
+    for t in titles:
+        if t.args:
+            # Replicating existing logic (but correctly)
+            for arg in reversed(t.args):
+                if hasattr(arg, 'contents'):
+                    arg.contents = ['<< metadata.title >>']
+                    break
+    
+    # 2. Author mutation
+    authors = list(soup.find_all('author'))
+    for a in authors:
+        if a.args:
+            a.args[-1].contents = ['<< metadata.author_block >>']
+    
+    # 3. Abstract mutation
+    abstracts = list(soup.find_all('abstract'))
+    for ab in abstracts:
+        if ab.args:
+            ab.args[-1].contents = ['<< metadata.abstract >>']
+        else:
+            ab.replace_with('\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}')
+            
+    modified = str(soup)
+    print("--- MODIFIED LATEX ---")
+    print(modified)
+    
+    if '<< metadata.title >>' in modified and '<< metadata.author_block >>' in modified:
+        print("\nSUCCESS: Mutation persisted in str(soup)!")
+    else:
+        print("\nFAILURE: Mutation lost!")
 
-print(f"Modified: {soup}")
+if __name__ == "__main__":
+    test_mutation()

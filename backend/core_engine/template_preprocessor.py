@@ -21,14 +21,9 @@ class TemplatePreprocessor:
             titles = list(soup.find_all('title')) + list(soup.find_all('Title'))
             for t in titles:
                 if t.args:
-                    # Thay đổi nội dung của đối số cuối cùng (thường là nội dung chính)
-                    # t.args[-1].value = '<< metadata.title >>' 
-                    # TexSoup args có thể là RArg (braces) hoặc OArg (brackets). 
-                    # Ta tìm cái RArg cuối cùng.
                     for arg in reversed(t.args):
-                        if hasattr(arg, 'value'):
-                            # Đảm bảo giữ lại dấu ngoặc {}, chỉ thay ruột
-                            arg.value = '<< metadata.title >>'
+                        if hasattr(arg, 'contents'):
+                            arg.contents = ['<< metadata.title >>']
                             break
             
             # 2. Xử lý Author
@@ -38,8 +33,8 @@ class TemplatePreprocessor:
                 first = authors[0]
                 if first.args:
                     for arg in reversed(first.args):
-                        if hasattr(arg, 'value'):
-                            arg.value = '<< metadata.author_block >>'
+                        if hasattr(arg, 'contents'):
+                            arg.contents = ['<< metadata.author_block >>']
                             break
                 # Xóa các author còn lại (ví dụ trong template có nhiều author mẫu)
                 for other in authors[1:]:
@@ -57,24 +52,28 @@ class TemplatePreprocessor:
                 # Nếu là command \abstract{...}
                 if ab.args:
                     for arg in reversed(ab.args):
-                        if hasattr(arg, 'value'):
-                            arg.value = '<< metadata.abstract >>'
+                        if hasattr(arg, 'contents'):
+                            arg.contents = ['<< metadata.abstract >>']
+                            print("[*] TexSoup tagged abstract command.")
                             break
                 else:
                     # Nếu là environment \begin{abstract}...\end{abstract}
                     # Ta thay thế toàn bộ nội dung trong begin/end
                     ab.replace_with('\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}')
+                    print("[*] TexSoup tagged abstract environment.")
 
             # 4. Xử lý Keywords
             for cmd in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']:
                 for kw in soup.find_all(cmd):
                     if kw.args:
                         for arg in reversed(kw.args):
-                            if hasattr(arg, 'value'):
-                                arg.value = '<< metadata.keywords_str >>'
+                            if hasattr(arg, 'contents'):
+                                arg.contents = ['<< metadata.keywords_str >>']
+                                print(f"[*] TexSoup tagged {cmd} command.")
                                 break
                     else:
                         kw.replace_with(f'\\begin{{{cmd}}}\n<< metadata.keywords_str >>\n\\end{{{cmd}}}')
+                        print(f"[*] TexSoup tagged {cmd} environment.")
 
             tex = str(soup)
             print("[*] TexSoup tagging hoàn tất cho metadata.")

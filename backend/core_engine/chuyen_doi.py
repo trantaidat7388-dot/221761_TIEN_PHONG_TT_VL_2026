@@ -2094,11 +2094,16 @@ class ChuyenDoiWordSangLatex:
         template_name = os.path.basename(duong_dan_tex_chinh)
 
         if "<< body >>" not in raw_template and "{{ body }}" not in raw_template:
-            print("[*] Template chưa được tag, đang tự động gán tag...")
+            print("[*] Template chưa được tag, đang tự động gán tag (TexSoup)...")
             template_tagged = TemplatePreprocessor.auto_tag(raw_template)
             # Ghi đè lại file tại chỗ (an toàn vì đây là bản copy trong thư mục job/temp)
             with open(duong_dan_tex_chinh, 'w', encoding='utf-8') as f:
                 f.write(template_tagged)
+            print(f"[*] Đã lưu file template đã tag: {duong_dan_tex_chinh}")
+            
+        # Debug metadata before rendering
+        print(f"[*] Metadata extracted: Title={ir.get('metadata', {}).get('title')[:50]}...")
+        print(f"[*] Author Block Preview: {ir.get('metadata', {}).get('author_block', '')[:50]}...")
 
         # 5. Jinja2 Render: loader trỏ tới thư mục chứa file .tex chính
         #    → để Jinja có thể tìm thấy các file phụ thuộc nếu template dùng include
