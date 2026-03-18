@@ -414,7 +414,7 @@ def package_output_directory(work_dir: str, output_zip_path: str,
     """
     # Chỉ cho phép các đuôi file này vào ZIP
     ALLOWED_EXTENSIONS = {
-        '.tex', '.pdf', '.bib', '.cls', '.sty', '.bst',
+        '.tex', '.pdf', '.bib', '.cls', '.sty', '.bst', '.csl',
         '.png', '.jpg', '.jpeg', '.eps', '.gif', '.svg', '.tif', '.tiff',
         # Biblatex styles & font definitions
         '.bbx', '.cbx', '.lbx', '.dbx', '.fd', '.cfg', '.def',
