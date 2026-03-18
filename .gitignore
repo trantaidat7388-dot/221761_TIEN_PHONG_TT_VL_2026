@@ -84,3 +84,6 @@ frontend/src/services/firebaseConfig.js
 # SQLite Database
 *.db
 word2latex.db
+
+# Logs
+server_log.txt
