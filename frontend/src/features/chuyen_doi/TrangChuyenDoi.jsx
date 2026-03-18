@@ -133,7 +133,9 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   
   // Tự động reset trạng thái khi đổi template hoặc file mới để người dùng bấm "Bắt đầu" lại được luôn
   useEffect(() => {
-    if (trangThaiXuLy === 'hoan_thanh' || trangThaiXuLy === 'loi') {
+    const shouldReset = trangThaiXuLy !== 'cho' || jobId !== '' || ketQuaChuyenDoi !== null
+    if (shouldReset) {
+      console.log("[*] Resetting state due to template or file change...")
       setTrangThaiXuLy('cho')
       setKetQuaChuyenDoi(null)
       setError(null)
@@ -141,6 +143,8 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
       setPdfLoi(null)
       setTexContent('')
       setJobId('')
+      setBuocHienTai(0)
+      setTienTrinh(0)
     }
   }, [loaiTemplate, fileChon])
 

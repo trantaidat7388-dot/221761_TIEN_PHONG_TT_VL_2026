@@ -26,25 +26,28 @@ class TemplatePreprocessor:
                             arg.contents = ['<< metadata.title >>']
                             break
             
-            # 2. Xử lý Author
-            authors = list(soup.find_all('author')) + list(soup.find_all('Author'))
-            if authors:
-                # Giữ author đầu tiên làm placeholder, xóa ruột
-                first = authors[0]
-                if first.args:
-                    for arg in reversed(first.args):
-                        if hasattr(arg, 'contents'):
-                            arg.contents = ['<< metadata.author_block >>']
-                            break
-                # Xóa các author còn lại (ví dụ trong template có nhiều author mẫu)
-                for other in authors[1:]:
-                    other.delete()
-            
-            # Xóa các lệnh metadata phụ trợ thường đi kèm author (affil, email, address...)
-            for cmd in ['affil', 'affiliation', 'address', 'email', 'institute', 'authornote', 
-                        'orcid', 'corres', 'firstnote', 'AuthorNames', 'authorrunning', 'titlerunning']:
-                for node in soup.find_all(cmd):
-                    node.delete()
+            # 2. Xử lý Author & Affiliations (Robust Deletion for acmart/generic)
+            # Tìm vị trí author đầu tiên để chèn tag lên trước
+            author_nodes = list(soup.find_all('author')) + list(soup.find_all('Author'))
+            if author_nodes:
+                print(f"[*] TexSoup found {len(author_nodes)} author nodes. Revamping injection...")
+                first_author = author_nodes[0]
+                # Chèn tag lên trước node author đầu tiên
+                first_author.insert_before('<< metadata.author_block >>\n')
+                print("[*] TexSoup inserted author_block tag before first author node.")
+
+            # Xóa sạch toàn bộ các node metadata cũ để tránh rác (như \affiliation thừa gây lỗi })
+            related_cmds = ['author', 'Author', 'affil', 'affiliation', 'address', 'email', 'institute', 
+                            'authornote', 'orcid', 'corres', 'firstnote', 'AuthorNames', 
+                            'authorrunning', 'titlerunning']
+            for cmd in related_cmds:
+                nodes = soup.find_all(cmd)
+                for node in nodes:
+                    try:
+                        node.delete()
+                    except Exception:
+                        pass
+            print("[*] TexSoup deleted all legacy author/affiliation nodes.")
 
             # 3. Xử lý Abstract
             abstracts = list(soup.find_all('abstract')) + list(soup.find_all('Abstract'))

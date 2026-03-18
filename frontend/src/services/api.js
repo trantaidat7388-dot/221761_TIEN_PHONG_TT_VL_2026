@@ -163,7 +163,11 @@ export const bienDichPDF = async (jobId) => {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
     const response = await fetch(`${API_BASE_URL}/api/compile-pdf/${jobId}`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({}), // Gửi body rỗng để tránh 422 trên một số cấu hình server/proxy
       signal: controller.signal
     })
     clearTimeout(timeoutId)
