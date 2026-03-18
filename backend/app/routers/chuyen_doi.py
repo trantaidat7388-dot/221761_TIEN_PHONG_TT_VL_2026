@@ -369,7 +369,7 @@ async def chuyen_doi_file_stream(
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
 
 
-@router.get("/tai-ve-zip/{job_id}")
+@router.api_route("/tai-ve-zip/{job_id}", methods=["GET", "HEAD"])
 def tai_ve_zip_theo_job(job_id: str):
     job_folder = TEMP_FOLDER / f"job_{job_id}"
     if not job_folder.exists() or not job_folder.is_dir():
@@ -386,7 +386,7 @@ def tai_ve_zip_theo_job(job_id: str):
     )
 
 
-@router.get("/download/{job_id}")
+@router.api_route("/download/{job_id}", methods=["GET", "HEAD"])
 def tai_ve_theo_job(job_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     """Tải file ZIP từ đường dẫn được lưu trong DB (yêu cầu auth)."""
     record = db.query(models.ConversionHistory).filter(models.ConversionHistory.job_id == job_id, models.ConversionHistory.user_id == current_user.id).first()
@@ -494,7 +494,7 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request):
         })
 
 
-@router.get("/tai-ve-pdf/{job_id}")
+@router.api_route("/tai-ve-pdf/{job_id}", methods=["GET", "HEAD"])
 def tai_ve_pdf_theo_job(job_id: str):
     """Tải file PDF đã biên dịch từ job folder."""
     job_folder = TEMP_FOLDER / f"job_{job_id}"
