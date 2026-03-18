@@ -26,27 +26,64 @@ class TemplatePreprocessor:
                             arg.contents = ['<< metadata.title >>']
                             break
             
-            # 2. Xử lý Author & Affiliations (Robust Deletion for acmart/generic)
+            # 2. Xử lý Author & Affiliations (Robust Deletion + Arity Padding for jov/acmart/generic)
             # Tìm vị trí author đầu tiên để chèn tag lên trước
             author_nodes = list(soup.find_all('author')) + list(soup.find_all('Author'))
             if author_nodes:
                 print(f"[*] TexSoup found {len(author_nodes)} author nodes. Revamping injection...")
                 first_author = author_nodes[0]
-                # Chèn tag lên trước node author đầu tiên
-                first_author.insert_before('<< metadata.author_block >>\n')
-                print("[*] TexSoup inserted author_block tag before first author node.")
+                
+                # --- ARITY DETECTION (Fix Argument Gobbling) ---
+                extra_braces_count = 0
+                parent = first_author.parent
+                if parent:
+                    try:
+                        contents = list(parent.contents)
+                        # Tìm vị trí node author đầu tiên trong danh sách contents của parent
+                        idx = -1
+                        for i, item in enumerate(contents):
+                            if item == first_author:
+                                idx = i
+                                break
+                        
+                        if idx != -1:
+                            to_delete_extra = []
+                            # Duyệt các sibling đứng sau để tìm các BraceGroup rời rạc (ví dụ: \author{N}{Aff}{URL}{Email})
+                            for i in range(idx + 1, len(contents)):
+                                sibling = contents[i]
+                                s_sibling = str(sibling).strip()
+                                if not s_sibling: continue # Bỏ qua khoảng trắng/xuống dòng
+                                
+                                # Nếu sibling bắt đầu bằng { và kết thúc bằng } và KHÔNG phải là lệnh (không bắt đầu bằng \)
+                                if s_sibling.startswith('{') and s_sibling.endswith('}') and not s_sibling.startswith('\\'):
+                                    print(f"[*] Detected trailing argument (gobbling risk): {s_sibling}")
+                                    extra_braces_count += 1
+                                    to_delete_extra.append(sibling)
+                                else:
+                                    # Gặp lệnh khác hoặc text thường thì dừng lại
+                                    break
+                            
+                            # Xóa các tham số thừa để dọn đường cho tag mới
+                            for item in to_delete_extra:
+                                try: item.delete()
+                                except: pass
+                    except Exception as e:
+                        print(f"[!] Warning: Arity detection failed: {e}")
 
-            # Xóa sạch toàn bộ các node metadata cũ để tránh rác (như \affiliation thừa gây lỗi })
+                # Bù đắp số ngoặc nhọn để thỏa mãn signature của macro (ví dụ jov.cls yêu cầu 4 tham số)
+                padding = "{}" * extra_braces_count
+                first_author.insert_before(f'<< metadata.author_block >>{padding}\n')
+                print(f"[*] TexSoup inserted author_block tag with padding: {padding}")
+
+            # Xóa sạch toàn bộ các node metadata cũ
             related_cmds = ['author', 'Author', 'affil', 'affiliation', 'address', 'email', 'institute', 
                             'authornote', 'orcid', 'corres', 'firstnote', 'AuthorNames', 
                             'authorrunning', 'titlerunning']
             for cmd in related_cmds:
                 nodes = soup.find_all(cmd)
                 for node in nodes:
-                    try:
-                        node.delete()
-                    except Exception:
-                        pass
+                    try: node.delete()
+                    except: pass
             print("[*] TexSoup deleted all legacy author/affiliation nodes.")
 
             # 3. Xử lý Abstract

@@ -369,6 +369,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   // --- PDF Compilation (Step 2) ---
   const xuLyBienDichPDF = async () => {
     const currentJobId = jobId || ketQuaChuyenDoi?.jobId
+    console.log(`[*] Triggering PDF compilation for Job ID: ${currentJobId}`)
     if (!currentJobId) { toast.error('Không tìm thấy Job ID'); return }
     setDangBienDichPDF(true)
     setPdfLoi(null)
