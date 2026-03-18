@@ -95,7 +95,7 @@ def chuyen_docm_sang_docx(duong_dan_docm: str) -> str:
     return duong_dan_docx
 
 def chuyen_strict_sang_transitional(duong_dan_strict: str) -> str:
-    """Chuyển đổi file Word định dạng Strict Open XML sang Transitional
+    r"""Chuyển đổi file Word định dạng Strict Open XML sang Transitional
     vì \python-docx\ hiện tại không hỗ trợ trực tiếp các namespace của Strict Open XML.
     """
     duong_dan_docx = duong_dan_strict.rsplit('.', 1)[0] + '_transitional.docx'
@@ -1509,7 +1509,7 @@ class ChuyenDoiWordSangLatex:
         return template
 
     def _thay_the_abstract(self, template: str) -> str:
-        """Thay thế nội dung abstract theo 2 dạng: \begin{abstract}...\end{abstract} hoặc \abstract{...}."""
+        r"""Thay thế nội dung abstract theo 2 dạng: \begin{abstract}...\end{abstract} hoặc \abstract{...}."""
         abstract = self.parsed_data.get('abstract', '').strip()
 
         # Dạng 1: \begin{abstract} ... \end{abstract}
@@ -1868,7 +1868,7 @@ class ChuyenDoiWordSangLatex:
         return body
 
     def _thay_the_body(self, template: str) -> str:
-        """Thay thế TOÀN BỘ dummy content trong template bằng body thật từ Word.
+        r"""Thay thế TOÀN BỘ dummy content trong template bằng body thật từ Word.
 
         Chiến lược:
         1. Tìm điểm BẮT ĐẦU: ngay sau \end{IEEEkeywords}, \end{abstract},
@@ -1958,18 +1958,77 @@ class ChuyenDoiWordSangLatex:
         # Xóa các khối rác của Elsevier (nếu có)
         ket_qua = re.sub(r'\\begin\{graphicalabstract\}.*?\\end\{graphicalabstract\}', '', ket_qua, flags=re.DOTALL)
         ket_qua = re.sub(r'\\begin\{highlights\}.*?\\end\{highlights\}', '', ket_qua, flags=re.DOTALL)
+        try:
+            from TexSoup import TexSoup
+            soup = TexSoup(ket_qua)
+            
+            # 1. Title
+            title = self.parsed_data.get('title', '').strip()
+            if title:
+                for t_tag in ['title', 'Title']:
+                    for t in soup.find_all(t_tag):
+                        if t.args:
+                            thanks = t.find('thanks')
+                            thanks_str = f"\\thanks{{{thanks.args[0].value}}}" if thanks and thanks.args else ""
+                            # Dùng .contents thay vì .value để tránh rụng ngoặc
+                            t.args[-1].contents = [title + thanks_str]
+            
+            # 2. Author
+            author_block = self.parsed_data.get('author_block', '').strip()
+            if author_block:
+                authors = []
+                for a_tag in ['author', 'Author']:
+                    authors.extend(list(soup.find_all(a_tag)))
+                
+                if authors:
+                    if authors[0].args:
+                        authors[0].args[-1].contents = [author_block]
+                    else:
+                        authors[0].contents = [author_block]
+                    
+                    for other in authors[1:]:
+                        try: other.delete()
+                        except: pass
+            
+            for cmd in ['affil', 'affiliation', 'address', 'email', 'institute', 'authornote', 'orcid', 'AuthorNames']:
+                for node in soup.find_all(cmd):
+                    try: node.delete()
+                    except: pass
 
-        # 1. Title
-        ket_qua = self._thay_the_title(ket_qua)
+            # 3. Abstract
+            abstract = self.parsed_data.get('abstract', '').strip()
+            if abstract:
+                abstracts = []
+                for ab_tag in ['abstract', 'Abstract']:
+                    abstracts.extend(list(soup.find_all(ab_tag)))
+                
+                for ab in abstracts:
+                    if ab.args:
+                        ab.args[-1].contents = [f"\n{abstract}\n"]
+                    else:
+                        ab.contents = [f"\n{abstract}\n"]
 
-        # 2. Author (thay thế example authors trong template)
-        ket_qua = self._thay_the_author(ket_qua)
+            # 4. Keywords
+            keywords = self.parsed_data.get('keywords', '').strip()
+            if not keywords:
+                keywords = self.parsed_data.get('keywords_str', '').strip()
+            
+            if keywords:
+                for cmd in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms', 'Keywords']:
+                    for kw in soup.find_all(cmd):
+                        if kw.args:
+                            kw.args[-1].contents = [keywords]
+                        else:
+                            kw.contents = [keywords]
 
-        # 3. Abstract
-        ket_qua = self._thay_the_abstract(ket_qua)
-
-        # 4. Keywords
-        ket_qua = self._thay_the_keywords(ket_qua)
+            ket_qua = str(soup)
+            
+        except Exception as e:
+            print(f"[WARN] TexSoup injection thất bại ({e}), dùng Regex fallback...")
+            ket_qua = self._thay_the_title(ket_qua)
+            ket_qua = self._thay_the_author(ket_qua)
+            ket_qua = self._thay_the_abstract(ket_qua)
+            ket_qua = self._thay_the_keywords(ket_qua)
 
         # 4. Body (quan trọng nhất)
         ket_qua = self._thay_the_body(ket_qua)

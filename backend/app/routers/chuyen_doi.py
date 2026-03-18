@@ -93,18 +93,14 @@ async def chuyen_doi_file(
 
             template_tex_dir = template_path.parent
             if template_tex_dir != job_folder:
-                dep_extensions = {
-                    '.cls', '.sty', '.bst', '.tex', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib',
-                    '.bbx', '.cbx', '.lbx', '.dbx', '.fd', '.cfg', '.def', '.ttf', '.otf'
-                }
-                for item in template_tex_dir.rglob("*"):
-                    if item.is_file() and item.suffix.lower() in dep_extensions:
-                        target_file = job_folder / item.relative_to(template_tex_dir)
-                        target_file.parent.mkdir(parents=True, exist_ok=True)
-                        if not target_file.exists(): shutil.copy2(item, target_file)
-                main_tex_dest = job_folder / template_path.name
-                if not main_tex_dest.exists(): shutil.copy2(template_path, main_tex_dest)
-                template_path = main_tex_dest
+                # Copy ALL files from the extracted template directory to job_folder
+                try:
+                    shutil.copytree(str(template_tex_dir), str(job_folder), dirs_exist_ok=True)
+                except Exception as e:
+                    print(f"[WARN] copytree ZIP template thất bại: {e}")
+                
+                # Update template_path to point to the new location in job_folder
+                template_path = job_folder / template_path.name
         else:
             template_path = job_folder / "custom_uploaded_template.tex"
             with open(template_path, "wb") as f: f.write(template_contents)
@@ -272,17 +268,11 @@ async def chuyen_doi_file_stream(
                         yield sse_event(-1, "Không tìm thấy file .tex chính trong ZIP", error=True); return
                     template_tex_dir = template_path.parent
                     if template_tex_dir != job_folder:
-                        for item in template_tex_dir.rglob("*"):
-                            if item.is_file() and item.suffix.lower() in {
-                                '.cls', '.sty', '.bst', '.tex', '.png', '.jpg', '.jpeg', '.pdf', '.eps', '.bib',
-                                '.bbx', '.cbx', '.lbx', '.dbx', '.fd', '.cfg', '.def', '.ttf', '.otf'
-                            }:
-                                target_file = job_folder / item.relative_to(template_tex_dir)
-                                target_file.parent.mkdir(parents=True, exist_ok=True)
-                                if not target_file.exists(): shutil.copy2(item, target_file)
-                        main_tex_dest = job_folder / template_path.name
-                        if not main_tex_dest.exists(): shutil.copy2(template_path, main_tex_dest)
-                        template_path = main_tex_dest
+                        try:
+                            shutil.copytree(str(template_tex_dir), str(job_folder), dirs_exist_ok=True)
+                        except Exception:
+                            pass
+                        template_path = job_folder / template_path.name
                 else:
                     template_path = job_folder / "custom_uploaded_template.tex"
                     with open(template_path, "wb") as f: f.write(template_contents)

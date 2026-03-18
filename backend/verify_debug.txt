@@ -1,0 +1,80 @@
+﻿python : Traceback (most recent 
+call last):
+At line:1 char:60
++ ... HONG_TT_VL_2026\backend"; 
+python backend/final_verify.py 
+2>&1 | Out-F ...
++                               
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~
+    + CategoryInfo          : N 
+   otSpecified: (Traceback (mo  
+  st recent call last)::Strin   
+ g) [], RemoteException
+    + FullyQualifiedErrorId : N 
+   ativeCommandError
+ 
+  File "D:\221761_TIEN_PHONG_TT_
+VL_2026\backend\core_engine\xu_l
+y_toan.py", line 68, in 
+_init_mathml_converter
+    from latex2mathml import 
+mathml2latex as _m2l
+ImportError: cannot import name 
+'mathml2latex' from 
+'latex2mathml' (C:\Users\ASUS\Ap
+pData\Local\Programs\Python\Pyth
+on314\Lib\site-packages\latex2ma
+thml\__init__.py)
+
+During handling of the above 
+exception, another exception 
+occurred:
+
+Traceback (most recent call 
+last):
+  File "D:\221761_TIEN_PHONG_TT_
+VL_2026\backend\final_verify.py"
+, line 19, in <module>
+    bdc = ChuyenDoiWordSangLatex
+("dummy.docx", "template.tex", 
+"out.tex")
+  File "D:\221761_TIEN_PHONG_TT_
+VL_2026\backend\core_engine\chuy
+en_doi.py", line 179, in 
+__init__
+    self.bo_toan = BoXuLyToan(du
+ong_dan_xslt=duong_dan_xslt)
+                   ~~~~~~~~~~^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\221761_TIEN_PHONG_TT_
+VL_2026\backend\core_engine\xu_l
+y_toan.py", line 48, in __init__
+    
+self._init_mathml_converter()
+    
+~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\221761_TIEN_PHONG_TT_
+VL_2026\backend\core_engine\xu_l
+y_toan.py", line 72, in 
+_init_mathml_converter
+    print(f'[C\u1ea3nh báo] 
+L\u1ed7i im l\u1eb7ng \u1edf 
+xu_ly_toan.py d\xf2ng 70: {e}')
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^
+  File "C:\Users\ASUS\AppData\Lo
+cal\Programs\Python\Python314\Li
+b\encodings\cp1258.py", line 
+19, in encode
+    return codecs.charmap_encode
+(input,self.errors,encoding_tabl
+e)[0]
+           ~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^
+UnicodeEncodeError: 'charmap' 
+codec can't encode character 
+'\u1ea3' in position 2: 
+character maps to <undefined>

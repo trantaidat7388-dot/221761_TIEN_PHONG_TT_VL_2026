@@ -60,60 +60,70 @@ class JinjaLaTeXRenderer:
                 out.append("\\resizebox{\\columnwidth}{!}{%\n")
                 out.append(f"\\begin{{tabular}}{{{col_def}}}\n\\hline\n")
                 
-                for r_idx, row_cells in enumerate(rows_data):
+                # Theo dõi các ô bị chiếm bởi rowspan từ các hàng phía trên
+                occupied_cells = {} # (row_idx, col_idx) -> True
+                
+                for r_idx, row in enumerate(rows_data):
                     tex_cells = []
-                    c_idx = 0
+                    c_logical = 0   # Chỉ số cột thực tế trong LaTeX
+                    cell_ptr = 0    # Con trỏ duyệt qua danh sách ô trong data của IR
                     
-                    while c_idx < len(row_cells):
-                        cell = row_cells[c_idx]
-                        c_type = cell.get("type", "empty")
-                        
-                        if c_type == "empty":
+                    while c_logical < cols:
+                        # Kiểm tra nếu ô này đã bị chiếm bởi rowspan từ phía trên
+                        if occupied_cells.get((r_idx, c_logical)):
                             tex_cells.append("")
-                            c_idx += 1
+                            c_logical += 1
                             continue
+                        
+                        # Nếu còn ô trong dữ liệu của hàng này
+                        if cell_ptr < len(row):
+                            cell = row[cell_ptr]
+                            cell_ptr += 1
                             
-                        # It's a real cell
-                        text = cell.get("text") or ""
-                        # AST parser already handled escaping and LaTeX macros
-                        
-                        colspan = cell.get("colspan", 1)
-                        rowspan = cell.get("rowspan", 1)
-                        
-                        token = text
-                        if rowspan > 1:
-                            token = f"\\multirow{{{rowspan}}}{{*}}{{{token}}}"
-                        if colspan > 1:
-                            mc_width = colspan * width_frac
-                            token = f"\\multicolumn{{{colspan}}}{{p{{{mc_width:.3f}\\linewidth}}}}{{{token}}}"
+                            # Bỏ qua nếu đây là marker 'empty' (vốn đã được xử lý bởi occupied_cells)
+                            if cell.get("type") == "empty":
+                                tex_cells.append("")
+                                c_logical += 1
+                                continue
+                                
+                            colspan = cell.get("colspan", 1)
+                            rowspan = cell.get("rowspan", 1)
+                            text = cell.get("text") or ""
                             
-                        tex_cells.append(token)
-                        
-                        # Pad empty spots if colspan > 1 so zip/join aligns correctly
-                        for _ in range(colspan - 1):
+                            # Đánh dấu các ô bị chiếm trong tương lai (col/row span)
+                            for dr in range(rowspan):
+                                for dc in range(colspan):
+                                    if dr > 0 or dc > 0:
+                                        occupied_cells[(r_idx + dr, c_logical + dc)] = True
+                                        
+                            token = text
+                            if rowspan > 1:
+                                token = f"\\multirow{{{rowspan}}}{{*}}{{{token}}}"
+                            if colspan > 1:
+                                mc_width = colspan * width_frac
+                                token = f"\\multicolumn{{{colspan}}}{{p{{{mc_width:.3f}\\linewidth}}}}{{{token}}}"
+                                
+                            tex_cells.append(token)
+                            c_logical += colspan
+                        else:
+                            # Hết dữ liệu ô nhưng chưa đủ số cột
                             tex_cells.append("")
-                            c_idx += 1
-                            
-                        c_idx += 1
+                            c_logical += 1
                     
-                    # Filter out empty cells that are masked by previous multicolumns
+                    # Lọc để đóng gói thành dòng LaTeX (skip các ô bị multicolumn chiếm trong cùng hàng)
                     dong_filtered = []
-                    skip = 0
+                    skip_mc = 0
                     for cell_str in tex_cells:
-                        if skip > 0:
-                            skip -= 1
+                        if skip_mc > 0:
+                            skip_mc -= 1
                             continue
                         dong_filtered.append(cell_str)
                         if "\\multicolumn{" in cell_str:
                             import re
                             mc_match = re.search(r'\\multicolumn\{(\d+)\}', cell_str)
                             if mc_match:
-                                skip = int(mc_match.group(1)) - 1
-                                
-                    # Pad missing columns just in case
-                    while len(dong_filtered) < cols:
-                        dong_filtered.append("")
-                        
+                                skip_mc = int(mc_match.group(1)) - 1
+                    
                     out.append(" & ".join(dong_filtered) + " \\\\\n\\hline\n")
                     
                 out.append("\\end{tabular}%\n}\n")
@@ -176,7 +186,7 @@ class JinjaLaTeXRenderer:
                     "# Required for Overleaf: default compiler is pdfLaTeX which cannot handle Unicode\n"
                     "$pdf_mode = 5;\n"
                     "# Fallback for older latexmk versions\n"
-                    "$pdflatex = 'xelatex -interaction=nonstopmode -synctex=1 %O %S';\n"
+                    "$pdflatex = 'xelatex -interaction=nonstopmode -halt-on-error -synctex=1 %O %S';\n"
                 )
 
     @staticmethod

@@ -112,21 +112,29 @@ def loc_ky_tu(text: str) -> str:
     for ky_tu_u, placeholder, _ in unicode_placeholders:
         ket_qua = ket_qua.replace(ky_tu_u, placeholder)
     
-    # BƯỚC 2: Escape ký tự đặc biệt LaTeX (bình thường)
-    ky_tu_dac_biet = [
-        ('\\', r'\textbackslash{}'),
-        ('%', r'\%'),
-        ('$', r'\$'),
-        ('_', r'\_'),
-        ('&', r'\&'),
-        ('#', r'\#'),
-        ('{', r'\{'),
-        ('}', r'\}'),
-        ('~', r'\textasciitilde{}'),
-        ('^', r'\textasciicircum{}'),
-    ]
-    for ky_tu, thay_the in ky_tu_dac_biet:
-        ket_qua = ket_qua.replace(ky_tu, thay_the)
+    # BƯỚC 2: Escape ký tự đặc biệt LaTeX (Dùng Regex an toàn, tránh double-escape)
+    import re
+    
+    def replacer(match):
+        char = match.group(0)
+        mapping = {
+            '\\': r'\textbackslash{}',
+            '%': r'\%',
+            '$': r'\$',
+            '_': r'\_',
+            '&': r'\&',
+            '#': r'\#',
+            '{': r'\{',
+            '}': r'\}',
+            '~': r'\textasciitilde{}',
+            '^': r'\textasciicircum{}',
+        }
+        return mapping.get(char, char)
+
+    # Dùng Negative Lookbehind (?<!\\) để bỏ qua các ký tự đã được escape bằng dấu \
+    # Pattern bao quát cả 10 ký tự đặc biệt: \ % $ _ & # { } ~ ^
+    pattern = r'(?<!\\)[\\%$_&#{}~^]'
+    ket_qua = re.sub(pattern, replacer, ket_qua)
     
     # BƯỚC 3: Thay placeholder lại thành LaTeX command thật
     for _, placeholder, latex_cmd in unicode_placeholders:
@@ -213,21 +221,30 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
     if engine is None:
         engine = phat_hien_engine(duong_dan_dau_ra)
 
-    print(f"\nBắt đầu biên dịch {engine}: {ten_file} (cwd={thu_muc})")
+    print(f"\n--- [LATEX] STARTING {engine}: {ten_file} (cwd={thu_muc}) ---")
+    cmd = [engine, '-interaction=nonstopmode', '-halt-on-error', '-quiet', f"./{ten_file}"]
+    print(f"--- [LATEX] CMD: {' '.join(cmd)} ---")
+    
     try:
         ket_qua = subprocess.run(
-            [engine, '-interaction=nonstopmode', f"./{ten_file}"],
+            cmd,
             cwd=thu_muc if thu_muc else '.',
-            capture_output=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             text=True,
             encoding='utf-8',
             errors='ignore',
-            timeout=25,
+            timeout=35,
         )
+        print("--- [LATEX] FINISHED ---")
 
         # Kiểm tra PDF tồn tại (nonstopmode có thể tạo PDF dù có lỗi nhỏ)
         pdf_path = os.path.join(thu_muc, ten_file.replace('.tex', '.pdf'))
         pdf_exists = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+
+        # Mặc định đọc log nếu thất bại
+        error_msg = ""
+        log_path = os.path.join(thu_muc, ten_file.replace('.tex', '.log'))
 
         if ket_qua.returncode == 0:
             print(f" Biên dịch thành công: {ten_file.replace('.tex', '.pdf')}")
@@ -237,16 +254,24 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
             return True, ""
         else:
             print(f" Biên dịch thất bại (exit code: {ket_qua.returncode})")
-            error_msg = ket_qua.stdout + "\n" + ket_qua.stderr
-            if ket_qua.stderr:
-                print(f"Lỗi: {ket_qua.stderr[:500]}")
+            if os.path.exists(log_path):
+                try:
+                    with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        error_msg = f.read()
+                except Exception as e:
+                    error_msg = f"Không thể đọc file log: {e}"
+            else:
+                error_msg = "Không tìm thấy file .log để lấy thông tin lỗi."
+            
+            if error_msg:
+                print(f"Lỗi: {error_msg[:500]}")
             return False, error_msg
     except FileNotFoundError:
         msg = f"Không tìm thấy {engine}. Vui lòng cài đặt TeX Live hoặc MiKTeX."
         print(f" {msg}")
         return False, msg
     except subprocess.TimeoutExpired:
-        msg = "Biên dịch quá thời gian (>25s)"
+        msg = "Biên dịch quá thời gian (>35s)"
         print(f" {msg}")
         return False, msg
     except Exception as e:

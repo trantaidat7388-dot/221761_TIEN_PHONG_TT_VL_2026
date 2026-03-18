@@ -11,11 +11,83 @@ class TemplatePreprocessor:
     @classmethod
     def auto_tag(cls, tex_content: str) -> str:
         tex = cls._ensure_essential_packages(tex_content)
-        tex = cls._cleanup_publisher_metadata(tex)
-        tex = cls._process_title(tex)
-        tex = cls._process_authors(tex)
-        tex = cls._process_abstract(tex)
-        tex = cls._process_keywords(tex)
+        
+        # BẮT BUỘC dùng TexSoup cho các node metadata chính để tránh lỗi rớt ngoặc
+        try:
+            from TexSoup import TexSoup
+            soup = TexSoup(tex)
+            
+            # 1. Xử lý Title
+            titles = list(soup.find_all('title')) + list(soup.find_all('Title'))
+            for t in titles:
+                if t.args:
+                    # Thay đổi nội dung của đối số cuối cùng (thường là nội dung chính)
+                    # t.args[-1].value = '<< metadata.title >>' 
+                    # TexSoup args có thể là RArg (braces) hoặc OArg (brackets). 
+                    # Ta tìm cái RArg cuối cùng.
+                    for arg in reversed(t.args):
+                        if hasattr(arg, 'value'):
+                            # Đảm bảo giữ lại dấu ngoặc {}, chỉ thay ruột
+                            arg.value = '<< metadata.title >>'
+                            break
+            
+            # 2. Xử lý Author
+            authors = list(soup.find_all('author')) + list(soup.find_all('Author'))
+            if authors:
+                # Giữ author đầu tiên làm placeholder, xóa ruột
+                first = authors[0]
+                if first.args:
+                    for arg in reversed(first.args):
+                        if hasattr(arg, 'value'):
+                            arg.value = '<< metadata.author_block >>'
+                            break
+                # Xóa các author còn lại (ví dụ trong template có nhiều author mẫu)
+                for other in authors[1:]:
+                    other.delete()
+            
+            # Xóa các lệnh metadata phụ trợ thường đi kèm author (affil, email, address...)
+            for cmd in ['affil', 'affiliation', 'address', 'email', 'institute', 'authornote', 
+                        'orcid', 'corres', 'firstnote', 'AuthorNames', 'authorrunning', 'titlerunning']:
+                for node in soup.find_all(cmd):
+                    node.delete()
+
+            # 3. Xử lý Abstract
+            abstracts = list(soup.find_all('abstract')) + list(soup.find_all('Abstract'))
+            for ab in abstracts:
+                # Nếu là command \abstract{...}
+                if ab.args:
+                    for arg in reversed(ab.args):
+                        if hasattr(arg, 'value'):
+                            arg.value = '<< metadata.abstract >>'
+                            break
+                else:
+                    # Nếu là environment \begin{abstract}...\end{abstract}
+                    # Ta thay thế toàn bộ nội dung trong begin/end
+                    ab.replace_with('\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}')
+
+            # 4. Xử lý Keywords
+            for cmd in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']:
+                for kw in soup.find_all(cmd):
+                    if kw.args:
+                        for arg in reversed(kw.args):
+                            if hasattr(arg, 'value'):
+                                arg.value = '<< metadata.keywords_str >>'
+                                break
+                    else:
+                        kw.replace_with(f'\\begin{{{cmd}}}\n<< metadata.keywords_str >>\n\\end{{{cmd}}}')
+
+            tex = str(soup)
+            print("[*] TexSoup tagging hoàn tất cho metadata.")
+            
+        except Exception as e:
+            print(f"[WARN] TexSoup thất bại ({e}), đang dùng Regex fallback an toàn...")
+            tex = cls._cleanup_publisher_metadata(tex)
+            tex = cls._process_title(tex)
+            tex = cls._process_authors(tex)
+            tex = cls._process_abstract(tex)
+            tex = cls._process_keywords(tex)
+
+        # MỤC 4: Logic Body và References vẫn dùng Regex (ổn định hơn cho việc "quét sạch" dummy text)
         tex = cls._process_references(tex)
         tex = cls._process_body(tex)
         return tex

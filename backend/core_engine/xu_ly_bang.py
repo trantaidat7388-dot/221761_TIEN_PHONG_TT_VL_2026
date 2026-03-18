@@ -651,79 +651,68 @@ class BoXuLyBang:
         # Dùng \hline thay vì \toprule
         latex += r"  \hline" + "\n"
 
+        # Khởi tạo ma trận đánh dấu các ô bị chiếm bởi rowspan
+        occupied_cells = {} # (row, col) -> True
+        
         for r in range(so_hang):
-            cells_out = []
-            c = 0
-            while c < so_cot:
-                info = meta.get((r, c))
-                if not info:
-                    cells_out.append('')
-                    c += 1
+            tex_cells = []
+            c_logical = 0   # Chỉ số cột thực tế
+            
+            while c_logical < so_cot:
+                # Nếu ô này đã bị chiếm bởi rowspan từ phía trên
+                if occupied_cells.get((r, c_logical)):
+                    tex_cells.append("")
+                    c_logical += 1
                     continue
-
-                if not info.get('start'):
-                    cells_out.append('')
-                    c += 1
+                
+                info = meta.get((r, c_logical))
+                if not info or not info.get('start') or meta.get((r, c_logical)) != info:
+                    tex_cells.append("")
+                    c_logical += 1
                     continue
-
-                if meta.get((r, c)) != info:
-                    cells_out.append('')
-                    c += 1
-                    continue
-
+                
                 colspan = int(info.get('colspan') or 1)
                 cell_id = info['id']
                 rowspan = int(rowspan_map.get(cell_id, 1))
-
-                # Lấy text cell qua python-docx bằng mapping vị trí
+                
+                # Đánh dấu các ô bị chiếm trong tương lai
+                for dr in range(rowspan):
+                    for dc in range(colspan):
+                        if dr > 0 or dc > 0:
+                            occupied_cells[(r + dr, c_logical + dc)] = True
+                
                 try:
                     cell_obj = bang.rows[r].cells[0]
                     for candidate in bang.rows[r].cells:
                         if id(candidate._tc) == id(info['tc']):
                             cell_obj = candidate
                             break
-                except Exception as e:
-                    print(f'[Cảnh báo] Lỗi im lặng ở xu_ly_bang.py dòng 667: {e}')
-                    cell_obj = None
+                except: cell_obj = None
 
-                noi_dung = ""
-                if cell_obj is not None:
-                    noi_dung = self.xu_ly_doan_van_trong_cell(cell_obj)
-                noi_dung = noi_dung.strip()
-
-                token = noi_dung
+                noi_dung = self.xu_ly_doan_van_trong_cell(cell_obj) if cell_obj else ""
+                token = noi_dung.strip()
 
                 if rowspan > 1:
                     token = rf"\multirow{{{rowspan}}}{{*}}{{{token}}}"
-
                 if colspan > 1:
                     mc_width = colspan * width_frac
                     token = rf"\multicolumn{{{colspan}}}{{p{{{mc_width:.3f}\linewidth}}}}{{{token}}}"
 
-                cells_out.append(token)
-                # Skip các cột đã bị gộp bởi multicolumn
-                c += colspan
+                tex_cells.append(token)
+                c_logical += colspan
 
-            # Loại bỏ trailing empty cells do skip colspan
-            while cells_out and cells_out[-1] == '' and len(cells_out) > 1:
-                cells_out.pop()
-            # Đảm bảo đủ số cột (nếu thiếu thì thêm empty)
-            while len(cells_out) < so_cot:
-                cells_out.append('')
-            
-            # Build dòng chỉ với cells thực sự
+            # Loại bỏ trailing empty cells và lọc qua multicolumn skip logic
             dong_filtered = []
-            skip = 0
-            for i, cell_str in enumerate(cells_out):
-                if skip > 0:
-                    skip -= 1
+            skip_mc = 0
+            for cell_str in tex_cells:
+                if skip_mc > 0:
+                    skip_mc -= 1
                     continue
                 dong_filtered.append(cell_str)
-                # Nếu cell này là multicolumn, skip (colspan-1) cells tiếp theo
                 mc_match = re.match(r'\\multicolumn\{(\d+)\}', cell_str)
                 if mc_match:
-                    skip = int(mc_match.group(1)) - 1
-
+                    skip_mc = int(mc_match.group(1)) - 1
+            
             latex += "    " + " & ".join(dong_filtered) + r" \\" + "\n"
             
             latex += r"  \hline" + "\n"
