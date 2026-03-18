@@ -77,5 +77,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True,  # Auto-reload khi code thay đổi (chỉ dùng development)
-        reload_dirs=["backend/app"]
+        reload_dirs=["backend/app"],
+        reload_excludes=["backend/storage/temp_jobs/*"]
     )

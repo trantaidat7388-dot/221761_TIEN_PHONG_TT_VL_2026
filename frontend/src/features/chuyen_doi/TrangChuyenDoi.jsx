@@ -130,6 +130,19 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   const [pdfKetQua, setPdfKetQua] = useState(null)   // { soTrang, pdfUrl, tenFilePDF }
   const [pdfLoi, setPdfLoi] = useState(null)
   const [thoiGianChay, setThoiGianChay] = useState(0)
+  
+  // Tự động reset trạng thái khi đổi template hoặc file mới để người dùng bấm "Bắt đầu" lại được luôn
+  useEffect(() => {
+    if (trangThaiXuLy === 'hoan_thanh' || trangThaiXuLy === 'loi') {
+      setTrangThaiXuLy('cho')
+      setKetQuaChuyenDoi(null)
+      setError(null)
+      setPdfKetQua(null)
+      setPdfLoi(null)
+      setTexContent('')
+      setJobId('')
+    }
+  }, [loaiTemplate, fileChon])
 
   const TONG_BUOC = 5
 
