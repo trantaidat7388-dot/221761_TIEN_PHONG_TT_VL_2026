@@ -310,7 +310,27 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
         return False, msg
 
 
-# ========================= ZIP TEMPLATE SUPPORT =========================
+def detect_doc_class(template_src: str) -> str:
+    """Detect document class from template source. Returns normalized class name.
+    Shared between preprocessor and renderer.
+    """
+    m = re.search(r'\\documentclass(?:\[.*?\])?\{([^}]+)\}', template_src)
+    if not m:
+        return "generic"
+    # Extract basename from path-based class names (e.g. "Definitions/mdpi" -> "mdpi")
+    cls = m.group(1).rsplit('/', 1)[-1].lower()
+    if cls in ('ieeetran',):
+        return "ieee"
+    elif cls in ('llncs', 'svjour3', 'svmono', 'svmult'):
+        return "springer"
+    elif cls in ('elsarticle', 'cas-sc', 'cas-dc'):
+        return "elsevier"
+    elif cls in ('acmart',):
+        return "acm"
+    elif cls in ('mdpi',):
+        return "mdpi"
+    else:
+        return "generic"
 
 def extract_zip_template(zip_path: str, target_dir: str = None) -> str:
     """Giải nén file ZIP template vào thư mục đích.

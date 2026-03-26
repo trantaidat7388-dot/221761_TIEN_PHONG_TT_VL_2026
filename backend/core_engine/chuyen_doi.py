@@ -2095,7 +2095,18 @@ class ChuyenDoiWordSangLatex:
 
         if "<< body >>" not in raw_template and "{{ body }}" not in raw_template:
             print("[*] Template chưa được tag, đang tự động gán tag (TexSoup)...")
-            template_tagged = TemplatePreprocessor.auto_tag(raw_template)
+            config = {}
+            config_path = os.path.join(template_dir, 'config.json')
+            if os.path.exists(config_path):
+                import json
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as cf:
+                        config = json.load(cf)
+                    print(f"[*] Đã tải template config: {config.get('template_name', 'Unknown')}")
+                except Exception as e:
+                    print(f"[WARN] Lỗi tải config.json: {e}")
+
+            template_tagged = TemplatePreprocessor.auto_tag(raw_template, config=config)
             # Ghi đè lại file tại chỗ (an toàn vì đây là bản copy trong thư mục job/temp)
             with open(duong_dan_tex_chinh, 'w', encoding='utf-8') as f:
                 f.write(template_tagged)

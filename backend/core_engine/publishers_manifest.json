@@ -1,0 +1,91 @@
+{
+  "ieee": {
+    "title_command": "title",
+    "author_command": "author",
+    "abstract_env": "abstract",
+    "keywords_env": "IEEEkeywords",
+    "strip_commands": [],
+    "multi_brace_commands": [],
+    "strip_environments": []
+  },
+  "acm": {
+    "title_command": "title",
+    "author_command": "author",
+    "abstract_env": "abstract",
+    "keywords_cmd": "keywords",
+    "strip_commands": [
+      "acmDOI",
+      "acmYear",
+      "acmISBN",
+      "acmPrice",
+      "acmSubmissionID",
+      "setcopyright",
+      "copyrightyear",
+      "ccsdesc"
+    ],
+    "multi_brace_commands": [
+      "acmConference",
+      "acmBooktitle"
+    ],
+    "strip_environments": [
+      "CCSXML",
+      "teaserfigure"
+    ]
+  },
+  "springer": {
+    "title_command": "title",
+    "author_command": "author",
+    "abstract_env": "abstract",
+    "keywords_cmd": "keywords",
+    "strip_commands": [
+      "authorrunning",
+      "titlerunning"
+    ],
+    "multi_brace_commands": [],
+    "strip_environments": []
+  },
+  "mdpi": {
+    "title_command": "Title",
+    "author_command": "Author",
+    "abstract_env": "abstract",
+    "keywords_cmd": "keyword",
+    "strip_commands": [
+      "AuthorNames",
+      "secondnote",
+      "thirdnote",
+      "fourthnote",
+      "fifthnote",
+      "sixthnote",
+      "seventhnote",
+      "eighthnote",
+      "institutionalreview",
+      "dataavailability",
+      "conflictsofinterest",
+      "sampleavailability",
+      "authorcontributions",
+      "funding",
+      "abbreviations",
+      "appendixtitles"
+    ],
+    "multi_brace_commands": [],
+    "strip_environments": []
+  },
+  "elsevier": {
+    "title_command": "title",
+    "author_command": "author",
+    "abstract_env": "abstract",
+    "keywords_env": "keyword",
+    "strip_commands": [
+      "journal",
+      "tnotetext",
+      "fntext",
+      "cortext",
+      "ead"
+    ],
+    "multi_brace_commands": [],
+    "strip_environments": [
+      "graphicalabstract",
+      "highlights"
+    ]
+  }
+}
