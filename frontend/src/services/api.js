@@ -91,6 +91,8 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
                   jobId: event.job_id || '',
                   tenFileZip: event.ten_file_zip || '',
                   tenFileLatex: event.ten_file_latex || '',
+                  tenFilePdf: event.ten_file_pdf || '',
+                  pdfUrl: event.pdf_url || '',
                   metadata: event.metadata || {},
                 }
               })

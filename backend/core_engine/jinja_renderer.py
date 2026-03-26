@@ -1,7 +1,15 @@
 import jinja2
 import os
 import re
-from .utils import loc_ky_tu
+from .utils import loc_ky_tu, detect_doc_class
+from .author_strategies import (
+    IEEEAuthorStrategy,
+    SpringerAuthorStrategy,
+    ElsevierAuthorStrategy,
+    ACMAuthorStrategy,
+    MDPIAuthorStrategy,
+    GenericAuthorStrategy,
+)
 
 class JinjaLaTeXRenderer:
     """
@@ -153,7 +161,7 @@ class JinjaLaTeXRenderer:
         except Exception:
             template_src = ""
         
-        doc_class = self._detect_doc_class(template_src)
+        doc_class = detect_doc_class(template_src)
         
         # Override author_block with format-appropriate version
         metadata = dict(ir_data.get('metadata', {}))
@@ -189,302 +197,22 @@ class JinjaLaTeXRenderer:
                     "$pdflatex = 'xelatex -interaction=nonstopmode -halt-on-error -synctex=1 %O %S';\n"
                 )
 
-    @staticmethod
-    def _detect_doc_class(template_src: str) -> str:
-        """Detect document class from template source. Returns normalized class name."""
-        m = re.search(r'\\documentclass(?:\[.*?\])?\{([^}]+)\}', template_src)
-        if not m:
-            return "generic"
-        # Extract basename from path-based class names (e.g. "Definitions/mdpi" -> "mdpi")
-        cls = m.group(1).rsplit('/', 1)[-1].lower()
-        if cls in ('ieeetran',):
-            return "ieee"
-        elif cls in ('llncs', 'svjour3', 'svmono', 'svmult'):
-            return "springer"
-        elif cls in ('elsarticle', 'cas-sc', 'cas-dc'):
-            return "elsevier"
-        elif cls in ('acmart',):
-            return "acm"
-        elif cls in ('mdpi',):
-            return "mdpi"
-        else:
-            # Generic fallback — works for article, report, book, memoir,
-            # revtex4, amsart, thesis, or any unknown class
-            return "generic"
 
     def _generate_author_block(self, authors: list, doc_class: str) -> str:
         """Generate author block LaTeX code appropriate for the detected document class."""
         if not authors:
             return ""
-        if doc_class == "ieee":
-            return self._generate_ieee_author_block(authors)
-        elif doc_class == "springer":
-            return self._generate_springer_author_block(authors)
-        elif doc_class == "elsevier":
-            return self._generate_elsevier_author_block(authors)
-        elif doc_class == "acm":
-            return self._generate_acm_author_block(authors)
-        elif doc_class == "mdpi":
-            return self._generate_mdpi_author_block(authors)
-        else:
-            return self._generate_generic_author_block(authors)
-
-    @staticmethod
-    def _generate_ieee_author_block(authors: list) -> str:
-        """Generate author block in IEEEtran format."""
-        block = "\\author{\n"
-        parts = []
-        for author in authors:
-            auth_str = f"\\IEEEauthorblockN{{{author['name']}}}"
-            if author.get('affiliations'):
-                affil_lines = []
-                for aff in author['affiliations']:
-                    sub_lines = [s.strip() for s in aff.split('\n') if s.strip()]
-                    for sl in sub_lines:
-                        if '@' in sl:
-                            affil_lines.append(sl)
-                        else:
-                            affil_lines.append(f"\\textit{{{sl}}}")
-                affil_text = " \\\\ ".join(affil_lines)
-                auth_str += f"\n\\IEEEauthorblockA{{{affil_text}}}"
-            parts.append(auth_str)
-        block += " \\and\n".join(parts)
-        block += "\n}"
-        return block
-
-    @staticmethod
-    def _generate_springer_author_block(authors: list) -> str:
-        """Generate author block in Springer LNCS format (\\author + \\institute)."""
-        # Collect unique affiliations across all authors
-        affil_map = {}  # affiliation text -> institute number
-        for author in authors:
-            for aff in author.get('affiliations', []):
-                clean = aff.strip()
-                if clean and clean not in affil_map:
-                    affil_map[clean] = len(affil_map) + 1
-
-        # Build \author{...} block
-        author_parts = []
-        for author in authors:
-            name = author['name']
-            insts = []
-            for aff in author.get('affiliations', []):
-                clean = aff.strip()
-                if clean in affil_map:
-                    insts.append(str(affil_map[clean]))
-            if insts:
-                name += f"\\inst{{{','.join(insts)}}}"
-            author_parts.append(name)
-
-        author_block = "\\author{" + " \\and ".join(author_parts) + "}"
-
-        # Build \institute{...} block
-        if affil_map:
-            inst_parts = []
-            for aff_text in affil_map:
-                # Separate email from affiliation text
-                lines = [s.strip() for s in aff_text.split('\n') if s.strip()]
-                main_parts = []
-                email_parts = []
-                for line in lines:
-                    if '@' in line:
-                        email_parts.append(line)
-                    else:
-                        main_parts.append(line)
-                entry = ", ".join(main_parts) if main_parts else aff_text
-                if email_parts:
-                    entry += f"\\\\\n\\email{{{', '.join(email_parts)}}}"
-                inst_parts.append(entry)
-            author_block += "\n\\institute{" + " \\and ".join(inst_parts) + "}"
-        else:
-            # FIX 5: Graceful fallback when no affiliations were parsed (avoids "No Institute Given")
-            author_block += "\n\\institute{Institution not specified}"
-
-        return author_block
-
-    @staticmethod
-    def _generate_elsevier_author_block(authors: list) -> str:
-        """Generate author block in Elsevier format (\\author + \\affiliation).
-
-        Uses the key-value affiliation syntax required by elsarticle.cls:
-        ``\\affiliation{organization={...}, city={...}, country={...}}``.
-        """
-        parts = []
-        for author in authors:
-            parts.append(f"\\author{{{author['name']}}}")
-            for aff in author.get('affiliations', []):
-                aff_clean = aff.strip()
-                lines = [s.strip() for s in aff_clean.split('\n') if s.strip()]
-                email_line = None
-                plain_lines = []
-                for line in lines:
-                    if '@' in line:
-                        email_line = line
-                    else:
-                        plain_lines.append(line)
-                org = plain_lines[0] if plain_lines else aff_clean
-                city = plain_lines[1] if len(plain_lines) > 1 else ''
-                country = plain_lines[2] if len(plain_lines) > 2 else ''
-                kv_parts = [f"organization={{{org}}}"]
-                if city:
-                    kv_parts.append(f"city={{{city}}}")
-                if country:
-                    kv_parts.append(f"country={{{country}}}")
-                parts.append("\\affiliation{" + ",\n            ".join(kv_parts) + "}")
-                if email_line:
-                    parts.append(f"\\ead{{{email_line}}}")
-        return "\n".join(parts)
-
-    @staticmethod
-    def _generate_acm_author_block(authors: list) -> str:
-        """Generate author block in ACM format.
-
-        ACM strictly requires \\institution{}, \\city{}, and \\country{} inside
-        each \\affiliation{} block.
-        """
-        parts = []
-        for author in authors:
-            parts.append(f"\\author{{{author['name']}}}")
-            affs = author.get('affiliations', [])
-            if affs:
-                for aff in affs:
-                    aff_clean = aff.strip()
-                    # Separate email from affiliation text
-                    lines = [s.strip() for s in aff_clean.split('\n') if s.strip()]
-                    email_line = None
-                    plain_lines = []
-                    for line in lines:
-                        if '@' in line:
-                            email_line = line
-                        else:
-                            plain_lines.append(line)
-
-                    # Respect explicit ACM fields if they already exist in input.
-                    institution_match = re.search(r'\\institution\{([^}]*)\}', aff_clean)
-                    city_match = re.search(r'\\city\{([^}]*)\}', aff_clean)
-                    country_match = re.search(r'\\country\{([^}]*)\}', aff_clean)
-
-                    institution = (
-                        institution_match.group(1).strip()
-                        if institution_match and institution_match.group(1).strip()
-                        else (plain_lines[0] if plain_lines else 'University')
-                    )
-                    city = (
-                        city_match.group(1).strip()
-                        if city_match and city_match.group(1).strip()
-                        else (plain_lines[1] if len(plain_lines) > 1 else 'Your City')
-                    )
-                    country = (
-                        country_match.group(1).strip()
-                        if country_match and country_match.group(1).strip()
-                        else 'Vietnam'
-                    )
-
-                    aff_block = (
-                        "\\affiliation{%\n"
-                        f"  \\institution{{{institution}}}\n"
-                        f"  \\city{{{city}}}\n"
-                        f"  \\country{{{country}}}\n"
-                        "}"
-                    )
-                    parts.append(aff_block)
-                    if email_line:
-                        parts.append(f"\\email{{{email_line}}}")
-            else:
-                parts.append(
-                    "\\affiliation{%\n"
-                    "  \\institution{University}\n"
-                    "  \\city{Your City}\n"
-                    "  \\country{Vietnam}\n"
-                    "}"
-                )
-        return "\n".join(parts)
-
-    @staticmethod
-    def _generate_mdpi_author_block(authors: list) -> str:
-        r"""Generate author block in MDPI format (\Author + \address).
-
-        MDPI strictly requires:
-          \Author{Name1 $^{1}$, Name2 $^{2}$}
-          \address{$^{1}$ \quad Affil 1; email1 \\
-          $^{2}$ \quad Affil 2; email2}
-        """
-        # Collect unique affiliations and per-affiliation emails
-        affil_map = {}    # affiliation text (no email) -> number
-        affil_emails = {}  # affiliation text (no email) -> email string
-        for author in authors:
-            for aff in author.get('affiliations', []):
-                lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
-                email_parts = []
-                inst_parts = []
-                for line in lines:
-                    if '@' in line:
-                        email_parts.append(line)
-                    else:
-                        inst_parts.append(line)
-                key = ', '.join(inst_parts) if inst_parts else aff.strip()
-                if key and key not in affil_map:
-                    affil_map[key] = len(affil_map) + 1
-                    if email_parts:
-                        affil_emails[key] = '; '.join(email_parts)
-
-        # Build \Author{...}
-        author_parts = []
-        for author in authors:
-            name = author['name']
-            insts = []
-            for aff in author.get('affiliations', []):
-                lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
-                inst_parts = [l for l in lines if '@' not in l]
-                key = ', '.join(inst_parts) if inst_parts else aff.strip()
-                if key in affil_map:
-                    insts.append(str(affil_map[key]))
-            if insts:
-                name += " $^{" + ",".join(insts) + "}$"
-            author_parts.append(name)
-        block = "\\Author{" + ", ".join(author_parts) + "}"
-
-        # Build \AuthorNames{...} (plain names without affiliations)
-        plain_names = [a['name'] for a in authors]
-        block += "\n\\AuthorNames{" + ", ".join(plain_names) + "}"
-
-        # Build \address{...} with emails appended per affiliation
-        # MDPI cls ALWAYS reads \@address at \begin{document}; must emit \address{} to avoid undefined
-        if affil_map:
-            addr_parts = []
-            for aff_text, num in affil_map.items():
-                entry = f"$^{{{num}}}$ \\quad {aff_text}"
-                email = affil_emails.get(aff_text)
-                if email:
-                    entry += f"; {email}"
-                addr_parts.append(entry)
-            block += "\n\\address{" + " \\\\\n".join(addr_parts) + "}"
-        else:
-            block += "\n\\address{~}"
-
-        return block
-
-    @staticmethod
-    def _generate_generic_author_block(authors: list) -> str:
-        """Generate a generic \\author{} block with simple ,  separation.
-        Uses only standard LaTeX commands (\\author, , , \\thanks) that work
-        with article, report, book, memoir, and virtually any document class."""
-        # Collect unique affiliations for \thanks footnotes
-        affils = []
-        for a in authors:
-            for aff in a.get('affiliations', []):
-                if aff.strip() and aff.strip() not in affils:
-                    affils.append(aff.strip())
-        affil_note = ""
-        if affils:
-            affil_note = "\\thanks{" + "; ".join(affils) + "}"
-        # Build \author{Name1 ,  Name2 \thanks{...}}
-        names = [a['name'] for a in authors]
-        block = "\\author{" + ", ".join(names)
-        if affil_note:
-            block += " " + affil_note
-        block += "}"
-        return block
+            
+        strategies = {
+            "ieee": IEEEAuthorStrategy(),
+            "springer": SpringerAuthorStrategy(),
+            "elsevier": ElsevierAuthorStrategy(),
+            "acm": ACMAuthorStrategy(),
+            "mdpi": MDPIAuthorStrategy(),
+        }
+        
+        strategy = strategies.get(doc_class, GenericAuthorStrategy())
+        return strategy.generate(authors)
 
     def _generate_thebibliography(self, references: list) -> str:
         """Generate \\begin{thebibliography} block with numbered \\bibitem entries."""

@@ -1,4 +1,14 @@
 import re
+import json
+import os
+from .utils import detect_doc_class
+
+MANIFEST_PATH = os.path.join(os.path.dirname(__file__), 'publishers_manifest.json')
+try:
+    with open(MANIFEST_PATH, 'r', encoding='utf-8') as f:
+        PUBLISHERS_MANIFEST = json.load(f)
+except Exception:
+    PUBLISHERS_MANIFEST = {}
 
 class TemplatePreprocessor:
     """
@@ -9,7 +19,14 @@ class TemplatePreprocessor:
     """
 
     @classmethod
-    def auto_tag(cls, tex_content: str) -> str:
+    def auto_tag(cls, tex_content: str, config: dict = None) -> str:
+        # 1. Detect publisher logic
+        doc_class = detect_doc_class(tex_content)
+        pub_config = PUBLISHERS_MANIFEST.get(doc_class, {})
+        
+        # Merge provided config with manifest-based defaults
+        config = {**pub_config, **(config or {})}
+        
         tex = cls._ensure_essential_packages(tex_content)
         
         # ── Hỗ trợ Tiếng Việt (fontspec cho XeLaTeX - chỉ fallback nếu chưa có font) ──
@@ -23,124 +40,140 @@ class TemplatePreprocessor:
         if r'\onemaskedcitationmsg' not in tex:
             patch = r"\providecommand{\onemaskedcitationmsg}[1]{}" + "\n" + r"\providecommand{\maskedcitationsmsg}[1]{}" + "\n"
             tex = re.sub(r'(\\begin\{document\})', patch.replace('\\', '\\\\') + r'\1', tex)
+
+        # 1. Clean up known publisher metadata (Always run)
+        tex = cls._cleanup_publisher_metadata(tex, config)
         
-        # BẮT BUỘC dùng TexSoup cho các node metadata chính để tránh lỗi rớt ngoặc
+        # 2. BẮT BUỘC dùng pylatexenc cho các node metadata chính để tránh lỗi rớt ngoặc
         try:
-            from TexSoup import TexSoup
-            soup = TexSoup(tex)
-            
-            # 1. Xử lý Title
-            titles = list(soup.find_all('title')) + list(soup.find_all('Title'))
+            from pylatexenc.latexwalker import LatexWalker, LatexMacroNode, LatexEnvironmentNode, LatexGroupNode
+            walker = LatexWalker(tex)
+            nodelist, _, _ = walker.get_latex_nodes()
+
+            replace_ops = [] # list of (start, end, replacement_text)
+
+            def traverse(nodes):
+                if not nodes: return []
+                found = []
+                for n in nodes:
+                    found.append(n)
+                    if getattr(n, 'nodelist', None):
+                        found.extend(traverse(n.nodelist))
+                    if getattr(n, 'nodeargd', None) and getattr(n.nodeargd, 'argnlist', None):
+                        for arg in n.nodeargd.argnlist:
+                            if arg:
+                                found.append(arg)
+                                if getattr(arg, 'nodelist', None):
+                                    found.extend(traverse(arg.nodelist))
+                return found
+
+            all_nodes = traverse(nodelist)
+
+            # 1. Processing Title
+            title_cmd_raw = config.get("title_command", "title").replace("\\", "")
+            titles = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == title_cmd_raw.lower()]
             for t in titles:
-                if t.args:
-                    for arg in reversed(t.args):
-                        if hasattr(arg, 'contents'):
-                            arg.contents = ['<< metadata.title >>']
+                if getattr(t, 'nodeargd', None) and getattr(t.nodeargd, 'argnlist', None):
+                    for arg in reversed(t.nodeargd.argnlist):
+                        if arg and isinstance(arg, LatexGroupNode):
+                            replace_ops.append((arg.pos + 1, arg.pos_end - 1, '<< metadata.title >>'))
                             break
+
+            # 2. Author & Affiliations - Universal approach
+            author_cmd_raw = config.get("author_command", "author").replace("\\", "")
+            # Base related commands
+            related_cmds = {author_cmd_raw, 'author', 'Author', 'affil', 'affiliation', 'address', 'email', 'institute'}
+            # Add publisher-specific ones from manifest
+            related_cmds.update(config.get("author_related_cmds", [
+                'authornote', 'orcid', 'corres', 'firstnote', 'AuthorNames', 
+                'authorrunning', 'titlerunning'
+            ]))
             
-            # 2. Xử lý Author & Affiliations (Robust Deletion + Arity Padding for jov/acmart/generic)
-            # Tìm vị trí author đầu tiên để chèn tag lên trước
-            author_nodes = list(soup.find_all('author')) + list(soup.find_all('Author'))
+            author_nodes = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in related_cmds]
             if author_nodes:
-                print(f"[*] TexSoup found {len(author_nodes)} author nodes. Revamping injection...")
+                print(f"[*] pylatexenc found {len(author_nodes)} author nodes. Revamping injection...")
                 first_author = author_nodes[0]
+                insert_pos = first_author.pos
+                replace_ops.append((insert_pos, insert_pos, '<< metadata.author_block >>'))
                 
-                # --- ARITY DETECTION (Fix Argument Gobbling) ---
-                extra_braces_count = 0
-                parent = first_author.parent
-                if parent:
-                    try:
-                        contents = list(parent.contents)
-                        # Tìm vị trí node author đầu tiên trong danh sách contents của parent
-                        idx = -1
-                        for i, item in enumerate(contents):
-                            if item == first_author:
-                                idx = i
+                for node in author_nodes:
+                    end_pos = node.pos_end
+                    while end_pos < len(tex):
+                        rest = tex[end_pos:]
+                        match = re.match(r'^(\s|%.*?\n)*', rest)
+                        skip_len = match.end() if match else 0
+                        if end_pos + skip_len < len(tex) and tex[end_pos + skip_len] == '{':
+                            next_brace = end_pos + skip_len
+                            next_end = cls._find_matching_brace(tex, next_brace)
+                            if next_end != -1:
+                                end_pos = next_end + 1
+                                continue
+                        break
+                    replace_ops.append((node.pos, end_pos, ''))
+
+            # 3. Processing Abstract
+            abstract_env_raw = config.get("abstract_env", "abstract").replace("\\", "")
+            abstracts_env = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname.lower() == abstract_env_raw.lower()]
+            if abstracts_env:
+                ab = abstracts_env[0]
+                replace_ops.append((ab.pos, ab.pos_end, f'\\begin{{{ab.environmentname}}}\n<< metadata.abstract >>\n\\end{{{ab.environmentname}}}'))
+            else:
+                abstracts_cmd = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == abstract_env_raw.lower()]
+                if abstracts_cmd:
+                    ab = abstracts_cmd[0]
+                    if getattr(ab, 'nodeargd', None) and getattr(ab.nodeargd, 'argnlist', None):
+                        for arg in reversed(ab.nodeargd.argnlist):
+                            if arg and isinstance(arg, LatexGroupNode):
+                                replace_ops.append((arg.pos + 1, arg.pos_end - 1, '<< metadata.abstract >>'))
                                 break
-                        
-                        if idx != -1:
-                            to_delete_extra = []
-                            # Duyệt các sibling đứng sau để tìm các BraceGroup rời rạc (ví dụ: \author{N}{Aff}{URL}{Email})
-                            for i in range(idx + 1, len(contents)):
-                                sibling = contents[i]
-                                s_sibling = str(sibling).strip()
-                                if not s_sibling: continue # Bỏ qua khoảng trắng/xuống dòng
-                                
-                                # Nếu sibling bắt đầu bằng { và kết thúc bằng } và KHÔNG phải là lệnh (không bắt đầu bằng \)
-                                if s_sibling.startswith('{') and s_sibling.endswith('}') and not s_sibling.startswith('\\'):
-                                    print(f"[*] Detected trailing argument (gobbling risk): {s_sibling}")
-                                    extra_braces_count += 1
-                                    to_delete_extra.append(sibling)
-                                else:
-                                    # Gặp lệnh khác hoặc text thường thì dừng lại
-                                    break
-                            
-                            # Xóa các tham số thừa để dọn đường cho tag mới
-                            for item in to_delete_extra:
-                                try: item.delete()
-                                except: pass
-                    except Exception as e:
-                        print(f"[!] Warning: Arity detection failed: {e}")
 
-                # Bù đắp số ngoặc nhọn để thỏa mãn signature của macro (ví dụ jov.cls yêu cầu 4 tham số)
-                padding = "{}" * extra_braces_count
-                first_author.insert_before(f'<< metadata.author_block >>{padding}\n')
-                print(f"[*] TexSoup inserted author_block tag with padding: {padding}")
-
-            # Xóa sạch toàn bộ các node metadata cũ
-            related_cmds = ['author', 'Author', 'affil', 'affiliation', 'address', 'email', 'institute', 
-                            'authornote', 'orcid', 'corres', 'firstnote', 'AuthorNames', 
-                            'authorrunning', 'titlerunning']
-            for cmd in related_cmds:
-                nodes = soup.find_all(cmd)
-                for node in nodes:
-                    try: node.delete()
-                    except: pass
-            print("[*] TexSoup deleted all legacy author/affiliation nodes.")
-
-            # 3. Xử lý Abstract (Chỉ xử lý node đầu tiên để tránh documentation examples)
-            abstracts = list(soup.find_all('abstract')) + list(soup.find_all('Abstract'))
-            if abstracts:
-                ab = abstracts[0]
-                # Nếu là command \abstract{...}
-                if ab.args:
-                    for arg in reversed(ab.args):
-                        if hasattr(arg, 'contents'):
-                            arg.contents = ['<< metadata.abstract >>']
-                            print("[*] TexSoup tagged first abstract command.")
-                            break
-                else:
-                    # Nếu là environment \begin{abstract}...\end{abstract}
-                    # Ta thay thế toàn bộ nội dung trong begin/end
-                    ab.replace_with('\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}')
-                    print("[*] TexSoup tagged first abstract environment.")
-
-            # 4. Xử lý Keywords (Chỉ xử lý node đầu tiên)
-            for cmd in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']:
-                kw_nodes = list(soup.find_all(cmd))
-                if kw_nodes:
-                    kw = kw_nodes[0]
-                    if kw.args:
-                        for arg in reversed(kw.args):
-                            if hasattr(arg, 'contents'):
-                                arg.contents = ['<< metadata.keywords_str >>']
-                                print(f"[*] TexSoup tagged first {cmd} command.")
+            # 4. Processing Keywords
+            kw_envs = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']]
+            if kw_envs:
+                kw = kw_envs[0]
+                replace_ops.append((kw.pos, kw.pos_end, f'\\begin{{{kw.environmentname}}}\n<< metadata.keywords_str >>\n\\end{{{kw.environmentname}}}'))
+            else:
+                kw_cmds = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']]
+                if kw_cmds:
+                    kw = kw_cmds[0]
+                    if getattr(kw, 'nodeargd', None) and getattr(kw.nodeargd, 'argnlist', None):
+                        for arg in reversed(kw.nodeargd.argnlist):
+                            if arg and isinstance(arg, LatexGroupNode):
+                                replace_ops.append((arg.pos + 1, arg.pos_end - 1, '<< metadata.keywords_str >>'))
                                 break
-                    else:
-                        kw.replace_with(f'\\begin{{{cmd}}}\n<< metadata.keywords_str >>\n\\end{{{cmd}}}')
-                        print(f"[*] TexSoup tagged first {cmd} environment.")
-                    break # Chỉ xử lý loại keyword đầu tiên tìm thấy
 
-            tex = str(soup)
-            print("[*] TexSoup tagging hoàn tất cho metadata.")
+            # Apply replacements from back to front
+            # Sort by start descending. For same start, sort by end descending (largest span first).
+            replace_ops.sort(key=lambda x: (x[0], x[1]), reverse=True)
+            filtered_ops = []
+            last_start = float('inf')
+            for start, end, text in replace_ops:
+                # Same-start operations are allowed if they are non-overlapping with NEXT items (smaller start)
+                # But here we just need to ensure we don't skip an insertion at the same start as a deletion.
+                # If end <= last_start, it doesn't overlap with previously added (which are later in the file).
+                if end <= last_start:
+                    filtered_ops.append((start, end, text))
+                    last_start = start
+                elif start == last_start and end > last_start:
+                    # Special case: Deletion starting at same point as a previously added insertion/deletion.
+                    # Since we sort by end descending, the LARGER span came first.
+                    # So we should skip the smaller ones that are 'inside' it.
+                    continue
+
+            res_tex = tex
+            for start, end, text in filtered_ops:
+                res_tex = res_tex[:start] + text + res_tex[end:]
+                
+            tex = res_tex
+            print("[*] pylatexenc tagging hoàn tất cho metadata.")
             
         except Exception as e:
-            print(f"[WARN] TexSoup thất bại ({e}), đang dùng Regex fallback an toàn...")
-            tex = cls._cleanup_publisher_metadata(tex)
-            tex = cls._process_title(tex)
-            tex = cls._process_authors(tex)
-            tex = cls._process_abstract(tex)
-            tex = cls._process_keywords(tex)
+            print(f"[WARN] pylatexenc thất bại ({e}), đang dùng Regex fallback an toàn...")
+            # Note: _cleanup_publisher_metadata already ran before the try block.
+            tex = cls._process_title(tex, config)
+            tex = cls._process_authors(tex, config)
+            tex = cls._process_abstract(tex, config)
+            tex = cls._process_keywords(tex, config)
 
         # MỤC 4: Logic Body và References vẫn dùng Regex (ổn định hơn cho việc "quét sạch" dummy text)
         tex = cls._process_references(tex)
@@ -188,9 +221,11 @@ class TemplatePreprocessor:
             end = brace_end
             if multi_brace:
                 while end + 1 < len(tex):
-                    rest = tex[end + 1:].lstrip()
-                    if rest and rest[0] == '{':
-                        next_brace = tex.index('{', end + 1)
+                    rest = tex[end + 1:]
+                    match = re.match(r'^(\s|%.*?\n)*', rest)
+                    skip_len = match.end() if match else 0
+                    if end + 1 + skip_len < len(tex) and tex[end + 1 + skip_len] == '{':
+                        next_brace = end + 1 + skip_len
                         next_end = cls._find_matching_brace(tex, next_brace)
                         if next_end == -1:
                             break
@@ -322,81 +357,41 @@ class TemplatePreprocessor:
     # ── Phase 2: Publisher metadata cleanup ───────────────────────
 
     @classmethod
-    def _cleanup_publisher_metadata(cls, tex: str) -> str:
-        """Remove publisher-specific metadata that won't be populated from Word input."""
-        # ── ACM ──
-        # CCSXML block
-        tex = re.sub(
-            r'\\begin\{CCSXML\}.*?\\end\{CCSXML\}\s*\n?',
-            '', tex, flags=re.DOTALL,
-        )
-        # \ccsdesc[...]{...}
-        tex = cls._remove_command(tex, r'\\ccsdesc')
-        # Publisher metadata commands (multi-arg: \acmConference[...]{...}{...}{...})
-        for cmd in ('acmConference', 'acmBooktitle', 'acmDOI', 'acmYear',
-                     'acmISBN', 'acmPrice', 'acmSubmissionID',
-                     'setcopyright', 'copyrightyear'):
-            tex = cls._remove_command(tex, r'\\' + cmd, multi_brace=True)
-        # \begin{teaserfigure}...\end{teaserfigure}
-        tex = re.sub(
-            r'\\begin\{teaserfigure\}.*?\\end\{teaserfigure\}\s*\n?',
-            '', tex, flags=re.DOTALL,
-        )
-        # \renewcommand{\shortauthors}{...}
-        tex = re.sub(
-            r'^[ \t]*\\renewcommand\s*\{\\shortauthors\}\s*\{[^}]*\}.*$\n?',
-            '', tex, flags=re.MULTILINE,
-        )
-
-        # ── MDPI ──
-        # \AuthorNames{...} (redundant with \Author)
-        tex = cls._remove_command(tex, r'\\AuthorNames')
-        # Correspondence, review metadata (corres/firstnote handled in _process_authors)
-        for cmd in ('secondnote', 'thirdnote',
-                     'fourthnote', 'fifthnote', 'sixthnote', 'seventhnote', 'eighthnote',
-                     'institutionalreview', 'dataavailability',
-                     'conflictsofinterest', 'sampleavailability',
-                     'authorcontributions', 'funding',
-                     'abbreviations', 'appendixtitles'):
+    def _cleanup_publisher_metadata(cls, tex: str, config: dict = None) -> str:
+        """Remove publisher-specific metadata using rules from manifest."""
+        config = config or {}
+        
+        # 1. Strip commands from manifest
+        for cmd in config.get("strip_commands", []):
             tex = cls._remove_command(tex, r'\\' + cmd)
+            
+        # 2. Strip multi-brace commands from manifest
+        for cmd in config.get("multi_brace_commands", []):
+            tex = cls._remove_command(tex, r'\\' + cmd, multi_brace=True)
+            
+        # 3. Strip environments from manifest
+        for env in config.get("strip_environments", []):
+            tex = re.sub(
+                rf'[ \t]*\\begin\{{{env}\}}.*?\\end\{{{env}\}}\s*',
+                '', tex, flags=re.DOTALL,
+            )
 
-        # ── Elsevier (elsarticle) ──
-        # The authoryear option enables natbib author-year mode, which requires
-        # \bibitem[Author(Year)]{key} format.  Our renderer generates plain
-        # \bibitem{key} (numeric), so switch to numbered citations.
-        if re.search(r'\\documentclass\b[^}]*\{elsarticle\}', tex):
-            # Only touch the first uncommented \documentclass line
+        # 4. Elsevier (elsarticle) specialized fixes
+        if 'elsarticle' in tex:
+            # Switch to numbered citations
             tex = re.sub(
                 r'^([^%\n]*\\documentclass\s*\[)([^\]]*)\]',
                 lambda m: m.group(1) + m.group(2).replace('authoryear', 'number') + ']',
                 tex, count=1, flags=re.MULTILINE,
             )
-            # Also switch harv bibliography style to numeric
             tex = re.sub(
                 r'(\\bibliographystyle\{)elsarticle-harv(\})',
                 r'\1elsarticle-num\2',
                 tex,
             )
-            # Remove \journal{...} — not populated from Word
-            tex = cls._remove_command(tex, r'\\journal')
-            # Remove Elsevier-specific frontmatter elements not populated from Word
-            for cmd in ('tnotetext', 'fntext', 'cortext', 'ead'):
-                tex = cls._remove_command(tex, r'\\' + cmd)
-            # Remove graphicalabstract and highlights environments
-            tex = re.sub(
-                r'[ \t]*\\begin\{graphicalabstract\}.*?\\end\{graphicalabstract\}\s*',
-                '', tex, flags=re.DOTALL,
-            )
-            tex = re.sub(
-                r'[ \t]*\\begin\{highlights\}.*?\\end\{highlights\}\s*',
-                '', tex, flags=re.DOTALL,
-            )
 
-        # ── MDPI first‑page left‑column overlap fix ──
-        # In submit mode the class places dates + copyright as a marginnote on
-        # page 1.  With long body text the note overlaps content.
-        # Fix: redefine \contentleftcolumn to empty so the marginnote is blank.
-        if re.search(r'\\documentclass[^}]*\{Definitions/mdpi\}', tex):
+        # 5. MDPI first‑page left‑column overlap fix
+        if 'mdpi' in tex or 'Definitions/mdpi' in tex:
             doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
             if doc_match:
                 override = "\\makeatletter\\renewcommand{\\contentleftcolumn}{}\\makeatother\n"
@@ -408,14 +403,17 @@ class TemplatePreprocessor:
     # ── Phase 3: Title ──────────────────────────────────────────
 
     @classmethod
-    def _process_title(cls, tex: str) -> str:
+    def _process_title(cls, tex: str, config: dict = None) -> str:
+        config = config or {}
         r"""
         Replace content of \title{...} or \Title{...} with << metadata.title >>.
         Case-insensitive to support MDPI's \Title{} and standard \title{}.
         Handles optional args: \title[short title]{full title}.
         Skips commented-out occurrences.
         """
-        match_iter = re.finditer(r'(?i)\\title\s*(?:\[\[^\]]*\])?\s*\{', tex)
+        title_cmd = config.get("title_command", r"\title")
+        title_cmd_regex = r"\\" + title_cmd[1:] if title_cmd.startswith("\\") else r"\\" + title_cmd
+        match_iter = re.finditer(rf'(?i){title_cmd_regex}\s*(?:\[\[^\]]*\])?\s*\{{', tex)
         for match in match_iter:
             if cls._is_commented(tex, match.start()):
                 continue
@@ -429,7 +427,8 @@ class TemplatePreprocessor:
     # ── Phase 4: Authors ─────────────────────────────────────────
 
     @classmethod
-    def _process_authors(cls, tex: str) -> str:
+    def _process_authors(cls, tex: str, config: dict = None) -> str:
+        config = config or {}
         r"""
         Remove all author-related commands and inject << metadata.author_block >>.
         Supports IEEE, ACM, Springer, MDPI, Elsevier formats.
@@ -448,6 +447,9 @@ class TemplatePreprocessor:
             r'\\corres',                 # MDPI
             r'\\firstnote',              # MDPI
         ]
+        author_cmd = config.get("author_command")
+        if author_cmd:
+            commands_to_remove.append(r"\\" + author_cmd[1:] if author_cmd.startswith("\\") else r"\\" + author_cmd)
 
         for cmd in commands_to_remove:
             _failsafe = 0
@@ -469,7 +471,20 @@ class TemplatePreprocessor:
                 start_open = search_start + match.end() - 1
                 end_close = cls._find_matching_brace(tex, start_open)
                 if end_close != -1:
-                    remove_end = end_close + 1
+                    end_pos = end_close + 1
+                    while end_pos < len(tex):
+                        rest = tex[end_pos:]
+                        match = re.match(r'^(\s|%.*?\n)*', rest)
+                        skip_len = match.end() if match else 0
+                        if end_pos + skip_len < len(tex) and tex[end_pos + skip_len] == '{':
+                            next_brace = end_pos + skip_len
+                            next_end = cls._find_matching_brace(tex, next_brace)
+                            if next_end != -1:
+                                end_pos = next_end + 1
+                                continue
+                        break
+                    
+                    remove_end = end_pos
                     while remove_end < len(tex) and tex[remove_end] in (' ', '\t'):
                         remove_end += 1
                     if remove_end < len(tex) and tex[remove_end] == '\n':
@@ -487,7 +502,9 @@ class TemplatePreprocessor:
             insert_pos = -1
 
             # Try: after \title{...} (skip commented lines)
-            match_iter = re.finditer(r'(?i)\\title\s*(?:\[\[^\]]*\])?\s*\{', tex)
+            title_cmd = config.get("title_command", r"\title")
+            title_cmd_regex = r"\\" + title_cmd[1:] if title_cmd.startswith("\\") else r"\\" + title_cmd
+            match_iter = re.finditer(rf'(?i){title_cmd_regex}\s*(?:\[\[^\]]*\])?\s*\{{', tex)
             for match in match_iter:
                 if cls._is_commented(tex, match.start()):
                     continue
@@ -504,8 +521,7 @@ class TemplatePreprocessor:
                     insert_pos = doc_match.end()
 
             if insert_pos != -1:
-                # Inject with 5 empty braces for universal arity support (Regex Fallback)
-                author_tag = "\n<< metadata.author_block >>{ }{ }{ }{ }{ }\n"
+                author_tag = "\n<< metadata.author_block >>\n"
                 tex = tex[:insert_pos] + author_tag + tex[insert_pos:]
 
         return tex
@@ -513,7 +529,8 @@ class TemplatePreprocessor:
     # ── Phase 5: Abstract ────────────────────────────────────────
 
     @classmethod
-    def _process_abstract(cls, tex: str) -> str:
+    def _process_abstract(cls, tex: str, config: dict = None) -> str:
+        config = config or {}
         r"""
         Replace abstract content with << metadata.abstract >>.
 
@@ -522,26 +539,29 @@ class TemplatePreprocessor:
         - \abstract{...} (MDPI command form)
         - Fallback: inject abstract block if neither is found.
         """
+        abstract_env = config.get("abstract_env", "abstract")
+        abstract_cmd_regex = r"\\" + abstract_env[1:] if abstract_env.startswith("\\") else r"\\" + abstract_env
+        
         # Pattern 1: Environment form \begin{abstract}...\end{abstract}
-        env_match = re.search(r'\\begin\{abstract\}(.*?)\\end\{abstract\}', tex, re.DOTALL)
+        env_match = re.search(rf'\\begin\{{{abstract_env}\}}(.*?)\\end\{{{abstract_env}\}}', tex, re.DOTALL)
         if env_match:
             inner_text = env_match.group(1)
             has_keywords_inside = r'\keywords' in inner_text
 
-            repl = r'\g<1>\n<< metadata.abstract >>\n'
+            repl = rf'\g<1>\n<< metadata.abstract >>\n'
             if has_keywords_inside:
                 repl += r'\\keywords{<< metadata.keywords_str >>}\n'
             repl += r'\g<2>'
 
             # Sử dụng count=1 để tránh thay thế examples trong documentation (e.g. \inlinecode)
             tex = re.sub(
-                r'(\\begin\{abstract\}).*?(\\end\{abstract\})',
+                rf'(\\begin\{{{abstract_env}\}}).*?(\\end\{{{abstract_env}\}})',
                 repl, tex, count=1, flags=re.DOTALL,
             )
             return cls._process_ieee_keywords(tex)
 
         # Pattern 2: Command form \abstract{...} (MDPI) — case-insensitive
-        cmd_match = re.search(r'(?i)\\abstract\s*\{', tex)
+        cmd_match = re.search(rf'(?i){abstract_cmd_regex}\s*\{{', tex)
         if cmd_match:
             start_open = cmd_match.end() - 1
             end_close = cls._find_matching_brace(tex, start_open)
@@ -689,7 +709,8 @@ class TemplatePreprocessor:
     # ── Phase 6: Keywords ────────────────────────────────────────
 
     @classmethod
-    def _process_keywords(cls, tex: str) -> str:
+    def _process_keywords(cls, tex: str, config: dict = None) -> str:
+        config = config or {}
         r"""
         Inject << metadata.keywords_str >> into keywords command.
 

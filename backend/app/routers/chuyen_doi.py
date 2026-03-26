@@ -141,6 +141,9 @@ async def chuyen_doi_file(
 
         try:
             tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
+            # [FAIL-SAFE] Dọn dẹp rác metadata còn sót lại để tránh lỗi "Missing \begin{document}"
+            # This regex aggressively removes the metadata tag AND any subsequent { } blocks even with spaces between them.
+            tex_raw = re.sub(r'<<\s*metadata\.[a-zA-Z0-9_]+\s*>>(?:\s*\{[^{}]*\}\s*)*', '', tex_raw)
             images_abs = str(images_folder).replace('\\', '/')
             job_abs = str(job_folder).replace('\\', '/')
             tex_raw = tex_raw.replace(images_abs + '/', 'images/').replace(images_abs, 'images')
@@ -307,6 +310,8 @@ async def chuyen_doi_file_stream(
 
             try:
                 tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
+                # This regex aggressively removes the metadata tag AND any subsequent { } blocks even with spaces between them.
+                tex_raw = re.sub(r'<<\s*metadata\.[a-zA-Z0-9_]+\s*>>(?:\s*\{[^{}]*\}\s*)*', '', tex_raw, flags=re.MULTILINE)
                 images_abs = str(images_folder).replace('\\', '/')
                 job_abs = str(job_folder).replace('\\', '/')
                 tex_raw = tex_raw.replace(images_abs + '/', 'images/').replace(images_abs, 'images')
@@ -410,7 +415,7 @@ def tai_ve_theo_job(job_id: str, db: Session = Depends(get_db), current_user: mo
 
 
 @router.post("/compile-pdf/{job_id}")
-async def bien_dich_pdf_theo_job(job_id: str, request: Request):
+async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = Body(None)):
     """Biên dịch PDF từ file .tex đã tạo (step 2 — tách riêng khỏi conversion)."""
     print(f"[*] Triggering PDF compilation for Job ID: {job_id}")
     job_folder = TEMP_FOLDER / f"job_{job_id}"
@@ -421,17 +426,19 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request):
     if not danh_sach_tex:
         raise HTTPException(status_code=404, detail="Không tìm thấy file .tex trong job")
     
-    # 🛡️ Rename to safe filename (job_output.tex) to bypass MAX_PATH and special char issues
+    # 🛡️ Thay rename bằng copy2 để tránh WinError 2 khi gọi đúp
     original_tex = danh_sach_tex[0]
     original_tex_name = original_tex.name
     tex_path = job_folder / "job_output.tex"
-    try:
-        if tex_path.exists(): tex_path.unlink()
-        original_tex.rename(tex_path)
-    except Exception as e:
-        print(f"[WARN] Failed to rename to safe filename: {e}")
-        tex_path = original_tex # Fallback to original if rename fails
-        original_tex_name = tex_path.name
+    if original_tex_name != "job_output.tex":
+        try:
+            if tex_path.exists(): tex_path.unlink()
+            import shutil
+            shutil.copy2(original_tex, tex_path)
+        except Exception as e:
+            print(f"[WARN] Failed to copy to safe filename: {e}")
+            tex_path = original_tex # Fallback to original if copy fails
+            original_tex_name = tex_path.name
 
     try:
         thanh_cong, thong_bao_loi = await run_in_threadpool(bien_dich_latex, str(tex_path))

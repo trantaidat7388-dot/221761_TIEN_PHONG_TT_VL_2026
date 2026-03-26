@@ -325,6 +325,14 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
         soHinhAnh: metadata.so_hinh_anh ?? 0,
         soBang: metadata.so_bang ?? 0
       })
+
+      if (apiData.tenFilePdf && apiData.pdfUrl) {
+        setPdfKetQua({
+          soTrang: metadata.so_trang,
+          pdfUrl: apiData.pdfUrl,
+          tenFilePDF: apiData.tenFilePdf
+        })
+      }
       setTrangThaiXuLy('hoan_thanh')
       setTienTrinh(100)
       setBuocHienTai(TONG_BUOC)
