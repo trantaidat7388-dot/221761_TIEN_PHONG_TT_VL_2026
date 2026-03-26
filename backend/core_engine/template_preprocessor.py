@@ -24,118 +24,102 @@ class TemplatePreprocessor:
             patch = r"\providecommand{\onemaskedcitationmsg}[1]{}" + "\n" + r"\providecommand{\maskedcitationsmsg}[1]{}" + "\n"
             tex = re.sub(r'(\\begin\{document\})', patch.replace('\\', '\\\\') + r'\1', tex)
         
-        # BẮT BUỘC dùng TexSoup cho các node metadata chính để tránh lỗi rớt ngoặc
+        # BẮT BUỘC dùng pylatexenc cho các node metadata chính để tránh lỗi rớt ngoặc
         try:
-            from TexSoup import TexSoup
-            soup = TexSoup(tex)
-            
-            # 1. Xử lý Title
-            titles = list(soup.find_all('title')) + list(soup.find_all('Title'))
+            from pylatexenc.latexwalker import LatexWalker, LatexMacroNode, LatexEnvironmentNode, LatexGroupNode
+            walker = LatexWalker(tex)
+            nodelist, _, _ = walker.get_latex_nodes(display_errors=False)
+
+            replace_ops = [] # list of (start, end, replacement_text)
+
+            def traverse(nodes):
+                if not nodes: return []
+                found = []
+                for n in nodes:
+                    found.append(n)
+                    if getattr(n, 'nodelist', None):
+                        found.extend(traverse(n.nodelist))
+                    if getattr(n, 'nodeargd', None) and getattr(n.nodeargd, 'argnlist', None):
+                        for arg in n.nodeargd.argnlist:
+                            if arg:
+                                found.append(arg)
+                                if getattr(arg, 'nodelist', None):
+                                    found.extend(traverse(arg.nodelist))
+                return found
+
+            all_nodes = traverse(nodelist)
+
+            # 1. Processing Title
+            titles = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == 'title']
             for t in titles:
-                if t.args:
-                    for arg in reversed(t.args):
-                        if hasattr(arg, 'contents'):
-                            arg.contents = ['<< metadata.title >>']
+                if getattr(t, 'nodeargd', None) and getattr(t.nodeargd, 'argnlist', None):
+                    for arg in reversed(t.nodeargd.argnlist):
+                        if arg and isinstance(arg, LatexGroupNode):
+                            replace_ops.append((arg.pos + 1, arg.pos_end - 1, '<< metadata.title >>'))
                             break
-            
-            # 2. Xử lý Author & Affiliations (Robust Deletion + Arity Padding for jov/acmart/generic)
-            # Tìm vị trí author đầu tiên để chèn tag lên trước
-            author_nodes = list(soup.find_all('author')) + list(soup.find_all('Author'))
-            if author_nodes:
-                print(f"[*] TexSoup found {len(author_nodes)} author nodes. Revamping injection...")
-                first_author = author_nodes[0]
-                
-                # --- ARITY DETECTION (Fix Argument Gobbling) ---
-                extra_braces_count = 0
-                parent = first_author.parent
-                if parent:
-                    try:
-                        contents = list(parent.contents)
-                        # Tìm vị trí node author đầu tiên trong danh sách contents của parent
-                        idx = -1
-                        for i, item in enumerate(contents):
-                            if item == first_author:
-                                idx = i
-                                break
-                        
-                        if idx != -1:
-                            to_delete_extra = []
-                            # Duyệt các sibling đứng sau để tìm các BraceGroup rời rạc (ví dụ: \author{N}{Aff}{URL}{Email})
-                            for i in range(idx + 1, len(contents)):
-                                sibling = contents[i]
-                                s_sibling = str(sibling).strip()
-                                if not s_sibling: continue # Bỏ qua khoảng trắng/xuống dòng
-                                
-                                # Nếu sibling bắt đầu bằng { và kết thúc bằng } và KHÔNG phải là lệnh (không bắt đầu bằng \)
-                                if s_sibling.startswith('{') and s_sibling.endswith('}') and not s_sibling.startswith('\\'):
-                                    print(f"[*] Detected trailing argument (gobbling risk): {s_sibling}")
-                                    extra_braces_count += 1
-                                    to_delete_extra.append(sibling)
-                                else:
-                                    # Gặp lệnh khác hoặc text thường thì dừng lại
-                                    break
-                            
-                            # Xóa các tham số thừa để dọn đường cho tag mới
-                            for item in to_delete_extra:
-                                try: item.delete()
-                                except: pass
-                    except Exception as e:
-                        print(f"[!] Warning: Arity detection failed: {e}")
 
-                # Bù đắp số ngoặc nhọn để thỏa mãn signature của macro (ví dụ jov.cls yêu cầu 4 tham số)
-                padding = "{}" * extra_braces_count
-                first_author.insert_before(f'<< metadata.author_block >>{padding}\n')
-                print(f"[*] TexSoup inserted author_block tag with padding: {padding}")
-
-            # Xóa sạch toàn bộ các node metadata cũ
+            # 2. Xử lý Author & Affiliations
             related_cmds = ['author', 'Author', 'affil', 'affiliation', 'address', 'email', 'institute', 
                             'authornote', 'orcid', 'corres', 'firstnote', 'AuthorNames', 
                             'authorrunning', 'titlerunning']
-            for cmd in related_cmds:
-                nodes = soup.find_all(cmd)
-                for node in nodes:
-                    try: node.delete()
-                    except: pass
-            print("[*] TexSoup deleted all legacy author/affiliation nodes.")
+            author_nodes = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in related_cmds]
+            if author_nodes:
+                print(f"[*] pylatexenc found {len(author_nodes)} author nodes. Revamping injection...")
+                first_author = author_nodes[0]
+                insert_pos = first_author.pos
+                replace_ops.append((insert_pos, insert_pos, '\n<< metadata.author_block >>{ }{ }{ }{ }{ }\n'))
+                
+                for node in author_nodes:
+                    replace_ops.append((node.pos, node.pos_end, ''))
 
-            # 3. Xử lý Abstract (Chỉ xử lý node đầu tiên để tránh documentation examples)
-            abstracts = list(soup.find_all('abstract')) + list(soup.find_all('Abstract'))
-            if abstracts:
-                ab = abstracts[0]
-                # Nếu là command \abstract{...}
-                if ab.args:
-                    for arg in reversed(ab.args):
-                        if hasattr(arg, 'contents'):
-                            arg.contents = ['<< metadata.abstract >>']
-                            print("[*] TexSoup tagged first abstract command.")
-                            break
-                else:
-                    # Nếu là environment \begin{abstract}...\end{abstract}
-                    # Ta thay thế toàn bộ nội dung trong begin/end
-                    ab.replace_with('\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}')
-                    print("[*] TexSoup tagged first abstract environment.")
-
-            # 4. Xử lý Keywords (Chỉ xử lý node đầu tiên)
-            for cmd in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']:
-                kw_nodes = list(soup.find_all(cmd))
-                if kw_nodes:
-                    kw = kw_nodes[0]
-                    if kw.args:
-                        for arg in reversed(kw.args):
-                            if hasattr(arg, 'contents'):
-                                arg.contents = ['<< metadata.keywords_str >>']
-                                print(f"[*] TexSoup tagged first {cmd} command.")
+            # 3. Processing Abstract
+            abstracts_env = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname.lower() == 'abstract']
+            if abstracts_env:
+                ab = abstracts_env[0]
+                replace_ops.append((ab.pos, ab.pos_end, '\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}'))
+            else:
+                abstracts_cmd = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == 'abstract']
+                if abstracts_cmd:
+                    ab = abstracts_cmd[0]
+                    if getattr(ab, 'nodeargd', None) and getattr(ab.nodeargd, 'argnlist', None):
+                        for arg in reversed(ab.nodeargd.argnlist):
+                            if arg and isinstance(arg, LatexGroupNode):
+                                replace_ops.append((arg.pos + 1, arg.pos_end - 1, '<< metadata.abstract >>'))
                                 break
-                    else:
-                        kw.replace_with(f'\\begin{{{cmd}}}\n<< metadata.keywords_str >>\n\\end{{{cmd}}}')
-                        print(f"[*] TexSoup tagged first {cmd} environment.")
-                    break # Chỉ xử lý loại keyword đầu tiên tìm thấy
 
-            tex = str(soup)
-            print("[*] TexSoup tagging hoàn tất cho metadata.")
+            # 4. Processing Keywords
+            kw_envs = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']]
+            if kw_envs:
+                kw = kw_envs[0]
+                replace_ops.append((kw.pos, kw.pos_end, f'\\begin{{{kw.environmentname}}}\n<< metadata.keywords_str >>\n\\end{{{kw.environmentname}}}'))
+            else:
+                kw_cmds = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']]
+                if kw_cmds:
+                    kw = kw_cmds[0]
+                    if getattr(kw, 'nodeargd', None) and getattr(kw.nodeargd, 'argnlist', None):
+                        for arg in reversed(kw.nodeargd.argnlist):
+                            if arg and isinstance(arg, LatexGroupNode):
+                                replace_ops.append((arg.pos + 1, arg.pos_end - 1, '<< metadata.keywords_str >>'))
+                                break
+
+            # Apply replacements from back to front
+            replace_ops.sort(key=lambda x: x[0], reverse=True)
+            filtered_ops = []
+            last_start = float('inf')
+            for start, end, text in replace_ops:
+                if end <= last_start:
+                    filtered_ops.append((start, end, text))
+                    last_start = start
+
+            res_tex = tex
+            for start, end, text in filtered_ops:
+                res_tex = res_tex[:start] + text + res_tex[end:]
+                
+            tex = res_tex
+            print("[*] pylatexenc tagging hoàn tất cho metadata.")
             
         except Exception as e:
-            print(f"[WARN] TexSoup thất bại ({e}), đang dùng Regex fallback an toàn...")
+            print(f"[WARN] pylatexenc thất bại ({e}), đang dùng Regex fallback an toàn...")
             tex = cls._cleanup_publisher_metadata(tex)
             tex = cls._process_title(tex)
             tex = cls._process_authors(tex)

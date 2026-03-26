@@ -421,17 +421,19 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request):
     if not danh_sach_tex:
         raise HTTPException(status_code=404, detail="Không tìm thấy file .tex trong job")
     
-    # 🛡️ Rename to safe filename (job_output.tex) to bypass MAX_PATH and special char issues
+    # 🛡️ Thay rename bằng copy2 để tránh WinError 2 khi gọi đúp
     original_tex = danh_sach_tex[0]
     original_tex_name = original_tex.name
     tex_path = job_folder / "job_output.tex"
-    try:
-        if tex_path.exists(): tex_path.unlink()
-        original_tex.rename(tex_path)
-    except Exception as e:
-        print(f"[WARN] Failed to rename to safe filename: {e}")
-        tex_path = original_tex # Fallback to original if rename fails
-        original_tex_name = tex_path.name
+    if original_tex_name != "job_output.tex":
+        try:
+            if tex_path.exists(): tex_path.unlink()
+            import shutil
+            shutil.copy2(original_tex, tex_path)
+        except Exception as e:
+            print(f"[WARN] Failed to copy to safe filename: {e}")
+            tex_path = original_tex # Fallback to original if copy fails
+            original_tex_name = tex_path.name
 
     try:
         thanh_cong, thong_bao_loi = await run_in_threadpool(bien_dich_latex, str(tex_path))

@@ -194,27 +194,26 @@ def xoa_file_an_toan(duong_dan_file: str, so_lan_thu: int = 3, thoi_gian_cho_ms:
     return False
 
 def phat_hien_engine(duong_dan_tex: str) -> str:
-    """Phát hiện LaTeX engine phù hợp dựa trên nội dung file .tex.
-    
-    1. Ưu tiên 'xelatex' nếu thấy Magic Comment hoặc gói đặc thù (fontspec, polyglossia, etc.)
-    2. Trả về 'pdflatex' nếu template có tùy chọn [pdftex] trong documentclass.
-    3. Mặc định trả về 'xelatex' để hỗ trợ Unicode tốt nhất.
-    """
+    """Phát hiện LaTeX engine phù hợp dựa trên nội dung file .tex."""
     try:
         with open(duong_dan_tex, 'r', encoding='utf-8', errors='ignore') as f:
-            noi_dung = f.read(5000) # Đọc nhiều hơn chút để bao quát hết preamble
-        
-        # 🛡️ Ưu tiên 1: Magic comment (VD: % !TeX program = xelatex)
-        if re.search(r'^%\s*!TeX\s+program\s*=\s*(xelatex|lualatex)', noi_dung, re.IGNORECASE | re.MULTILINE):
-            return 'xelatex'
+            first_line = f.readline().strip()
+            # 🛡️ Ưu tiên 1: Đọc dòng đầu tiên xem có Magic Comment không
+            match = re.search(r'^%\s*!TeX\s+program\s*=\s*(xelatex|pdflatex|lualatex)', first_line, re.IGNORECASE)
+            if match:
+                return match.group(1).lower()
+
+        # Đọc lại nội dung để phân tích fallback
+        with open(duong_dan_tex, 'r', encoding='utf-8', errors='ignore') as f:
+            noi_dung = f.read(5000)
             
-        # 🛡️ Ưu tiên 2: Các gói bắt buộc phải dùng XeLaTeX/LuaLaTeX
+        # 🛡️ Fallback: Các gói bắt buộc phải dùng XeLaTeX/LuaLaTeX
         if re.search(r'\\usepackage\{fontspec\}', noi_dung) or \
            re.search(r'\\usepackage\{unicode-math\}', noi_dung) or \
            re.search(r'\\usepackage\{polyglossia\}', noi_dung):
             return 'xelatex'
             
-        # 🛡️ Ưu tiên 3: Nếu thấy tùy chọn pdftex trong documentclass (MDPI cũ, v.v.)
+        # 🛡️ Fallback: Nếu thấy tùy chọn pdftex trong documentclass
         if re.search(r'^[^%]*\\documentclass\[.*?pdftex', noi_dung, re.MULTILINE):
             return 'pdflatex'
             
@@ -235,6 +234,19 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
     
     if engine is None:
         engine = phat_hien_engine(duong_dan_dau_ra)
+
+    # Khắc phục lỗi driver đồ họa pdftex khi biên dịch bằng xelatex
+    if engine in ['xelatex', 'lualatex']:
+        try:
+            with open(duong_dan_dau_ra, 'r', encoding='utf-8') as f:
+                content = f.read()
+            content_fixed = re.sub(r'(\\documentclass\[[^\]]*)pdftex,?([^\]]*\])', r'\1\2', content)
+            content_fixed = re.sub(r'(\\documentclass\[[^\]]*),?pdftex([^\]]*\])', r'\1\2', content_fixed)
+            if content_fixed != content:
+                with open(duong_dan_dau_ra, 'w', encoding='utf-8') as f:
+                    f.write(content_fixed)
+        except Exception as e:
+            print(f"[WARN] Lỗi khi xử lý driver pdftex: {e}")
 
     print(f"\n--- [LATEX] START: {engine} (file={ten_file}, cwd={thu_muc}) ---")
     cmd = [engine, '-interaction=nonstopmode', '-halt-on-error', '-quiet', f"./{ten_file}"]
