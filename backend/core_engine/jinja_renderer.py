@@ -8,6 +8,7 @@ from .author_strategies import (
     ElsevierAuthorStrategy,
     ACMAuthorStrategy,
     MDPIAuthorStrategy,
+    OSCMAuthorStrategy,
     GenericAuthorStrategy,
 )
 
@@ -209,6 +210,7 @@ class JinjaLaTeXRenderer:
             "elsevier": ElsevierAuthorStrategy(),
             "acm": ACMAuthorStrategy(),
             "mdpi": MDPIAuthorStrategy(),
+            "oscm": OSCMAuthorStrategy(),
         }
         
         strategy = strategies.get(doc_class, GenericAuthorStrategy())

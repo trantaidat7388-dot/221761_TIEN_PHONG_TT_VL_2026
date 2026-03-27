@@ -235,19 +235,6 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
     if engine is None:
         engine = phat_hien_engine(duong_dan_dau_ra)
 
-    # Khắc phục lỗi driver đồ họa pdftex khi biên dịch bằng xelatex
-    if engine in ['xelatex', 'lualatex']:
-        try:
-            with open(duong_dan_dau_ra, 'r', encoding='utf-8') as f:
-                content = f.read()
-            content_fixed = re.sub(r'(\\documentclass\[[^\]]*)pdftex,?([^\]]*\])', r'\1\2', content)
-            content_fixed = re.sub(r'(\\documentclass\[[^\]]*),?pdftex([^\]]*\])', r'\1\2', content_fixed)
-            if content_fixed != content:
-                with open(duong_dan_dau_ra, 'w', encoding='utf-8') as f:
-                    f.write(content_fixed)
-        except Exception as e:
-            print(f"[WARN] Lỗi khi xử lý driver pdftex: {e}")
-
     print(f"\n--- [LATEX] START: {engine} (file={ten_file}, cwd={thu_muc}) ---")
     cmd = [engine, '-interaction=nonstopmode', '-halt-on-error', '-quiet', f"./{ten_file}"]
     print(f"[LATEX] CMD: {' '.join(cmd)}")
@@ -329,6 +316,8 @@ def detect_doc_class(template_src: str) -> str:
         return "acm"
     elif cls in ('mdpi',):
         return "mdpi"
+    elif cls in ('oscmjournal', 'oscmjournalv2', 'oscmjournalv2.0'):
+        return "oscm"
     else:
         return "generic"
 

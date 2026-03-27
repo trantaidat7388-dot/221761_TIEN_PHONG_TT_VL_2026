@@ -31,15 +31,38 @@ class TemplatePreprocessor:
         
         # ── Hỗ trợ Tiếng Việt (fontspec cho XeLaTeX - chỉ fallback nếu chưa có font) ──
         if r'\setmainfont' not in tex and r'\usepackage{fontspec}' not in tex:
-            # Ta dùng fontspec nhưng không ép cứng font nếu không cần thiết để tránh crash do thiếu font hệ thống
-            font_patch = r"\usepackage{fontspec}" + "\n" + r"% \setmainfont{Times New Roman} % Bỏ comment nếu muốn ép dùng font này" + "\n"
-            # Chèn sau documentclass
-            tex = re.sub(r'(\\documentclass\b.*?\]?\{.*?\})', r'\1' + '\n' + font_patch.replace('\\', '\\\\'), tex)
+            # Strict regex: skip commented-out \documentclass lines (starting with %)
+            # Inject \usepackage{fontspec} ONCE, after the first active \documentclass
+            active_dc_pattern = re.compile(r'^(?!\s*%).*?\\documentclass(\[.*?\])?\{.*?\}', re.MULTILINE)
+            lines = tex.split('\n')
+            injected = False
+            for i, line in enumerate(lines):
+                if not injected and active_dc_pattern.match(line):
+                    lines.insert(i + 1, r"\usepackage{fontspec}")
+                    lines.insert(i + 2, r"% \setmainfont{Times New Roman} % Bỏ comment nếu muốn ép dùng font này")
+                    injected = True
+                    break
+            if injected:
+                tex = '\n'.join(lines)
 
         # ── Vá lỗi apacite: \onemaskedcitationmsg + \maskedcitationsmsg undefined ──
         if r'\onemaskedcitationmsg' not in tex:
-            patch = r"\providecommand{\onemaskedcitationmsg}[1]{}" + "\n" + r"\providecommand{\maskedcitationsmsg}[1]{}" + "\n"
-            tex = re.sub(r'(\\begin\{document\})', patch.replace('\\', '\\\\') + r'\1', tex)
+            patch_lines = [
+                r"\providecommand{\onemaskedcitationmsg}[1]{}",
+                r"\providecommand{\maskedcitationsmsg}[1]{}"
+            ]
+            active_bd_pattern = re.compile(r'^(?!\s*%).*?\\begin\{document\}', re.MULTILINE)
+            lines = tex.split('\n')
+            patched = False
+            for i, line in enumerate(lines):
+                if not patched and active_bd_pattern.match(line):
+                    # Inject BEFORE \begin{document}
+                    for p_line in reversed(patch_lines):
+                        lines.insert(i, p_line)
+                    patched = True
+                    break
+            if patched:
+                tex = '\n'.join(lines)
 
         # 1. Clean up known publisher metadata (Always run)
         tex = cls._cleanup_publisher_metadata(tex, config)
@@ -76,7 +99,9 @@ class TemplatePreprocessor:
                 if getattr(t, 'nodeargd', None) and getattr(t.nodeargd, 'argnlist', None):
                     for arg in reversed(t.nodeargd.argnlist):
                         if arg and isinstance(arg, LatexGroupNode):
-                            replace_ops.append((arg.pos + 1, arg.pos_end - 1, '<< metadata.title >>'))
+                            title_tag = '<< metadata.title >>'
+                            title_tag = re.sub(r'\s+', ' ', title_tag).strip()
+                            replace_ops.append((arg.pos + 1, arg.pos + arg.len - 1, title_tag))
                             break
 
             # 2. Author & Affiliations - Universal approach
@@ -94,20 +119,37 @@ class TemplatePreprocessor:
                 print(f"[*] pylatexenc found {len(author_nodes)} author nodes. Revamping injection...")
                 first_author = author_nodes[0]
                 insert_pos = first_author.pos
-                replace_ops.append((insert_pos, insert_pos, '<< metadata.author_block >>'))
+                author_tag = '<< metadata.author_block >>'
+                author_tag = re.sub(r'\s+', ' ', author_tag).strip()
+                replace_ops.append((insert_pos, insert_pos, author_tag))
                 
                 for node in author_nodes:
-                    end_pos = node.pos_end
+                    end_pos = node.pos + node.len
                     while end_pos < len(tex):
                         rest = tex[end_pos:]
                         match = re.match(r'^(\s|%.*?\n)*', rest)
                         skip_len = match.end() if match else 0
-                        if end_pos + skip_len < len(tex) and tex[end_pos + skip_len] == '{':
-                            next_brace = end_pos + skip_len
-                            next_end = cls._find_matching_brace(tex, next_brace)
-                            if next_end != -1:
-                                end_pos = next_end + 1
+                        
+                        if end_pos + skip_len < len(tex):
+                            next_char = tex[end_pos + skip_len]
+                            
+                            if next_char == '{':
+                                next_end = cls._find_matching_brace(tex, end_pos + skip_len)
+                                if next_end != -1:
+                                    end_pos = next_end + 1
+                                    continue
+                            elif next_char == '[':
+                                closing_bracket = tex.find(']', end_pos + skip_len)
+                                if closing_bracket != -1:
+                                    end_pos = closing_bracket + 1
+                                    continue
+                            elif next_char in ('*', ']'):
+                                # '*' = star variant; ']' = orphaned closing bracket
+                                # (pylatexenc sometimes absorbs '[' into the node
+                                #  but leaves '*]' outside)
+                                end_pos = end_pos + skip_len + 1
                                 continue
+                                
                         break
                     replace_ops.append((node.pos, end_pos, ''))
 
@@ -116,7 +158,7 @@ class TemplatePreprocessor:
             abstracts_env = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname.lower() == abstract_env_raw.lower()]
             if abstracts_env:
                 ab = abstracts_env[0]
-                replace_ops.append((ab.pos, ab.pos_end, f'\\begin{{{ab.environmentname}}}\n<< metadata.abstract >>\n\\end{{{ab.environmentname}}}'))
+                replace_ops.append((ab.pos, ab.pos + ab.len, f'\\begin{{{ab.environmentname}}}\n<< metadata.abstract >>\n\\end{{{ab.environmentname}}}'))
             else:
                 abstracts_cmd = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == abstract_env_raw.lower()]
                 if abstracts_cmd:
@@ -124,14 +166,14 @@ class TemplatePreprocessor:
                     if getattr(ab, 'nodeargd', None) and getattr(ab.nodeargd, 'argnlist', None):
                         for arg in reversed(ab.nodeargd.argnlist):
                             if arg and isinstance(arg, LatexGroupNode):
-                                replace_ops.append((arg.pos + 1, arg.pos_end - 1, '<< metadata.abstract >>'))
+                                replace_ops.append((arg.pos + 1, arg.pos + arg.len - 1, '<< metadata.abstract >>'))
                                 break
 
             # 4. Processing Keywords
             kw_envs = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']]
             if kw_envs:
                 kw = kw_envs[0]
-                replace_ops.append((kw.pos, kw.pos_end, f'\\begin{{{kw.environmentname}}}\n<< metadata.keywords_str >>\n\\end{{{kw.environmentname}}}'))
+                replace_ops.append((kw.pos, kw.pos + kw.len, f'\\begin{{{kw.environmentname}}}\n<< metadata.keywords_str >>\n\\end{{{kw.environmentname}}}'))
             else:
                 kw_cmds = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']]
                 if kw_cmds:
@@ -139,7 +181,7 @@ class TemplatePreprocessor:
                     if getattr(kw, 'nodeargd', None) and getattr(kw.nodeargd, 'argnlist', None):
                         for arg in reversed(kw.nodeargd.argnlist):
                             if arg and isinstance(arg, LatexGroupNode):
-                                replace_ops.append((arg.pos + 1, arg.pos_end - 1, '<< metadata.keywords_str >>'))
+                                replace_ops.append((arg.pos + 1, arg.pos + arg.len - 1, '<< metadata.keywords_str >>'))
                                 break
 
             # Apply replacements from back to front
@@ -165,8 +207,18 @@ class TemplatePreprocessor:
                 res_tex = res_tex[:start] + text + res_tex[end:]
                 
             tex = res_tex
+
+            # Kích hoạt fallback lưu động nếu pylatexenc bỏ sót metadata do macro không chuẩn (vd \Title của MDPI)
+            if '<< metadata.title >>' not in tex:
+                tex = cls._process_title(tex, config)
+            if '<< metadata.author_block >>' not in tex:
+                tex = cls._process_authors(tex, config)
+            if '<< metadata.abstract >>' not in tex:
+                tex = cls._process_abstract(tex, config)
+            if '<< metadata.keywords_str >>' not in tex:
+                tex = cls._process_keywords(tex, config)
+
             print("[*] pylatexenc tagging hoàn tất cho metadata.")
-            
         except Exception as e:
             print(f"[WARN] pylatexenc thất bại ({e}), đang dùng Regex fallback an toàn...")
             # Note: _cleanup_publisher_metadata already ran before the try block.
@@ -178,6 +230,16 @@ class TemplatePreprocessor:
         # MỤC 4: Logic Body và References vẫn dùng Regex (ổn định hơn cho việc "quét sạch" dummy text)
         tex = cls._process_references(tex)
         tex = cls._process_body(tex)
+        
+        # MỤC 5: Xóa tùy chọn pdftex gây crash driver xcolor khi dùng xelatex
+        def remove_pdftex_option(match):
+            opts_str = match.group(1)
+            opts = [o.strip() for o in opts_str.split(',')]
+            opts = [o for o in opts if o.lower() != 'pdftex']
+            return r'\documentclass[' + ','.join(opts) + ']' if opts else r'\documentclass'
+
+        tex = re.sub(r'\\documentclass\s*\[([^\]]*)\]', remove_pdftex_option, tex)
+
         return tex
 
     # ── Utilities ──────────────────────────────────────────────────
@@ -420,7 +482,9 @@ class TemplatePreprocessor:
             start_open = match.end() - 1
             end_close = cls._find_matching_brace(tex, start_open)
             if end_close != -1:
-                tex = tex[:start_open + 1] + '<< metadata.title >>' + tex[end_close:]
+                title_tag = '<< metadata.title >>'
+                title_tag = re.sub(r'\s+', ' ', title_tag).strip()
+                tex = tex[:start_open + 1] + title_tag + tex[end_close:]
                 break
         return tex
 
@@ -521,7 +585,8 @@ class TemplatePreprocessor:
                     insert_pos = doc_match.end()
 
             if insert_pos != -1:
-                author_tag = "\n<< metadata.author_block >>\n"
+                author_tag = '<< metadata.author_block >>'
+                author_tag = re.sub(r'\s+', ' ', author_tag).strip()
                 tex = tex[:insert_pos] + author_tag + tex[insert_pos:]
 
         return tex

@@ -219,6 +219,44 @@ class MDPIAuthorStrategy(AuthorBlockStrategy):
 
         return block
 
+class OSCMAuthorStrategy(AuthorBlockStrategy):
+    def generate(self, authors: list) -> str:
+        r"""Generate author block in OSCM Journal format.
+        OSCM uses: \author[*]{Name}{Affiliation, Country}{email}
+        where [*] marks the corresponding author (first author by default).
+        """
+        parts = []
+        for i, author in enumerate(authors):
+            name = author['name']
+            # Extract affiliation and email from the author's affiliations
+            affil_text = ''
+            email_text = ''
+            for aff in author.get('affiliations', []):
+                lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
+                for line in lines:
+                    if '@' in line:
+                        if email_text:
+                            email_text += '; ' + line
+                        else:
+                            email_text = line
+                    else:
+                        if affil_text:
+                            affil_text += '; ' + line
+                        else:
+                            affil_text = line
+
+            if not affil_text:
+                affil_text = 'Affiliation, Country'
+            if not email_text:
+                email_text = 'email@example.com'
+
+            # First author is corresponding author [*]
+            star = '[*]' if i == 0 else ''
+            parts.append(f'\\author{star}{{{name}}}\n  {{{affil_text}}}\n  {{{email_text}}}')
+
+        return '\n\n'.join(parts)
+
+
 class GenericAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
         """Generate a generic \\author{} block with standard LaTeX commands."""
