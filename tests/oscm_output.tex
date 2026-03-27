@@ -1,0 +1,83 @@
+%% ====================================================================
+%% OSCM Journal — Author Template & Instructions
+%% ====================================================================
+%%
+%%  This file is the official author guide for the Operations and
+%%  Supply Chain Management (OSCM) Journal.  It doubles as a working
+%%  template: replace the sample content with your own manuscript.
+%%
+%%  SUBMISSION WORKFLOW:
+%%    - Use [preprint] for initial submission and review (single-column).
+%%    - Use [review] for double-blind peer review (single-column).
+%%    - Use [final] ONLY for the camera-ready version after acceptance.
+%%
+\PassOptionsToPackage{table,xcdraw}{xcolor}
+\PassOptionsToPackage{hidelinks}{hyperref}
+\documentclass[preprint]{oscmjournal}
+\usepackage{fontspec}
+% \setmainfont{Times New Roman} % Bỏ comment nếu muốn ép dùng font này
+% \documentclass[review]{oscmjournal}
+% \documentclass[final]{oscmjournal}
+%% ====================================================================
+
+%% ---- Additional packages --------------------------------------------
+%% The class already loads: amsmath, amssymb, bm, booktabs, multirow,
+%% array, diagbox, siunitx, graphicx, xcolor, hyperref, csquotes,
+%% multicol, ascmac, cuted, enumitem, caption, biblatex (APA), etc.
+%%
+%% Add ONLY packages the class does not provide:
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{amsthm}
+
+%% ---- Theorem-like environments --------------------------------------
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{remark}{Remark}
+
+%% ---- Bibliography ---------------------------------------------------
+\addbibresource{reference.bib}
+
+%% ---- Journal metadata (leave defaults during review) ----------------
+\renewcommand{\JournalVolume}{00}
+\renewcommand{\JournalNumber}{0}
+\renewcommand{\JournalYear}{2026}
+\renewcommand{\FirstPage}{1}
+\renewcommand{\RunningHeader}{Lastname1 \& Lastname2: Author Guidelines for Preparing Manuscripts for the OSCM Journal}
+
+%% ---- Title ----------------------------------------------------------
+\title{<< metadata.title >>}
+
+%% ---- Authors --------------------------------------------------------
+<< metadata.author_block >>
+
+  
+
+%% ---- Keywords -------------------------------------------------------
+\keywords{<< metadata.keywords_str >>}
+
+
+%% ====================================================================
+\makeatletter
+\@ifpackageloaded{amsmath}{}{\usepackage{amsmath}}
+\@ifpackageloaded{amssymb}{}{\usepackage{amssymb}}
+\@ifpackageloaded{xurl}{}{\usepackage{xurl}}
+\@ifpackageloaded{xcolor}{}{\usepackage{xcolor}}
+\@ifpackageloaded{graphicx}{}{\usepackage{graphicx}}
+\makeatother
+\providecommand{\onemaskedcitationmsg}[1]{}
+\providecommand{\maskedcitationsmsg}[1]{}
+\begin{document}
+%% ====================================================================
+
+\maketitle
+
+\begin{abstract}
+<< metadata.abstract >>
+\end{abstract}
+
+<< body >>
+
+\end{document}

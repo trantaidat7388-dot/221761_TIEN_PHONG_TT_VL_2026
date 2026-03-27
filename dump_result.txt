@@ -1,0 +1,20 @@
+\PassOptionsToPackage{table,xcdraw}{xcolor}
+\PassOptionsToPackage{hidelinks}{hyperref}
+\documentclass[preprints,article,submit,moreauthors]{Definitions/mdpi}
+\usepackage{fontspec}
+% \setmainfont{Times New Roman} % Bỏ comment nếu muốn ép dùng font này
+\makeatletter
+\@ifpackageloaded{amsmath}{}{\usepackage{amsmath}}
+\@ifpackageloaded{amssymb}{}{\usepackage{amssymb}}
+\@ifpackageloaded{xurl}{}{\usepackage{xurl}}
+\@ifpackageloaded{xcolor}{}{\usepackage{xcolor}}
+\@ifpackageloaded{graphicx}{}{\usepackage{graphicx}}
+\makeatother
+\providecommand{\onemaskedcitationmsg}[1]{}
+\providecommand{\maskedcitationsmsg}[1]{}
+\makeatletter\renewcommand{\contentleftcolumn}{}\makeatother
+\begin{document}
+
+<< body >>
+
+\end{document}
