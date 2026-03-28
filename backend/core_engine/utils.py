@@ -318,6 +318,8 @@ def detect_doc_class(template_src: str) -> str:
         return "mdpi"
     elif cls in ('oscmjournal', 'oscmjournalv2', 'oscmjournalv2.0'):
         return "oscm"
+    elif cls in ('jov',):
+        return "jov"
     else:
         return "generic"
 

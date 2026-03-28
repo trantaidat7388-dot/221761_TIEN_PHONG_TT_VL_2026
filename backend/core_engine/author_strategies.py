@@ -256,6 +256,44 @@ class OSCMAuthorStrategy(AuthorBlockStrategy):
 
         return '\n\n'.join(parts)
 
+class JOVAuthorStrategy(AuthorBlockStrategy):
+    def generate(self, authors: list) -> str:
+        r"""Generate author block for JOV Journal format.
+        JOV uses: \author{Family name}{First name(s)}{Institution}{Address}{homepage}{email}
+        """
+        parts = []
+        for author in authors:
+            name_parts = author['name'].split(' ', 1)
+            first_name = name_parts[0] if len(name_parts) > 1 else ''
+            family_name = name_parts[1] if len(name_parts) > 1 else author['name']
+            
+            affil_text = 'Institution'
+            address_text = 'Address'
+            email_text = 'email@example.com'
+            
+            affil_lines = []
+            for aff in author.get('affiliations', []):
+                lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
+                for line in lines:
+                    if '@' in line:
+                        email_text = line
+                    else:
+                        affil_lines.append(line)
+            
+            if affil_lines:
+                affil_text = affil_lines[0]
+                if len(affil_lines) > 1:
+                    address_text = ', '.join(affil_lines[1:])
+                else:
+                    address_text = ''
+                    
+            parts.append(
+                f"\\author{{{family_name}}}{{{first_name}}}"
+                f"{{{affil_text}}}{{{address_text}}}{{}}{{{email_text}}}"
+            )
+            
+        return "\n".join(parts)
+
 
 class GenericAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:

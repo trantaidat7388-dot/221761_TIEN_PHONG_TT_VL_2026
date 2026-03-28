@@ -9,6 +9,7 @@ from .author_strategies import (
     ACMAuthorStrategy,
     MDPIAuthorStrategy,
     OSCMAuthorStrategy,
+    JOVAuthorStrategy,
     GenericAuthorStrategy,
 )
 
@@ -152,7 +153,6 @@ class JinjaLaTeXRenderer:
         body_tex = self.render_body_nodes(ir_data.get('body', []))
         
         bib_file = self._generate_bib_file(ir_data.get('references', []), output_path)
-        references_block = self._generate_thebibliography(ir_data.get('references', []))
         
         # Detect document class to generate format-appropriate author block
         try:
@@ -163,6 +163,8 @@ class JinjaLaTeXRenderer:
             template_src = ""
         
         doc_class = detect_doc_class(template_src)
+
+        references_block = self._generate_thebibliography(ir_data.get('references', []), doc_class)
         
         # Override author_block with format-appropriate version
         metadata = dict(ir_data.get('metadata', {}))
@@ -211,12 +213,13 @@ class JinjaLaTeXRenderer:
             "acm": ACMAuthorStrategy(),
             "mdpi": MDPIAuthorStrategy(),
             "oscm": OSCMAuthorStrategy(),
+            "jov": JOVAuthorStrategy(),
         }
         
         strategy = strategies.get(doc_class, GenericAuthorStrategy())
         return strategy.generate(authors)
 
-    def _generate_thebibliography(self, references: list) -> str:
+    def _generate_thebibliography(self, references: list, doc_class: str = "generic") -> str:
         """Generate \\begin{thebibliography} block with numbered \\bibitem entries."""
         if not references:
             return ""
@@ -228,7 +231,11 @@ class JinjaLaTeXRenderer:
             # Strip leading numbers like "[1]" or "1. "
             text = re.sub(r'^\[?\d+\]?\s*\.?\s*', '', text).strip()
             if text:
-                items.append(f"\\bibitem{{ref{i+1}}} {text}")
+                if doc_class == "jov":
+                    # jovcite/apacite requires \bibitem to have an optional argument
+                    items.append(f"\\bibitem[{{\\relax }}]{{ref{i+1}}} {text}")
+                else:
+                    items.append(f"\\bibitem{{ref{i+1}}} {text}")
         if not items:
             return ""
         width_label = str(len(items))

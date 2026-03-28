@@ -45,19 +45,32 @@ class TemplatePreprocessor:
             if injected:
                 tex = '\n'.join(lines)
 
-        # ── Vá lỗi apacite: \onemaskedcitationmsg + \maskedcitationsmsg undefined ──
+        # ── Vá lỗi apacite / jovcite: provide missing commands ──
+        # jovcite.sty (2008) dựa trên apacite cũ, thiếu nhiều lệnh mà
+        # english.apc v6.03 (TeX Live 2026) gọi \renewcommand.
+        # Dùng \providecommand để tránh crash nếu chưa tồn tại,
+        # nhưng vô hại nếu đã có.
+        _apacite_patch_lines = [
+            r"\providecommand{\onemaskedcitationmsg}[1]{}",
+            r"\providecommand{\maskedcitationsmsg}[1]{}",
+            r"\providecommand{\BRetrievedFrom}{Retrieved from\ }",
+            r"\providecommand{\PrintOrdinal}[1]{#1}",
+            r"\providecommand{\CardinalNumeric}[1]{\number#1}",
+            r"\providecommand{\APACmonth}[1]{\ifcase #1\or January\or February\or March\or April\or May\or June\or July\or August\or September\or October\or November\or December\else {#1}\fi}",
+            r"\providecommand{\APACrefYearMonthDay}[3]{{(#1)}}",
+        ]
+        # Boolean flag that english.apc checks via \if@APAC@natbib@apa
+        _apacite_flag_line = r"\makeatletter\@ifundefined{if@APAC@natbib@apa}{\newif\if@APAC@natbib@apa}{}\makeatother"
+
         if r'\onemaskedcitationmsg' not in tex:
-            patch_lines = [
-                r"\providecommand{\onemaskedcitationmsg}[1]{}",
-                r"\providecommand{\maskedcitationsmsg}[1]{}"
-            ]
             active_bd_pattern = re.compile(r'^(?!\s*%).*?\\begin\{document\}', re.MULTILINE)
             lines = tex.split('\n')
             patched = False
             for i, line in enumerate(lines):
                 if not patched and active_bd_pattern.match(line):
                     # Inject BEFORE \begin{document}
-                    for p_line in reversed(patch_lines):
+                    all_patches = [_apacite_flag_line] + _apacite_patch_lines
+                    for p_line in reversed(all_patches):
                         lines.insert(i, p_line)
                     patched = True
                     break
@@ -75,26 +88,31 @@ class TemplatePreprocessor:
 
             replace_ops = [] # list of (start, end, replacement_text)
 
-            def traverse(nodes):
+            def traverse(nodes, in_def=False):
                 if not nodes: return []
                 found = []
                 for n in nodes:
+                    is_def = in_def
+                    if isinstance(n, LatexMacroNode) and n.macroname in ('newcommand', 'renewcommand', 'providecommand', 'def', 'let'):
+                        is_def = True
+                    n._is_definition = in_def
                     found.append(n)
                     if getattr(n, 'nodelist', None):
-                        found.extend(traverse(n.nodelist))
+                        found.extend(traverse(n.nodelist, is_def))
                     if getattr(n, 'nodeargd', None) and getattr(n.nodeargd, 'argnlist', None):
                         for arg in n.nodeargd.argnlist:
                             if arg:
+                                arg._is_definition = is_def
                                 found.append(arg)
                                 if getattr(arg, 'nodelist', None):
-                                    found.extend(traverse(arg.nodelist))
+                                    found.extend(traverse(arg.nodelist, is_def))
                 return found
 
             all_nodes = traverse(nodelist)
 
             # 1. Processing Title
             title_cmd_raw = config.get("title_command", "title").replace("\\", "")
-            titles = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == title_cmd_raw.lower()]
+            titles = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == title_cmd_raw.lower() and not getattr(n, '_is_definition', False)]
             for t in titles:
                 if getattr(t, 'nodeargd', None) and getattr(t.nodeargd, 'argnlist', None):
                     for arg in reversed(t.nodeargd.argnlist):
@@ -114,7 +132,7 @@ class TemplatePreprocessor:
                 'authorrunning', 'titlerunning'
             ]))
             
-            author_nodes = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in related_cmds]
+            author_nodes = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in related_cmds and not getattr(n, '_is_definition', False)]
             if author_nodes:
                 print(f"[*] pylatexenc found {len(author_nodes)} author nodes. Revamping injection...")
                 first_author = author_nodes[0]
@@ -125,6 +143,16 @@ class TemplatePreprocessor:
                 
                 for node in author_nodes:
                     end_pos = node.pos + node.len
+                    # pylatexenc quirk: for \author[a,1]{Name}, it often
+                    # absorbs the '[' into the node span but leaves
+                    # 'a,1]{Name}' as rest. Detect this by checking if the
+                    # node span ends with '['.
+                    if end_pos > 0 and tex[end_pos - 1] == '[':
+                        # Find the matching ']' first
+                        closing_bracket = tex.find(']', end_pos)
+                        if closing_bracket != -1:
+                            end_pos = closing_bracket + 1
+                    
                     while end_pos < len(tex):
                         rest = tex[end_pos:]
                         match = re.match(r'^(\s|%.*?\n)*', rest)
@@ -145,8 +173,6 @@ class TemplatePreprocessor:
                                     continue
                             elif next_char in ('*', ']'):
                                 # '*' = star variant; ']' = orphaned closing bracket
-                                # (pylatexenc sometimes absorbs '[' into the node
-                                #  but leaves '*]' outside)
                                 end_pos = end_pos + skip_len + 1
                                 continue
                                 
@@ -155,12 +181,12 @@ class TemplatePreprocessor:
 
             # 3. Processing Abstract
             abstract_env_raw = config.get("abstract_env", "abstract").replace("\\", "")
-            abstracts_env = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname.lower() == abstract_env_raw.lower()]
+            abstracts_env = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname.lower() == abstract_env_raw.lower() and not getattr(n, '_is_definition', False)]
             if abstracts_env:
                 ab = abstracts_env[0]
                 replace_ops.append((ab.pos, ab.pos + ab.len, f'\\begin{{{ab.environmentname}}}\n<< metadata.abstract >>\n\\end{{{ab.environmentname}}}'))
             else:
-                abstracts_cmd = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == abstract_env_raw.lower()]
+                abstracts_cmd = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == abstract_env_raw.lower() and not getattr(n, '_is_definition', False)]
                 if abstracts_cmd:
                     ab = abstracts_cmd[0]
                     if getattr(ab, 'nodeargd', None) and getattr(ab.nodeargd, 'argnlist', None):
@@ -170,12 +196,12 @@ class TemplatePreprocessor:
                                 break
 
             # 4. Processing Keywords
-            kw_envs = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']]
+            kw_envs = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms'] and not getattr(n, '_is_definition', False)]
             if kw_envs:
                 kw = kw_envs[0]
                 replace_ops.append((kw.pos, kw.pos + kw.len, f'\\begin{{{kw.environmentname}}}\n<< metadata.keywords_str >>\n\\end{{{kw.environmentname}}}'))
             else:
-                kw_cmds = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']]
+                kw_cmds = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms'] and not getattr(n, '_is_definition', False)]
                 if kw_cmds:
                     kw = kw_cmds[0]
                     if getattr(kw, 'nodeargd', None) and getattr(kw.nodeargd, 'argnlist', None):
@@ -491,6 +517,20 @@ class TemplatePreprocessor:
     # ── Phase 4: Authors ─────────────────────────────────────────
 
     @classmethod
+    def _replace_existing_author(cls, tex: str) -> str:
+        """Replace author macros with a single placeholder.
+        The first non‑commented \author (or \Author) macro is replaced by the
+        ``<< metadata.author_block >>`` placeholder. Any additional author macros
+        are removed entirely to avoid duplicate definitions.
+        """
+        # Find all matches of \author (optional star) with optional [] args
+        pattern = r'(?i)\\author\*?\s*(?:\[[^\]]*\])?\s*\{(?:[^{}]*|\{[^{}]*\})*\}'
+        # Find first non‑commented occurrence
+        match = re.search(pattern, tex)
+        if match and not cls._is_commented(tex, match.start()):
+            # Replace the whole match with placeholder
+            tex = tex[:match.start()] + "<< metadata.author_block >>" + tex[match.end():]
+        return tex
     def _process_authors(cls, tex: str, config: dict = None) -> str:
         config = config or {}
         r"""
@@ -499,6 +539,8 @@ class TemplatePreprocessor:
 
         Case-insensitive for \author / \Author (MDPI) and \address / \Address.
         """
+        # First, replace any existing \author definition with placeholder to avoid duplicate definitions
+        tex = cls._replace_existing_author(tex)
         commands_to_remove = [
             r'\\authorrunning', r'\\titlerunning',
             r'(?i)\\author(?!Names|note|mark|contributions)',  # \author/\Author but not \AuthorNames etc.
