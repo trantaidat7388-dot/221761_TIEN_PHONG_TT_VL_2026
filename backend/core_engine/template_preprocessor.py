@@ -45,19 +45,32 @@ class TemplatePreprocessor:
             if injected:
                 tex = '\n'.join(lines)
 
-        # ── Vá lỗi apacite: \onemaskedcitationmsg + \maskedcitationsmsg undefined ──
+        # ── Vá lỗi apacite / jovcite: provide missing commands ──
+        # jovcite.sty (2008) dựa trên apacite cũ, thiếu nhiều lệnh mà
+        # english.apc v6.03 (TeX Live 2026) gọi \renewcommand.
+        # Dùng \providecommand để tránh crash nếu chưa tồn tại,
+        # nhưng vô hại nếu đã có.
+        _apacite_patch_lines = [
+            r"\providecommand{\onemaskedcitationmsg}[1]{}",
+            r"\providecommand{\maskedcitationsmsg}[1]{}",
+            r"\providecommand{\BRetrievedFrom}{Retrieved from\ }",
+            r"\providecommand{\PrintOrdinal}[1]{#1}",
+            r"\providecommand{\CardinalNumeric}[1]{\number#1}",
+            r"\providecommand{\APACmonth}[1]{\ifcase #1\or January\or February\or March\or April\or May\or June\or July\or August\or September\or October\or November\or December\else {#1}\fi}",
+            r"\providecommand{\APACrefYearMonthDay}[3]{{(#1)}}",
+        ]
+        # Boolean flag that english.apc checks via \if@APAC@natbib@apa
+        _apacite_flag_line = r"\makeatletter\@ifundefined{if@APAC@natbib@apa}{\newif\if@APAC@natbib@apa}{}\makeatother"
+
         if r'\onemaskedcitationmsg' not in tex:
-            patch_lines = [
-                r"\providecommand{\onemaskedcitationmsg}[1]{}",
-                r"\providecommand{\maskedcitationsmsg}[1]{}"
-            ]
             active_bd_pattern = re.compile(r'^(?!\s*%).*?\\begin\{document\}', re.MULTILINE)
             lines = tex.split('\n')
             patched = False
             for i, line in enumerate(lines):
                 if not patched and active_bd_pattern.match(line):
                     # Inject BEFORE \begin{document}
-                    for p_line in reversed(patch_lines):
+                    all_patches = [_apacite_flag_line] + _apacite_patch_lines
+                    for p_line in reversed(all_patches):
                         lines.insert(i, p_line)
                     patched = True
                     break
@@ -125,6 +138,16 @@ class TemplatePreprocessor:
                 
                 for node in author_nodes:
                     end_pos = node.pos + node.len
+                    # pylatexenc quirk: for \author[a,1]{Name}, it often
+                    # absorbs the '[' into the node span but leaves
+                    # 'a,1]{Name}' as rest. Detect this by checking if the
+                    # node span ends with '['.
+                    if end_pos > 0 and tex[end_pos - 1] == '[':
+                        # Find the matching ']' first
+                        closing_bracket = tex.find(']', end_pos)
+                        if closing_bracket != -1:
+                            end_pos = closing_bracket + 1
+                    
                     while end_pos < len(tex):
                         rest = tex[end_pos:]
                         match = re.match(r'^(\s|%.*?\n)*', rest)
@@ -145,8 +168,6 @@ class TemplatePreprocessor:
                                     continue
                             elif next_char in ('*', ']'):
                                 # '*' = star variant; ']' = orphaned closing bracket
-                                # (pylatexenc sometimes absorbs '[' into the node
-                                #  but leaves '*]' outside)
                                 end_pos = end_pos + skip_len + 1
                                 continue
                                 
