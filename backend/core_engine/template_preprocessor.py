@@ -88,26 +88,31 @@ class TemplatePreprocessor:
 
             replace_ops = [] # list of (start, end, replacement_text)
 
-            def traverse(nodes):
+            def traverse(nodes, in_def=False):
                 if not nodes: return []
                 found = []
                 for n in nodes:
+                    is_def = in_def
+                    if isinstance(n, LatexMacroNode) and n.macroname in ('newcommand', 'renewcommand', 'providecommand', 'def', 'let'):
+                        is_def = True
+                    n._is_definition = in_def
                     found.append(n)
                     if getattr(n, 'nodelist', None):
-                        found.extend(traverse(n.nodelist))
+                        found.extend(traverse(n.nodelist, is_def))
                     if getattr(n, 'nodeargd', None) and getattr(n.nodeargd, 'argnlist', None):
                         for arg in n.nodeargd.argnlist:
                             if arg:
+                                arg._is_definition = is_def
                                 found.append(arg)
                                 if getattr(arg, 'nodelist', None):
-                                    found.extend(traverse(arg.nodelist))
+                                    found.extend(traverse(arg.nodelist, is_def))
                 return found
 
             all_nodes = traverse(nodelist)
 
             # 1. Processing Title
             title_cmd_raw = config.get("title_command", "title").replace("\\", "")
-            titles = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == title_cmd_raw.lower()]
+            titles = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == title_cmd_raw.lower() and not getattr(n, '_is_definition', False)]
             for t in titles:
                 if getattr(t, 'nodeargd', None) and getattr(t.nodeargd, 'argnlist', None):
                     for arg in reversed(t.nodeargd.argnlist):
@@ -127,7 +132,7 @@ class TemplatePreprocessor:
                 'authorrunning', 'titlerunning'
             ]))
             
-            author_nodes = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in related_cmds]
+            author_nodes = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in related_cmds and not getattr(n, '_is_definition', False)]
             if author_nodes:
                 print(f"[*] pylatexenc found {len(author_nodes)} author nodes. Revamping injection...")
                 first_author = author_nodes[0]
@@ -176,12 +181,12 @@ class TemplatePreprocessor:
 
             # 3. Processing Abstract
             abstract_env_raw = config.get("abstract_env", "abstract").replace("\\", "")
-            abstracts_env = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname.lower() == abstract_env_raw.lower()]
+            abstracts_env = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname.lower() == abstract_env_raw.lower() and not getattr(n, '_is_definition', False)]
             if abstracts_env:
                 ab = abstracts_env[0]
                 replace_ops.append((ab.pos, ab.pos + ab.len, f'\\begin{{{ab.environmentname}}}\n<< metadata.abstract >>\n\\end{{{ab.environmentname}}}'))
             else:
-                abstracts_cmd = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == abstract_env_raw.lower()]
+                abstracts_cmd = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == abstract_env_raw.lower() and not getattr(n, '_is_definition', False)]
                 if abstracts_cmd:
                     ab = abstracts_cmd[0]
                     if getattr(ab, 'nodeargd', None) and getattr(ab.nodeargd, 'argnlist', None):
@@ -191,12 +196,12 @@ class TemplatePreprocessor:
                                 break
 
             # 4. Processing Keywords
-            kw_envs = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']]
+            kw_envs = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms'] and not getattr(n, '_is_definition', False)]
             if kw_envs:
                 kw = kw_envs[0]
                 replace_ops.append((kw.pos, kw.pos + kw.len, f'\\begin{{{kw.environmentname}}}\n<< metadata.keywords_str >>\n\\end{{{kw.environmentname}}}'))
             else:
-                kw_cmds = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms']]
+                kw_cmds = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms'] and not getattr(n, '_is_definition', False)]
                 if kw_cmds:
                     kw = kw_cmds[0]
                     if getattr(kw, 'nodeargd', None) and getattr(kw.nodeargd, 'argnlist', None):
@@ -512,6 +517,20 @@ class TemplatePreprocessor:
     # ── Phase 4: Authors ─────────────────────────────────────────
 
     @classmethod
+    def _replace_existing_author(cls, tex: str) -> str:
+        """Replace author macros with a single placeholder.
+        The first non‑commented \author (or \Author) macro is replaced by the
+        ``<< metadata.author_block >>`` placeholder. Any additional author macros
+        are removed entirely to avoid duplicate definitions.
+        """
+        # Find all matches of \author (optional star) with optional [] args
+        pattern = r'(?i)\\author\*?\s*(?:\[[^\]]*\])?\s*\{(?:[^{}]*|\{[^{}]*\})*\}'
+        # Find first non‑commented occurrence
+        match = re.search(pattern, tex)
+        if match and not cls._is_commented(tex, match.start()):
+            # Replace the whole match with placeholder
+            tex = tex[:match.start()] + "<< metadata.author_block >>" + tex[match.end():]
+        return tex
     def _process_authors(cls, tex: str, config: dict = None) -> str:
         config = config or {}
         r"""
@@ -520,6 +539,8 @@ class TemplatePreprocessor:
 
         Case-insensitive for \author / \Author (MDPI) and \address / \Address.
         """
+        # First, replace any existing \author definition with placeholder to avoid duplicate definitions
+        tex = cls._replace_existing_author(tex)
         commands_to_remove = [
             r'\\authorrunning', r'\\titlerunning',
             r'(?i)\\author(?!Names|note|mark|contributions)',  # \author/\Author but not \AuthorNames etc.

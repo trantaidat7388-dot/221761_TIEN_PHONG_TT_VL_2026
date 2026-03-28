@@ -87,5 +87,17 @@
       "graphicalabstract",
       "highlights"
     ]
+  },
+  "jov": {
+    "title_command": "title",
+    "author_command": "author",
+    "abstract_env": "abstract",
+    "keywords_cmd": "keywords",
+    "strip_commands": [
+      "authorrunning",
+      "titlerunning"
+    ],
+    "multi_brace_commands": [],
+    "strip_environments": []
   }
 }
