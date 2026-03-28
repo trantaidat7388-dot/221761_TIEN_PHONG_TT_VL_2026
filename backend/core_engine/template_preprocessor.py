@@ -410,6 +410,7 @@ class TemplatePreprocessor:
         INJECT_BLOCK = (
             "\\makeatletter\n"
             "\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n"
+            "\\@ifundefined{Bbbk}{}{\\let\\Bbbk\\relax}\n"
             "\\@ifpackageloaded{amssymb}{}{\\usepackage{amssymb}}\n"
             "\\@ifpackageloaded{xurl}{}{\\usepackage{xurl}}\n"
             "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
@@ -676,22 +677,20 @@ class TemplatePreprocessor:
                 tex = tex[:start_open + 1] + '<< metadata.abstract >>' + tex[end_close:]
                 return cls._process_ieee_keywords(tex)
 
-        # Fallback: inject abstract block after author_block or after \begin{document}
+        # Fallback: inject abstract block after \maketitle or \begin{document}
         if '<< metadata.abstract >>' not in tex:
-            ab_pos = tex.find('<< metadata.author_block >>')
-            if ab_pos != -1:
-                # Insert after the author_block line
-                nl = tex.find('\n', ab_pos + len('<< metadata.author_block >>'))
-                insert_pos = nl if nl != -1 else ab_pos + len('<< metadata.author_block >>')
+            maketitle_match = re.search(r'^[ \t]*\\maketitle', tex, re.MULTILINE)
+            if maketitle_match:
+                insert_pos = maketitle_match.end()
                 tex = (tex[:insert_pos] +
-                       "\n\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}\n" +
+                       "\n\n\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}\n\n" +
                        tex[insert_pos:])
             else:
                 doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
                 if doc_match:
                     insert_pos = doc_match.end()
                     tex = (tex[:insert_pos] +
-                           "\n\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}\n" +
+                           "\n\n\\begin{abstract}\n<< metadata.abstract >>\n\\end{abstract}\n\n" +
                            tex[insert_pos:])
 
         return cls._process_ieee_keywords(tex)
@@ -776,6 +775,7 @@ class TemplatePreprocessor:
             r'\\begin\{thebibliography\}',
             r'\\bibliographystyle\{',
             r'\\bibliography\{',
+            r'\\printbibliography',
             r'<< references_block >>',
             r'\\end\{document\}'
         ]
@@ -937,14 +937,23 @@ class TemplatePreprocessor:
                               if m.start() < end_doc.start()]
                 bib_cmds = [m for m in re.finditer(r'^[ \t]*\\bibliography\{', tex, re.MULTILINE)
                             if m.start() < end_doc.start()]
-                bib_style = bib_styles[-1] if bib_styles else None
-                bib_cmd = bib_cmds[-1] if bib_cmds else None
-                start = bib_style.start() if bib_style else (bib_cmd.start() if bib_cmd else None)
-                if start is not None:
+                print_bibs = [m for m in re.finditer(r'^[ \t]*\\printbibliography\b', tex, re.MULTILINE)
+                              if m.start() < end_doc.start()]
+                
+                valid_starts = []
+                if bib_styles: valid_starts.append(bib_styles[-1].start())
+                if bib_cmds: valid_starts.append(bib_cmds[-1].start())
+                if print_bibs: valid_starts.append(print_bibs[-1].start())
+                
+                if valid_starts:
+                    start = max(valid_starts)
                     tex = tex[:start] + '\n<< references_block >>\n\n' + tex[end_doc.start():]
+                else:
+                    tex = tex[:end_doc.start()] + '\n<< references_block >>\n\n' + tex[end_doc.start():]
         else:
             # references_block already exists — just comment out the commands
             tex = re.sub(r'^(\s*)(\\bibliographystyle\{[^}]*\})', r'\1% \2', tex, flags=re.MULTILINE)
             tex = re.sub(r'^(\s*)(\\bibliography\{[^}]*\})', r'\1% \2', tex, flags=re.MULTILINE)
+            tex = re.sub(r'^(\s*)(\\printbibliography\b.*)', r'\1% \2', tex, flags=re.MULTILINE)
 
         return tex
