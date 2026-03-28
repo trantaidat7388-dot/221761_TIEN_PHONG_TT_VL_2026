@@ -128,8 +128,8 @@ class TemplatePreprocessor:
             related_cmds = {author_cmd_raw, 'author', 'Author', 'affil', 'affiliation', 'address', 'email', 'institute'}
             # Add publisher-specific ones from manifest
             related_cmds.update(config.get("author_related_cmds", [
-                'authornote', 'orcid', 'corres', 'firstnote', 'AuthorNames', 
-                'authorrunning', 'titlerunning'
+                'authornote', 'authornotemark', 'orcid', 'corres', 'firstnote', 'AuthorNames', 
+                'authorrunning', 'titlerunning', 'address', 'institute'
             ]))
             
             author_nodes = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in related_cmds and not getattr(n, '_is_definition', False)]
@@ -547,12 +547,14 @@ class TemplatePreprocessor:
             r'(?i)\\author(?!Names|note|mark|contributions)',  # \author/\Author but not \AuthorNames etc.
             r'(?i)\\affil(?:iation)?',   # \affil (Springer), \affiliation (ACM)
             r'(?i)\\address',
-            r'\\email',
-            r'\\institute',
+            r'(?i)\\email',
+            r'(?i)\\institute',
             r'\\authornote',             # ACM
+            r'\\authornotemark',         # ACM
             r'\\orcid',                  # ACM
             r'\\corres',                 # MDPI
             r'\\firstnote',              # MDPI
+            r'\\ead',                    # Elsevier
         ]
         author_cmd = config.get("author_command")
         if author_cmd:

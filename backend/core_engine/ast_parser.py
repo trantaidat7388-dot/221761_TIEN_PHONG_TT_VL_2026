@@ -727,23 +727,28 @@ class WordASTParser:
         if current:
             authors.append(current)
 
-        # Post-process: map superscript numbers in names to numbered affiliations
-        # Extract trailing digits from names and leading digits from affiliations
-        affil_map = {}  # number -> affiliation text
+        # Post-process: map superscript numbers/symbols in names to numbered affiliations
+        affil_map = {}  # marker -> affiliation text
+        unmapped_affils = []
         all_affils = []
         for a in authors:
             for af in a.get("affiliations", []):
                 all_affils.append(af)
-                m = re.match(r'^(\d+)\s+', af)
-                if m:
-                    affil_map[m.group(1)] = re.sub(r'^\d+\s+', '', af).strip()
+                m_num = re.match(r'^(\d+)\s+(.*)', af)
+                if m_num:
+                    affil_map[m_num.group(1)] = m_num.group(2).strip()
+                else:
+                    m_sym = re.search(r'([*†‡]+)', af)
+                    if m_sym:
+                        affil_map[m_sym.group(1)] = af.strip()
+                    else:
+                        unmapped_affils.append(af.strip())
 
-        # FIX 2: Collect emails from affiliations block (standalone email lines)
+        # FIX 2: Collect unmapped standalone emails
         email_pattern = re.compile(r'[\w\.\-\+]+@[\w\.\-]+')
         extracted_emails = []
-        for af in all_affils:
-            emails_in_line = email_pattern.findall(af)
-            extracted_emails.extend(emails_in_line)
+        for af in unmapped_affils:
+            extracted_emails.extend(email_pattern.findall(af))
 
         if affil_map:
             # FIX 2: Map by superscript numbers/symbols (*, †, ‡ included)
@@ -753,19 +758,18 @@ class WordASTParser:
                 num_match = re.search(r'([\d\*†‡,\s]+)$', name)
                 if num_match:
                     raw_markers = num_match.group(1)
-                    # Extract only digit parts for affil_map lookup
-                    nums = re.findall(r'\d+', raw_markers)
+                    markers = re.findall(r'\d+|[*†‡]', raw_markers)
                     a["name"] = name[:num_match.start()].strip()
                     a["affiliations"] = []
-                    for n in nums:
-                        if n in affil_map:
-                            a["affiliations"].append(affil_map[n])
-                    # If * present and no numbered affil found, fall back to all
-                    if not a["affiliations"] and '*' in raw_markers:
+                    for mk in markers:
+                        if mk in affil_map:
+                            a["affiliations"].append(affil_map[mk])
+                    # If * present and no mapped affil found, fall back to all
+                    if not a["affiliations"] and '*' in raw_markers and '*' not in affil_map:
                         a["affiliations"] = list(affil_map.values())
                 else:
-                    # No superscript => give all affiliations
-                    a["affiliations"] = list(affil_map.values())
+                    # No markers => give all numbered affiliations as fallback
+                    a["affiliations"] = [v for k, v in affil_map.items() if str(k).isdigit()]
         elif len(authors) > 1:
             # Fallback: if some have no affil, share all
             any_empty = any(not a.get("affiliations") for a in authors)
@@ -774,13 +778,13 @@ class WordASTParser:
                 for a in authors:
                     a["affiliations"] = all_affils[:]
 
-        # FIX 2: Attach extracted emails to authors who have no email yet
+        # FIX 2: Attach remaining extracted emails to authors who have no email yet
         if extracted_emails:
             email_idx = 0
             for a in authors:
                 has_email = any('@' in aff for aff in a.get('affiliations', []))
                 if not has_email and email_idx < len(extracted_emails):
-                    a.setdefault('email', extracted_emails[email_idx])
+                    a.setdefault('affiliations', []).append(extracted_emails[email_idx])
                     email_idx += 1
 
         return authors

@@ -4,7 +4,7 @@
     "author_command": "author",
     "abstract_env": "abstract",
     "keywords_env": "IEEEkeywords",
-    "strip_commands": [],
+    "strip_commands": ["affil", "affiliation", "authorblockA", "authorblockN"],
     "multi_brace_commands": [],
     "strip_environments": []
   },
@@ -39,7 +39,9 @@
     "keywords_cmd": "keywords",
     "strip_commands": [
       "authorrunning",
-      "titlerunning"
+      "titlerunning",
+      "institute",
+      "email"
     ],
     "multi_brace_commands": [],
     "strip_environments": []
@@ -52,6 +54,7 @@
     "strip_commands": [
       "AuthorNames",
       "secondnote",
+      "secondaddress",
       "thirdnote",
       "fourthnote",
       "fifthnote",
@@ -65,7 +68,11 @@
       "authorcontributions",
       "funding",
       "abbreviations",
-      "appendixtitles"
+      "appendixtitles",
+      "address",
+      "email",
+      "corres",
+      "firstnote"
     ],
     "multi_brace_commands": [],
     "strip_environments": []
@@ -80,7 +87,9 @@
       "tnotetext",
       "fntext",
       "cortext",
-      "ead"
+      "ead",
+      "affiliation",
+      "address"
     ],
     "multi_brace_commands": [],
     "strip_environments": [
