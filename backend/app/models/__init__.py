@@ -1,10 +1,21 @@
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
+"""SQLAlchemy model definitions for the application domain.
+
+This module keeps all ORM entities in one import location to preserve
+backward compatibility with existing imports:
+    from backend.app import models
+"""
+
 from datetime import datetime
-from .database import Base
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy.orm import relationship
+
+from ..database import Base
 
 
 class User(Base):
+    """Application user account."""
+
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -25,6 +36,8 @@ class User(Base):
 
 
 class ConversionHistory(Base):
+    """Tracks each conversion request/result for a user."""
+
     __tablename__ = "conversion_history"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -33,7 +46,7 @@ class ConversionHistory(Base):
     file_name = Column(String)
     template_name = Column(String)
     status = Column(String)
-    file_path = Column(String, default="")   # local path to output .zip
+    file_path = Column(String, default="")
     pages_count = Column(Integer, default=0, nullable=False)
     token_cost = Column(Integer, default=0, nullable=False)
     token_refunded = Column(Boolean, default=False, nullable=False)
@@ -45,6 +58,8 @@ class ConversionHistory(Base):
 
 
 class TokenLedger(Base):
+    """Ledger table for all token balance changes."""
+
     __tablename__ = "token_ledger"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -60,6 +75,8 @@ class TokenLedger(Base):
 
 
 class AdminAuditLog(Base):
+    """Audit trail for admin actions."""
+
     __tablename__ = "admin_audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)

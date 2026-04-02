@@ -87,6 +87,14 @@ word2latex.db
 
 # Logs
 server_log.txt
+backend/job_info.txt
+backend/recent_files.txt
+backend/recent_logs_full.txt
+backend/recent_tex.txt
+backend/recent_tex_full.txt
+backend/texsoup_out.txt
+backend/verify_debug.txt
+backend/verify_out.txt
 
 # Local environment files (secrets)
 .env

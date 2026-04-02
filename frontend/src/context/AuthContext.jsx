@@ -76,6 +76,19 @@ export const BoBaoBocXacThuc = ({ children }) => {
     useEffect(() => {
         let daHuy = false
 
+        const xuLyTokenTuUrl = () => {
+            try {
+                const params = new URLSearchParams(window.location.search)
+                const tokenTuUrl = (params.get('token') || '').trim()
+                if (!tokenTuUrl) return
+                localStorage.setItem(TOKEN_KEY, tokenTuUrl)
+                const newUrl = `${window.location.origin}${window.location.pathname}`
+                window.history.replaceState({}, document.title, newUrl)
+            } catch {
+                // Ignore malformed URL parsing errors.
+            }
+        }
+
         const xacThucTokenDaLuu = async ({ imLang = false } = {}) => {
             const tokenDaLuu = localStorage.getItem(TOKEN_KEY)
             if (!tokenDaLuu) {
@@ -96,6 +109,7 @@ export const BoBaoBocXacThuc = ({ children }) => {
             if (!imLang && !daHuy) datDangTai(false)
         }
 
+        xuLyTokenTuUrl()
         xacThucTokenDaLuu()
 
         const xuLyTrangThaiTab = () => {

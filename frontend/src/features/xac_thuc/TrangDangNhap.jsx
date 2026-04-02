@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dungXacThuc } from '../../context/AuthContext'
+import { DIA_CHI_API_GOC } from '../../config/apiConfig'
 
 const TrangDangNhap = () => {
   const navigate = useNavigate()
@@ -312,6 +313,14 @@ const TrangDangNhap = () => {
           <div className="mt-5 pt-5 border-t border-white/10">
             <p className="text-white/50 text-xs text-center mb-3">Hoặc tiếp tục với Google</p>
             <div id="google-signin-btn" className="flex justify-center" />
+            <div className="flex justify-center mt-3">
+              <a
+                href={`${DIA_CHI_API_GOC}/api/auth/google/login`}
+                className="text-xs text-primary-300 hover:text-primary-200 underline"
+              >
+                Đăng nhập Google (Redirect Flow)
+              </a>
+            </div>
             {!import.meta.env?.VITE_GOOGLE_CLIENT_ID && (
               <p className="text-xs text-amber-300/80 text-center mt-2">
                 Chưa cấu hình VITE_GOOGLE_CLIENT_ID

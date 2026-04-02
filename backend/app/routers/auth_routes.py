@@ -8,14 +8,22 @@ import os
 from datetime import datetime, timedelta
 from urllib import parse, request as urlrequest
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .. import models
 from .. import auth
 from ..database import lay_db
-from ..config import PREMIUM_SELF_SUBSCRIBE_DAYS, PREMIUM_SELF_SUBSCRIBE_TOKEN_COST
+from ..config import (
+    FRONTEND_URL,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI,
+    PREMIUM_SELF_SUBSCRIBE_DAYS,
+    PREMIUM_SELF_SUBSCRIBE_TOKEN_COST,
+)
 
 router = APIRouter(prefix="/api", tags=["Auth & History"])
 
@@ -52,6 +60,24 @@ def _serialize_user(user: models.User) -> dict:
         "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None,
         "auth_provider": user.auth_provider,
         "created_at": user.created_at.isoformat() if user.created_at else None,
+    }
+
+
+def _tao_auth_payload(user: models.User) -> dict:
+    token = auth.tao_access_token({"sub": str(user.id)})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+            "plan_type": user.plan_type,
+            "token_balance": user.token_balance,
+            "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None,
+            "auth_provider": user.auth_provider,
+        },
     }
 
 
@@ -95,6 +121,88 @@ def _tao_username_tu_google(db: Session, email: str, display_name: str = "") -> 
         counter += 1
         candidate = f"{base}{counter}"
     return candidate
+
+
+def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, google_name: str) -> models.User:
+    user = db.query(models.User).filter(models.User.google_id == google_sub).first()
+
+    if user is None:
+        user_by_email = db.query(models.User).filter(models.User.email == google_email).first()
+        if user_by_email:
+            user_by_email.google_id = google_sub
+            user_by_email.auth_provider = "google"
+            user = user_by_email
+        else:
+            user = models.User(
+                username=_tao_username_tu_google(db, google_email, google_name),
+                email=google_email,
+                hashed_password=auth.bam_mat_khau(os.urandom(24).hex()),
+                role="user",
+                plan_type="free",
+                token_balance=5000,
+                auth_provider="google",
+                google_id=google_sub,
+            )
+            db.add(user)
+
+        db.commit()
+        db.refresh(user)
+
+    return user
+
+
+def _lay_google_user_info_tu_authorization_code(code: str) -> dict:
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(status_code=500, detail="Thiếu GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET")
+
+    token_payload = parse.urlencode(
+        {
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
+    ).encode("utf-8")
+
+    try:
+        token_req = urlrequest.Request(
+            "https://oauth2.googleapis.com/token",
+            data=token_payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        with urlrequest.urlopen(token_req, timeout=10) as resp:
+            token_data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Không thể đổi authorization code từ Google")
+
+    access_token = (token_data.get("access_token") or "").strip()
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Google không trả về access_token")
+
+    try:
+        userinfo_req = urlrequest.Request(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            method="GET",
+        )
+        with urlrequest.urlopen(userinfo_req, timeout=10) as resp:
+            info = json.loads(resp.read().decode("utf-8", errors="ignore"))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Không thể lấy thông tin user từ Google")
+
+    google_email = (info.get("email") or "").strip().lower()
+    google_sub = (info.get("sub") or "").strip()
+    email_verified = bool(info.get("email_verified"))
+    google_name = (info.get("name") or "").strip()
+
+    if not google_sub or not google_email:
+        raise HTTPException(status_code=401, detail="Google userinfo thiếu thông tin định danh")
+    if not email_verified:
+        raise HTTPException(status_code=401, detail="Email Google chưa được xác minh")
+
+    return {"sub": google_sub, "email": google_email, "name": google_name}
 
 @router.post("/auth/register")
 def dang_ky(req: YeuCauDangKy, db: Session = Depends(lay_db)) -> dict:
@@ -166,45 +274,37 @@ def dang_nhap_voi_google(req: YeuCauDangNhapGoogle, db: Session = Depends(lay_db
     google_email = google_info["email"]
     google_name = google_info["name"]
 
-    user = db.query(models.User).filter(models.User.google_id == google_sub).first()
+    user = _dong_bo_tai_khoan_google(db, google_sub, google_email, google_name)
+    return _tao_auth_payload(user)
 
-    if user is None:
-        user_by_email = db.query(models.User).filter(models.User.email == google_email).first()
-        if user_by_email:
-            user_by_email.google_id = google_sub
-            user_by_email.auth_provider = "google"
-            user = user_by_email
-        else:
-            user = models.User(
-                username=_tao_username_tu_google(db, google_email, google_name),
-                email=google_email,
-                hashed_password=auth.bam_mat_khau(os.urandom(24).hex()),
-                role="user",
-                plan_type="free",
-                token_balance=5000,
-                auth_provider="google",
-                google_id=google_sub,
-            )
-            db.add(user)
 
-        db.commit()
-        db.refresh(user)
+@router.get("/auth/google/login")
+def dang_nhap_google_redirect() -> RedirectResponse:
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Thiếu cấu hình GOOGLE_CLIENT_ID")
 
-    token = auth.tao_access_token({"sub": str(user.id)})
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "role": user.role,
-            "plan_type": user.plan_type,
-            "token_balance": user.token_balance,
-            "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None,
-            "auth_provider": user.auth_provider,
-        },
-    }
+    query = parse.urlencode(
+        {
+            "client_id": GOOGLE_CLIENT_ID,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "response_type": "code",
+            "scope": "openid email profile",
+            "access_type": "online",
+            "prompt": "select_account",
+        }
+    )
+    return RedirectResponse(url=f"https://accounts.google.com/o/oauth2/v2/auth?{query}")
+
+
+@router.get("/auth/google/callback")
+def google_callback(code: str, request: Request, db: Session = Depends(lay_db)) -> RedirectResponse:
+    _ = request  # reserved for future state validation / audit logging.
+    google_info = _lay_google_user_info_tu_authorization_code(code)
+    user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"])
+
+    payload = _tao_auth_payload(user)
+    token = payload["access_token"]
+    return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/dang-nhap?token={parse.quote(token)}")
 
 @router.get("/auth/me")
 def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> dict:

@@ -15,6 +15,10 @@ def _lay_so_nguyen_tu_env(name: str, default: int, min_value: int = 0) -> int:
         value = default
     return max(min_value, value)
 
+
+def _lay_chuoi_tu_env(name: str, default: str = "") -> str:
+    return os.getenv(name, default).strip()
+
 # Thư mục gốc dự án
 BASE_DIR = Path(__file__).parent.parent.parent
 
@@ -50,6 +54,9 @@ OUTPUT_TTL_HOURS = _lay_so_nguyen_tu_env('OUTPUT_TTL_HOURS', 24, min_value=1)
 # Logging
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').strip().upper() or 'INFO'
 
+# Frontend / OAuth URLs
+FRONTEND_URL = _lay_chuoi_tu_env('FRONTEND_URL', 'http://localhost:5173')
+
 # API giới hạn upload
 MAX_DOC_UPLOAD_MB = _lay_so_nguyen_tu_env('MAX_DOC_UPLOAD_MB', 10, min_value=1)
 MAX_TEMPLATE_UPLOAD_MB = _lay_so_nguyen_tu_env('MAX_TEMPLATE_UPLOAD_MB', 20, min_value=1)
@@ -63,6 +70,11 @@ TOKEN_WORDS_PER_UNIT = _lay_so_nguyen_tu_env('TOKEN_WORDS_PER_UNIT', 2250, min_v
 TOKEN_MIN_COST = _lay_so_nguyen_tu_env('TOKEN_MIN_COST', 1, min_value=1)
 PREMIUM_SELF_SUBSCRIBE_DAYS = _lay_so_nguyen_tu_env('PREMIUM_SELF_SUBSCRIBE_DAYS', 30, min_value=1)
 PREMIUM_SELF_SUBSCRIBE_TOKEN_COST = _lay_so_nguyen_tu_env('PREMIUM_SELF_SUBSCRIBE_TOKEN_COST', 12000, min_value=1)
+
+# Google OAuth redirect flow
+GOOGLE_CLIENT_ID = _lay_chuoi_tu_env('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = _lay_chuoi_tu_env('GOOGLE_CLIENT_SECRET')
+GOOGLE_REDIRECT_URI = _lay_chuoi_tu_env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/auth/google/callback')
 
 # Rate limiting
 RATE_LIMIT_AUTH_PER_MINUTE = _lay_so_nguyen_tu_env('RATE_LIMIT_AUTH_PER_MINUTE', 30, min_value=5)
