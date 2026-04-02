@@ -13,7 +13,10 @@ import backend.app.routers.chuyen_doi as router_chuyen_doi
 import backend.app.routers.templates as router_templates
 
 
-client = TestClient(app)
+@pytest.fixture()
+def client():
+    with TestClient(app) as c:
+        yield c
 
 
 class GiaLapBoChuyenDoi:
@@ -39,7 +42,11 @@ def _gia_lap_dong_goi_thu_muc_dau_ra(work_dir: str, output_zip_path: str, exclud
     return output_zip_path
 
 
-def test_smoke_upload_template_tex(tmp_path, monkeypatch) -> None:
+async def _cleanup_noop(*_args, **_kwargs) -> None:
+    return None
+
+
+def test_smoke_upload_template_tex(tmp_path, monkeypatch, client) -> None:
     monkeypatch.setattr(router_templates, "CUSTOM_TEMPLATE_FOLDER", tmp_path)
     tep_tex = b"\\documentclass{article}\\begin{document}A\\end{document}"
 
@@ -53,9 +60,11 @@ def test_smoke_upload_template_tex(tmp_path, monkeypatch) -> None:
     assert data["thanhCong"] is True
 
 
-def test_smoke_chuyen_doi_stream(tmp_path, monkeypatch) -> None:
+def test_smoke_chuyen_doi_stream(tmp_path, monkeypatch, client) -> None:
     monkeypatch.setattr(router_chuyen_doi, "ChuyenDoiWordSangLatex", GiaLapBoChuyenDoi)
     monkeypatch.setattr(router_chuyen_doi, "dong_goi_thu_muc_dau_ra", _gia_lap_dong_goi_thu_muc_dau_ra)
+    monkeypatch.setattr(router_chuyen_doi, "don_dep_sau_thoi_gian", _cleanup_noop)
+    monkeypatch.setattr(router_chuyen_doi, "SSE_CLEANUP_DELAY_SECONDS", 0)
 
     tep_word = b"gia lap noi dung word"
     tep_template = b"\\documentclass{article}\\begin{document}<<content>><< /content >>\\end{document}"
