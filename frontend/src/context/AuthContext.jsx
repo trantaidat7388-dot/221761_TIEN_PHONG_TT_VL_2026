@@ -37,10 +37,14 @@ export const BoBaoBocXacThuc = ({ children }) => {
     }
 
     const luuPhien = (accessToken, duLieuNguoiDung) => {
+        const userNormalized = {
+            ...duLieuNguoiDung,
+            role: duLieuNguoiDung?.role || 'user'
+        }
         localStorage.setItem(TOKEN_KEY, accessToken)
-        localStorage.setItem(USER_KEY, JSON.stringify(duLieuNguoiDung))
+        localStorage.setItem(USER_KEY, JSON.stringify(userNormalized))
         datToken(accessToken)
-        datNguoiDung(duLieuNguoiDung)
+        datNguoiDung(userNormalized)
     }
 
     const xoaPhien = () => {
@@ -142,8 +146,39 @@ export const BoBaoBocXacThuc = ({ children }) => {
         return data.user
     }
 
+    const dangNhapGoogle = async (googleIdToken) => {
+        const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_token: googleIdToken })
+        })
+        const data = await resp.json().catch(() => ({}))
+        if (!resp.ok) throw new Error(data.detail || 'Đăng nhập Google thất bại')
+        luuPhien(data.access_token, data.user)
+        return data.user
+    }
+
     const dangXuat = () => {
         xoaPhien()
+    }
+
+    const capNhatTaiKhoan = async (payload) => {
+        const tokenDangDung = localStorage.getItem(TOKEN_KEY)
+        if (!tokenDangDung) throw new Error('Phiên đăng nhập không hợp lệ')
+
+        const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/me`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${tokenDangDung}`
+            },
+            body: JSON.stringify(payload)
+        })
+        const data = await resp.json().catch(() => ({}))
+        if (!resp.ok) throw new Error(data.detail || 'Không thể cập nhật thông tin tài khoản')
+
+        luuPhien(tokenDangDung, data.user)
+        return data.user
     }
 
     if (dangTai) {
@@ -156,7 +191,7 @@ export const BoBaoBocXacThuc = ({ children }) => {
 
     return (
         <NguCanhXacThuc.Provider
-            value={{ nguoiDung, token, dangTai, dangNhap, dangKy, dangXuat }}
+            value={{ nguoiDung, token, dangTai, dangNhap, dangKy, dangNhapGoogle, dangXuat, capNhatTaiKhoan }}
         >
             {children}
         </NguCanhXacThuc.Provider>

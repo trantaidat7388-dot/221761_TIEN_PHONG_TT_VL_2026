@@ -22,6 +22,7 @@ from ..utils.api_utils import xoa_thu_muc_an_toan, don_dep_sau_15_phut, don_dep_
 from ..database import lay_db
 from .. import models
 from .. import auth
+from ..services import token_service
 
 # Nhập các module lõi từ core_engine
 from backend.core_engine.chuyen_doi import ChuyenDoiWordSangLatex
@@ -36,13 +37,45 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Chuyển Đổi"])
 
+
+def _ghi_lich_su_chuyen_doi(
+    db: Session,
+    user_id: int,
+    job_id: str,
+    file_name: str,
+    template_name: str,
+    status: str,
+    file_path: str,
+    pages_count: int,
+    token_cost: int,
+    token_refunded: bool = False,
+    error_type: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    history_record = models.ConversionHistory(
+        user_id=user_id,
+        job_id=job_id,
+        file_name=file_name,
+        template_name=template_name,
+        status=status,
+        file_path=file_path,
+        pages_count=pages_count,
+        token_cost=token_cost,
+        token_refunded=token_refunded,
+        error_type=error_type,
+        error_message=error_message,
+    )
+    db.add(history_record)
+    db.commit()
+
 @router.post("/chuyen-doi")
 async def chuyen_doi_file(
     background_tasks: BackgroundTasks,
     request: Request,
     file: UploadFile = File(...),
     template_type: str = Query("ieee_conference", description="ieee_conference hoặc custom_xxx"),
-    template_file: UploadFile = File(None, description="Tùy chọn: file .tex hoặc .zip chứa template")
+    template_file: UploadFile = File(None, description="Tùy chọn: file .tex hoặc .zip chứa template"),
+    db: Session = Depends(lay_db)
 ) -> JSONResponse:
     """Endpoint chuyển đổi file Word → LaTeX (chế độ thường)."""
     
@@ -50,12 +83,44 @@ async def chuyen_doi_file(
     if not (ten_file.endswith('.docx') or ten_file.endswith('.docm')):
         raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .docx hoặc .docm")
     
+    current_user = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1]
+        try:
+            current_user = auth.lay_nguoi_dung_hien_tai(token=token, db=db)
+        except Exception as e:
+            logger.warning("Bearer token không hợp lệ cho request /chuyen-doi", exc_info=e)
+
     contents = await file.read()
     if len(contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(status_code=400, detail=f"File quá lớn. Kích thước tối đa {MAX_DOC_UPLOAD_MB}MB")
     
     job_id = str(uuid.uuid4())
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    token_usage = {
+        "pages_count": 0,
+        "token_cost": 0,
+        "balance_after": None,
+        "deducted": False,
+        "refunded": False,
+    }
+
+    if current_user is not None:
+        pages_estimate = token_service.uoc_tinh_so_trang_tu_noi_dung_word(contents)
+        deduction = token_service.tru_token_cho_chuyen_doi(
+            db=db,
+            user_id=current_user.id,
+            so_trang_uoc_tinh=pages_estimate,
+            job_id=job_id,
+        )
+        token_usage.update({
+            "pages_count": deduction["pages_count"],
+            "token_cost": deduction["token_cost"],
+            "balance_after": deduction["balance_after"],
+            "deducted": True,
+        })
+
     request_id = getattr(request.state, "request_id", "-")
     logger.info(
         "request_id=%s job_id=%s upload_received file=%s template=%s",
@@ -193,6 +258,22 @@ async def chuyen_doi_file(
         except Exception as e:
             logger.warning("Không thể copy ZIP sang outputs", exc_info=e)
 
+        if current_user is not None:
+            try:
+                _ghi_lich_su_chuyen_doi(
+                    db=db,
+                    user_id=current_user.id,
+                    job_id=job_id,
+                    file_name=file.filename,
+                    template_name=template_type,
+                    status="Thành công",
+                    file_path=str(OUTPUTS_FOLDER / zip_filename),
+                    pages_count=token_usage["pages_count"],
+                    token_cost=token_usage["token_cost"],
+                )
+            except Exception as hist_err:
+                logger.warning("Không thể lưu lịch sử conversion /chuyen-doi", exc_info=hist_err)
+
         logger.info(
             "request_id=%s job_id=%s conversion_success output_zip=%s",
             request_id,
@@ -211,11 +292,83 @@ async def chuyen_doi_file(
                 "so_hinh_anh": so_hinh_anh,
                 "so_cong_thuc": so_cong_thuc,
                 "so_bang": so_bang,
-                "thoi_gian_xu_ly_giay": round(thoi_gian_xu_ly_giay, 2)
-            }
+                "thoi_gian_xu_ly_giay": round(thoi_gian_xu_ly_giay, 2),
+                "pages_count": token_usage["pages_count"],
+                "token_cost": token_usage["token_cost"],
+                "token_balance_after": token_usage["balance_after"],
+            },
+            "token_usage": {
+                "pages_count": token_usage["pages_count"],
+                "token_cost": token_usage["token_cost"],
+                "token_balance_after": token_usage["balance_after"],
+            },
         })
-    except HTTPException: raise
+    except HTTPException as loi_http:
+        if current_user is not None and token_usage["deducted"] and not token_usage["refunded"]:
+            try:
+                token_service.hoan_token_chuyen_doi(
+                    db=db,
+                    user_id=current_user.id,
+                    token_cost=token_usage["token_cost"],
+                    job_id=job_id,
+                    pages_count=token_usage["pages_count"],
+                )
+                token_usage["refunded"] = True
+            except Exception as refund_err:
+                logger.warning("Hoàn token thất bại cho request /chuyen-doi", exc_info=refund_err)
+
+        if current_user is not None:
+            try:
+                _ghi_lich_su_chuyen_doi(
+                    db=db,
+                    user_id=current_user.id,
+                    job_id=job_id,
+                    file_name=file.filename,
+                    template_name=template_type,
+                    status="Thất bại",
+                    file_path="",
+                    pages_count=token_usage["pages_count"],
+                    token_cost=token_usage["token_cost"],
+                    token_refunded=token_usage["refunded"],
+                    error_type="HTTPException",
+                    error_message=str(getattr(loi_http, "detail", "")),
+                )
+            except Exception as hist_err:
+                logger.warning("Lưu lịch sử thất bại /chuyen-doi (HTTPException)", exc_info=hist_err)
+        raise
     except Exception as loi:
+        if current_user is not None and token_usage["deducted"] and not token_usage["refunded"]:
+            try:
+                token_service.hoan_token_chuyen_doi(
+                    db=db,
+                    user_id=current_user.id,
+                    token_cost=token_usage["token_cost"],
+                    job_id=job_id,
+                    pages_count=token_usage["pages_count"],
+                )
+                token_usage["refunded"] = True
+            except Exception as refund_err:
+                logger.warning("Hoàn token thất bại cho lỗi runtime /chuyen-doi", exc_info=refund_err)
+
+        if current_user is not None:
+            try:
+                _ghi_lich_su_chuyen_doi(
+                    db=db,
+                    user_id=current_user.id,
+                    job_id=job_id,
+                    file_name=file.filename,
+                    template_name=template_type,
+                    status="Thất bại",
+                    file_path="",
+                    pages_count=token_usage["pages_count"],
+                    token_cost=token_usage["token_cost"],
+                    token_refunded=token_usage["refunded"],
+                    error_type=type(loi).__name__,
+                    error_message=str(loi),
+                )
+            except Exception as hist_err:
+                logger.warning("Lưu lịch sử thất bại /chuyen-doi (runtime)", exc_info=hist_err)
+
         logger.exception("request_id=%s job_id=%s conversion_failed", request_id, job_id)
         return JSONResponse(status_code=400, content={"error": f"Lỗi: {str(loi) or 'không xác định'}"})
     finally:
@@ -270,12 +423,34 @@ async def chuyen_doi_file_stream(
         output_path = job_folder / output_filename
         images_folder = job_folder / "images"
         images_folder.mkdir(parents=True, exist_ok=True)
+        token_usage = {
+            "pages_count": 0,
+            "token_cost": 0,
+            "balance_after": None,
+            "deducted": False,
+            "refunded": False,
+        }
 
         def sse_event(step, msg, **extra):
             payload = {"step": step, "msg": msg, **extra}
             return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
         try:
+            if current_user is not None:
+                pages_estimate = token_service.uoc_tinh_so_trang_tu_noi_dung_word(contents)
+                deduction = token_service.tru_token_cho_chuyen_doi(
+                    db=db,
+                    user_id=current_user.id,
+                    so_trang_uoc_tinh=pages_estimate,
+                    job_id=job_id,
+                )
+                token_usage.update({
+                    "pages_count": deduction["pages_count"],
+                    "token_cost": deduction["token_cost"],
+                    "balance_after": deduction["balance_after"],
+                    "deducted": True,
+                })
+
             yield sse_event(1, "Đang tải file lên server...")
             with open(input_path, "wb") as f: f.write(contents)
 
@@ -380,21 +555,64 @@ async def chuyen_doi_file_stream(
 
             if current_user is not None:
                 try:
-                    history_record = models.ConversionHistory(
-                        user_id=current_user.id, job_id=job_id, file_name=file.filename,
-                        template_name=template_type, status="Thành công", file_path=str(output_zip_path)
+                    _ghi_lich_su_chuyen_doi(
+                        db=db,
+                        user_id=current_user.id,
+                        job_id=job_id,
+                        file_name=file.filename,
+                        template_name=template_type,
+                        status="Thành công",
+                        file_path=str(output_zip_path),
+                        pages_count=token_usage["pages_count"],
+                        token_cost=token_usage["token_cost"],
                     )
-                    db.add(history_record)
-                    db.commit()
                 except Exception as hist_err:
                     logger.warning("Không thể lưu lịch sử conversion", exc_info=hist_err)
 
             yield sse_event(5, "Hoàn tất!", done=True, job_id=job_id, ten_file_zip=zip_filename,
                             ten_file_latex=output_filename, tex_content=tex_raw,
                             metadata={"so_trang": None, "so_hinh_anh": so_hinh_anh, "so_cong_thuc": so_cong_thuc,
-                                      "so_bang": so_bang, "thoi_gian_xu_ly_giay": round(thoi_gian_xu_ly_giay, 2)})
+                                      "so_bang": so_bang, "thoi_gian_xu_ly_giay": round(thoi_gian_xu_ly_giay, 2),
+                                      "pages_count": token_usage["pages_count"],
+                                      "token_cost": token_usage["token_cost"],
+                                      "token_balance_after": token_usage["balance_after"]},
+                            token_usage={"pages_count": token_usage["pages_count"],
+                                         "token_cost": token_usage["token_cost"],
+                                         "token_balance_after": token_usage["balance_after"]})
         except Exception as loi:
             req_id = getattr(request.state, "request_id", "-")
+            if current_user is not None and token_usage["deducted"] and not token_usage["refunded"]:
+                try:
+                    token_service.hoan_token_chuyen_doi(
+                        db=db,
+                        user_id=current_user.id,
+                        token_cost=token_usage["token_cost"],
+                        job_id=job_id,
+                        pages_count=token_usage["pages_count"],
+                    )
+                    token_usage["refunded"] = True
+                except Exception as refund_err:
+                    logger.warning("Hoàn token thất bại cho SSE conversion", exc_info=refund_err)
+
+            if current_user is not None:
+                try:
+                    _ghi_lich_su_chuyen_doi(
+                        db=db,
+                        user_id=current_user.id,
+                        job_id=job_id,
+                        file_name=file.filename,
+                        template_name=template_type,
+                        status="Thất bại",
+                        file_path="",
+                        pages_count=token_usage["pages_count"],
+                        token_cost=token_usage["token_cost"],
+                        token_refunded=token_usage["refunded"],
+                        error_type=type(loi).__name__,
+                        error_message=str(loi),
+                    )
+                except Exception as hist_err:
+                    logger.warning("Không thể lưu lịch sử thất bại SSE", exc_info=hist_err)
+
             logger.exception("request_id=%s job_id=%s sse_conversion_failed", req_id, job_id)
             yield sse_event(-1, str(loi) or "Lỗi không xác định", error=True)
         finally:

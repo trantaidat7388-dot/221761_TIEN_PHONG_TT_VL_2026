@@ -7,8 +7,10 @@ import {
   FileText,
   Upload,
   History,
+  Settings,
   LogOut,
   User,
+  Shield,
   Menu,
   X,
   ChevronDown
@@ -25,10 +27,14 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
   const [dropdownMo, setDropdownMo] = useState(false)
   const [avatarLoi, setAvatarLoi] = useState(false)
 
-  const danhSachMenu = [
+  const danhSachMenuCoBan = [
     { duongDan: '/chuyen-doi', nhan: 'Chuyển đổi', icon: Upload },
     { duongDan: '/lich-su', nhan: 'Lịch sử', icon: History },
+    { duongDan: '/tai-khoan', nhan: 'Tài khoản', icon: Settings },
   ]
+  const danhSachMenu = nguoiDung?.role === 'admin'
+    ? [...danhSachMenuCoBan, { duongDan: '/admin', nhan: 'Quản trị', icon: Shield }]
+    : danhSachMenuCoBan
 
   const xuLyDangXuat = () => {
     // Đăng xuất bằng JWT

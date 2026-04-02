@@ -6,6 +6,8 @@ import { ThanhDieuHuong } from './components'
 import { TrangDangNhap } from './features/xac_thuc'
 import { TrangChuyenDoi } from './features/chuyen_doi'
 import { TrangLichSu } from './features/lich_su'
+import { TrangAdmin } from './features/admin'
+import { TrangTaiKhoan } from './features/tai_khoan'
 
 // Layout chung cho các trang có thanh điều hướng
 const BoCucChung = () => {
@@ -39,6 +41,14 @@ const CacTuyenUngDung = () => {
         <Route
           path="/lich-su"
           element={nguoiDung ? <TrangLichSu nguoiDung={nguoiDung} /> : <Navigate to="/dang-nhap" replace />}
+        />
+        <Route
+          path="/tai-khoan"
+          element={nguoiDung ? <TrangTaiKhoan /> : <Navigate to="/dang-nhap" replace />}
+        />
+        <Route
+          path="/admin"
+          element={nguoiDung?.role === 'admin' ? <TrangAdmin /> : <Navigate to="/chuyen-doi" replace />}
         />
       </Route>
 

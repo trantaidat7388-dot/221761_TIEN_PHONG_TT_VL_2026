@@ -86,3 +86,12 @@ def lay_nguoi_dung_hien_tai(
         raise credentials_exception
     return user
 
+
+def yeu_cau_quyen_admin(current_user: models.User = Depends(lay_nguoi_dung_hien_tai)) -> models.User:
+    if (current_user.role or "user").lower() != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền truy cập tài nguyên quản trị",
+        )
+    return current_user
+
