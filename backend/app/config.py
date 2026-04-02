@@ -61,6 +61,8 @@ SSE_CLEANUP_DELAY_SECONDS = _lay_so_nguyen_tu_env('SSE_CLEANUP_DELAY_SECONDS', 3
 TOKEN_WORDS_PER_PAGE = _lay_so_nguyen_tu_env('TOKEN_WORDS_PER_PAGE', 450, min_value=100)
 TOKEN_WORDS_PER_UNIT = _lay_so_nguyen_tu_env('TOKEN_WORDS_PER_UNIT', 2250, min_value=100)
 TOKEN_MIN_COST = _lay_so_nguyen_tu_env('TOKEN_MIN_COST', 1, min_value=1)
+PREMIUM_SELF_SUBSCRIBE_DAYS = _lay_so_nguyen_tu_env('PREMIUM_SELF_SUBSCRIBE_DAYS', 30, min_value=1)
+PREMIUM_SELF_SUBSCRIBE_TOKEN_COST = _lay_so_nguyen_tu_env('PREMIUM_SELF_SUBSCRIBE_TOKEN_COST', 12000, min_value=1)
 
 # Rate limiting
 RATE_LIMIT_AUTH_PER_MINUTE = _lay_so_nguyen_tu_env('RATE_LIMIT_AUTH_PER_MINUTE', 30, min_value=5)

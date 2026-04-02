@@ -366,6 +366,41 @@ export const capNhatThongTinTaiKhoan = async (payload) => {
   }
 }
 
+export const layThongTinGoiPremium = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/premium/options`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const dangKyGoiPremium = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/premium/subscribe`, {
+      method: 'POST',
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
 export const xoaLichSuChuyenDoi = async (recordId) => {
   try {
     const response = await fetch(`${DIA_CHI_API_GOC}/api/history/${recordId}`, {
@@ -708,6 +743,8 @@ export default {
   layLichSuChuyenDoi,
   xoaLichSuChuyenDoi,
   capNhatThongTinTaiKhoan,
+  layThongTinGoiPremium,
+  dangKyGoiPremium,
   layTongQuanAdmin,
   layDanhSachNguoiDungAdmin,
   capNhatVaiTroNguoiDungAdmin,

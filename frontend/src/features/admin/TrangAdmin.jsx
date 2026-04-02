@@ -20,11 +20,13 @@ import { NutBam } from '../../components'
 
 const TrangAdmin = () => {
   const [dangTai, setDangTai] = useState(true)
+  const [tuKhoaTimNguoiDung, setTuKhoaTimNguoiDung] = useState('')
   const [tongQuan, setTongQuan] = useState(null)
   const [danhSachNguoiDung, setDanhSachNguoiDung] = useState([])
   const [danhSachLichSu, setDanhSachLichSu] = useState([])
   const [danhSachTemplate, setDanhSachTemplate] = useState([])
   const [selectedUserId, setSelectedUserId] = useState(null)
+  const [selectedUserSummary, setSelectedUserSummary] = useState(null)
   const [chiTietLichSuUser, setChiTietLichSuUser] = useState([])
   const [chiTietLedgerUser, setChiTietLedgerUser] = useState([])
 
@@ -81,6 +83,8 @@ const TrangAdmin = () => {
 
   const taiChiTietNguoiDung = async (userId) => {
     setSelectedUserId(userId)
+    const user = danhSachNguoiDung.find((u) => u.id === userId)
+    setSelectedUserSummary(user || null)
     const [historyRes, ledgerRes] = await Promise.all([
       layLichSuTheoNguoiDungAdmin(userId, 30),
       layTokenLedgerTheoNguoiDungAdmin(userId, 50),
@@ -164,6 +168,16 @@ const TrangAdmin = () => {
 
   const topRecentHistory = useMemo(() => danhSachLichSu.slice(0, 20), [danhSachLichSu])
 
+  const danhSachNguoiDungDaLoc = useMemo(() => {
+    const keyword = (tuKhoaTimNguoiDung || '').trim().toLowerCase()
+    if (!keyword) return danhSachNguoiDung
+    return danhSachNguoiDung.filter((u) => {
+      const username = (u.username || '').toLowerCase()
+      const email = (u.email || '').toLowerCase()
+      return username.includes(keyword) || email.includes(keyword)
+    })
+  }, [danhSachNguoiDung, tuKhoaTimNguoiDung])
+
   const dinhDangNgayGio = (value) => {
     if (!(value instanceof Date)) return '-'
     return value.toLocaleString('vi-VN')
@@ -218,6 +232,18 @@ const TrangAdmin = () => {
               <Users className="w-5 h-5 text-primary-300" />
               Người dùng
             </h2>
+            <div className="mb-3">
+              <input
+                type="text"
+                value={tuKhoaTimNguoiDung}
+                onChange={(e) => setTuKhoaTimNguoiDung(e.target.value)}
+                placeholder="Tìm theo username hoặc email..."
+                className="w-full rounded-lg border border-white/15 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:border-primary-300"
+              />
+              <p className="text-xs text-white/50 mt-1">
+                Hiển thị {danhSachNguoiDungDaLoc.length}/{danhSachNguoiDung.length} người dùng. Bấm vào dòng để xem lịch sử chuyển đổi.
+              </p>
+            </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm text-white/90">
                 <thead>
@@ -232,13 +258,19 @@ const TrangAdmin = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {danhSachNguoiDung.map((u) => (
-                    <tr key={u.id} className="border-b border-white/5">
+                  {danhSachNguoiDungDaLoc.map((u) => (
+                    <tr
+                      key={u.id}
+                      className={`border-b border-white/5 cursor-pointer transition-colors ${selectedUserId === u.id ? 'bg-sky-500/10' : 'hover:bg-white/5'}`}
+                      onClick={() => taiChiTietNguoiDung(u.id)}
+                      title="Bấm để xem lịch sử chuyển đổi"
+                    >
                       <td className="py-2 pr-2">{u.username}</td>
                       <td className="py-2 pr-2">{u.email}</td>
                       <td className="py-2 pr-2">
                         <select
                           value={u.role || 'user'}
+                          onClick={(e) => e.stopPropagation()}
                           onChange={(e) => xuLyDoiVaiTro(u.id, e.target.value)}
                           className="bg-slate-800 border border-white/20 rounded-lg px-2 py-1"
                         >
@@ -254,14 +286,14 @@ const TrangAdmin = () => {
                       <td className="py-2 pr-2 font-semibold text-amber-300">{u.token_balance ?? 0}</td>
                       <td className="py-2 pr-2">{u.so_lan_chuyen_doi}</td>
                       <td className="py-2 space-x-2">
-                        <button onClick={() => taiChiTietNguoiDung(u.id)} className="text-sky-300 hover:text-sky-200 text-xs">Chi tiết</button>
-                        <button onClick={() => xuLyCapNhatPremium(u.id, u.plan_type !== 'premium')} className="text-emerald-300 hover:text-emerald-200 text-xs">
+                        <button onClick={(e) => { e.stopPropagation(); taiChiTietNguoiDung(u.id) }} className="text-sky-300 hover:text-sky-200 text-xs">Chi tiết</button>
+                        <button onClick={(e) => { e.stopPropagation(); xuLyCapNhatPremium(u.id, u.plan_type !== 'premium') }} className="text-emerald-300 hover:text-emerald-200 text-xs">
                           {u.plan_type === 'premium' ? 'Hạ Premium' : 'Nâng Premium'}
                         </button>
-                        <button onClick={() => xuLyCongToken(u.id)} className="text-amber-300 hover:text-amber-200 text-xs">+Token</button>
-                        <button onClick={() => xuLyTruToken(u.id)} className="text-orange-300 hover:text-orange-200 text-xs">-Token</button>
+                        <button onClick={(e) => { e.stopPropagation(); xuLyCongToken(u.id) }} className="text-amber-300 hover:text-amber-200 text-xs">+Token</button>
+                        <button onClick={(e) => { e.stopPropagation(); xuLyTruToken(u.id) }} className="text-orange-300 hover:text-orange-200 text-xs">-Token</button>
                         <button
-                          onClick={() => xuLyXoaNguoiDung(u.id)}
+                          onClick={(e) => { e.stopPropagation(); xuLyXoaNguoiDung(u.id) }}
                           className="inline-flex items-center gap-1 text-red-300 hover:text-red-200 text-xs"
                         >
                           <Trash2 className="w-3.5 h-3.5" /> Xóa
@@ -269,9 +301,11 @@ const TrangAdmin = () => {
                       </td>
                     </tr>
                   ))}
-                  {!danhSachNguoiDung.length && (
+                  {!danhSachNguoiDungDaLoc.length && (
                     <tr>
-                      <td className="py-3 text-white/60" colSpan={7}>Không có dữ liệu người dùng</td>
+                      <td className="py-3 text-white/60" colSpan={7}>
+                        {danhSachNguoiDung.length ? 'Không tìm thấy người dùng phù hợp' : 'Không có dữ liệu người dùng'}
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -312,7 +346,10 @@ const TrangAdmin = () => {
 
         {selectedUserId && (
           <section className="glass-card p-4 mt-6">
-            <h2 className="text-white font-semibold text-lg mb-4">Chi tiết tài khoản #{selectedUserId}</h2>
+            <h2 className="text-white font-semibold text-lg mb-4">
+              Chi tiết tài khoản #{selectedUserId}
+              {selectedUserSummary ? ` - ${selectedUserSummary.username} (${selectedUserSummary.email})` : ''}
+            </h2>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <div>
                 <h3 className="text-white/80 font-medium mb-2">Lịch sử chuyển đổi gần nhất</h3>

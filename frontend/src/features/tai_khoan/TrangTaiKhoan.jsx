@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { UserCog, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dungXacThuc } from '../../context/AuthContext'
 import { NutBam } from '../../components'
 
 const TrangTaiKhoan = () => {
-  const { nguoiDung, capNhatTaiKhoan } = dungXacThuc()
+  const { nguoiDung, capNhatTaiKhoan, lamMoiThongTinNguoiDung } = dungXacThuc()
+  const laTaiKhoanGoogle = (nguoiDung?.auth_provider || '').toLowerCase() === 'google'
   const [dangLuu, setDangLuu] = useState(false)
   const [formData, setFormData] = useState({
     username: nguoiDung?.username || '',
@@ -20,20 +21,39 @@ const TrangTaiKhoan = () => {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      username: nguoiDung?.username || '',
+      email: nguoiDung?.email || '',
+    }))
+  }, [nguoiDung?.username, nguoiDung?.email])
+
+  useEffect(() => {
+    lamMoiThongTinNguoiDung({ imLang: true })
+
+    const xuLyFocus = () => {
+      lamMoiThongTinNguoiDung({ imLang: true })
+    }
+
+    window.addEventListener('focus', xuLyFocus)
+    return () => window.removeEventListener('focus', xuLyFocus)
+  }, [])
+
   const xuLyLuu = async (e) => {
     e.preventDefault()
 
-    if (!formData.currentPassword) {
+    if (!laTaiKhoanGoogle && !formData.currentPassword) {
       toast.error('Vui lòng nhập mật khẩu hiện tại để xác nhận')
       return
     }
 
-    if (formData.newPassword && formData.newPassword.length < 6) {
+    if (!laTaiKhoanGoogle && formData.newPassword && formData.newPassword.length < 6) {
       toast.error('Mật khẩu mới phải có ít nhất 6 ký tự')
       return
     }
 
-    if (formData.newPassword && formData.newPassword !== formData.confirmNewPassword) {
+    if (!laTaiKhoanGoogle && formData.newPassword && formData.newPassword !== formData.confirmNewPassword) {
       toast.error('Xác nhận mật khẩu mới không khớp')
       return
     }
@@ -41,9 +61,9 @@ const TrangTaiKhoan = () => {
     const payload = {
       username: formData.username,
       email: formData.email,
-      current_password: formData.currentPassword,
     }
-    if (formData.newPassword) payload.new_password = formData.newPassword
+    if (!laTaiKhoanGoogle && formData.currentPassword) payload.current_password = formData.currentPassword
+    if (!laTaiKhoanGoogle && formData.newPassword) payload.new_password = formData.newPassword
 
     setDangLuu(true)
     try {
@@ -114,48 +134,56 @@ const TrangTaiKhoan = () => {
             />
           </div>
 
-          <div className="pt-2 border-t border-white/10">
-            <p className="text-white text-sm font-medium mb-3">Đổi mật khẩu (tùy chọn)</p>
+          {!laTaiKhoanGoogle ? (
+            <div className="pt-2 border-t border-white/10">
+              <p className="text-white text-sm font-medium mb-3">Đổi mật khẩu (tùy chọn)</p>
 
-            <div className="mb-3">
-              <label htmlFor="currentPassword" className="block text-white/80 text-sm mb-2">Mật khẩu hiện tại (bắt buộc)</label>
-              <input
-                id="currentPassword"
-                name="currentPassword"
-                type="password"
-                value={formData.currentPassword}
-                onChange={xuLyThayDoiInput}
-                className="input-glass"
-                placeholder="Nhập mật khẩu hiện tại"
-              />
-            </div>
+              <div className="mb-3">
+                <label htmlFor="currentPassword" className="block text-white/80 text-sm mb-2">Mật khẩu hiện tại (bắt buộc)</label>
+                <input
+                  id="currentPassword"
+                  name="currentPassword"
+                  type="password"
+                  value={formData.currentPassword}
+                  onChange={xuLyThayDoiInput}
+                  className="input-glass"
+                  placeholder="Nhập mật khẩu hiện tại"
+                />
+              </div>
 
-            <div className="mb-3">
-              <label htmlFor="newPassword" className="block text-white/80 text-sm mb-2">Mật khẩu mới</label>
-              <input
-                id="newPassword"
-                name="newPassword"
-                type="password"
-                value={formData.newPassword}
-                onChange={xuLyThayDoiInput}
-                className="input-glass"
-                placeholder="Để trống nếu không đổi"
-              />
-            </div>
+              <div className="mb-3">
+                <label htmlFor="newPassword" className="block text-white/80 text-sm mb-2">Mật khẩu mới</label>
+                <input
+                  id="newPassword"
+                  name="newPassword"
+                  type="password"
+                  value={formData.newPassword}
+                  onChange={xuLyThayDoiInput}
+                  className="input-glass"
+                  placeholder="Để trống nếu không đổi"
+                />
+              </div>
 
-            <div>
-              <label htmlFor="confirmNewPassword" className="block text-white/80 text-sm mb-2">Xác nhận mật khẩu mới</label>
-              <input
-                id="confirmNewPassword"
-                name="confirmNewPassword"
-                type="password"
-                value={formData.confirmNewPassword}
-                onChange={xuLyThayDoiInput}
-                className="input-glass"
-                placeholder="Nhập lại mật khẩu mới"
-              />
+              <div>
+                <label htmlFor="confirmNewPassword" className="block text-white/80 text-sm mb-2">Xác nhận mật khẩu mới</label>
+                <input
+                  id="confirmNewPassword"
+                  name="confirmNewPassword"
+                  type="password"
+                  value={formData.confirmNewPassword}
+                  onChange={xuLyThayDoiInput}
+                  className="input-glass"
+                  placeholder="Nhập lại mật khẩu mới"
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="pt-2 border-t border-white/10">
+              <p className="text-white/70 text-sm">
+                Tài khoản của bạn đăng nhập bằng Google. Bạn có thể cập nhật tên và email mà không cần mật khẩu tại đây.
+              </p>
+            </div>
+          )}
 
           <div className="pt-2">
             <NutBam type="submit" icon={Save} dangTai={dangLuu}>

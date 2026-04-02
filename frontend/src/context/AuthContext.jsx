@@ -6,7 +6,7 @@ import { DIA_CHI_API_GOC } from '../config/apiConfig'
 const TOKEN_KEY = 'word2latex_token'
 const USER_KEY = 'word2latex_user'
 const SU_KIEN_PHIEN_HET_HAN = 'xac-thuc:het-han'
-const CHU_KY_XAC_THUC_MS = 5 * 60 * 1000
+const CHU_KY_XAC_THUC_MS = 60 * 1000
 
 const NguCanhXacThuc = createContext(null)
 
@@ -21,6 +21,24 @@ export const BoBaoBocXacThuc = ({ children }) => {
         }
     })
     const [dangTai, datDangTai] = useState(true)
+
+    const lamMoiThongTinNguoiDung = async ({ imLang = true } = {}) => {
+        const tokenDangDung = localStorage.getItem(TOKEN_KEY)
+        if (!tokenDangDung) return null
+        try {
+            const resp = await goiApiThongTinNguoiDung(tokenDangDung)
+            if (resp.ok) {
+                const duLieuNguoiDung = await resp.json()
+                luuPhien(tokenDangDung, duLieuNguoiDung)
+                return duLieuNguoiDung
+            }
+            xoaPhien()
+            return null
+        } catch {
+            if (!imLang) throw new Error('Không thể làm mới thông tin người dùng')
+            return null
+        }
+    }
 
     const goiApiThongTinNguoiDung = async (tokenDangDung) => {
         const controller = new AbortController()
@@ -191,7 +209,7 @@ export const BoBaoBocXacThuc = ({ children }) => {
 
     return (
         <NguCanhXacThuc.Provider
-            value={{ nguoiDung, token, dangTai, dangNhap, dangKy, dangNhapGoogle, dangXuat, capNhatTaiKhoan }}
+            value={{ nguoiDung, token, dangTai, dangNhap, dangKy, dangNhapGoogle, dangXuat, capNhatTaiKhoan, lamMoiThongTinNguoiDung }}
         >
             {children}
         </NguCanhXacThuc.Provider>

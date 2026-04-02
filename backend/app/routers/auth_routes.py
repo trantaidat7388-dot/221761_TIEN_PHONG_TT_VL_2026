@@ -5,6 +5,7 @@ auth_routes.py
 
 import json
 import os
+from datetime import datetime, timedelta
 from urllib import parse, request as urlrequest
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from .. import auth
 from ..database import lay_db
+from ..config import PREMIUM_SELF_SUBSCRIBE_DAYS, PREMIUM_SELF_SUBSCRIBE_TOKEN_COST
 
 router = APIRouter(prefix="/api", tags=["Auth & History"])
 
@@ -36,6 +38,21 @@ class YeuCauCapNhatTaiKhoan(BaseModel):
     email: str | None = None
     current_password: str | None = None
     new_password: str | None = None
+
+
+def _serialize_user(user: models.User) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "plan_type": user.plan_type,
+        "token_balance": user.token_balance,
+        "premium_started_at": user.premium_started_at.isoformat() if user.premium_started_at else None,
+        "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None,
+        "auth_provider": user.auth_provider,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+    }
 
 
 def _xac_thuc_google_id_token(id_token: str) -> dict:
@@ -192,17 +209,68 @@ def dang_nhap_voi_google(req: YeuCauDangNhapGoogle, db: Session = Depends(lay_db
 @router.get("/auth/me")
 def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> dict:
     """Trả về thông tin người dùng đang đăng nhập dựa trên JWT token."""
+    return _serialize_user(current_user)
+
+
+@router.get("/premium/options")
+def lay_goi_premium(current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> dict:
     return {
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "role": current_user.role,
-        "plan_type": current_user.plan_type,
-        "token_balance": current_user.token_balance,
-        "premium_started_at": current_user.premium_started_at.isoformat() if current_user.premium_started_at else None,
-        "premium_expires_at": current_user.premium_expires_at.isoformat() if current_user.premium_expires_at else None,
-        "auth_provider": current_user.auth_provider,
-        "created_at": current_user.created_at.isoformat()
+        "goi_mac_dinh": {
+            "plan_key": "premium_30d",
+            "name": "Premium 30 ngay",
+            "so_ngay": PREMIUM_SELF_SUBSCRIBE_DAYS,
+            "token_cost": PREMIUM_SELF_SUBSCRIBE_TOKEN_COST,
+        },
+        "nguoi_dung": {
+            "id": current_user.id,
+            "plan_type": current_user.plan_type,
+            "token_balance": current_user.token_balance,
+            "premium_expires_at": current_user.premium_expires_at.isoformat() if current_user.premium_expires_at else None,
+        },
+    }
+
+
+@router.post("/premium/subscribe")
+def dang_ky_goi_premium(
+    db: Session = Depends(lay_db),
+    current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai),
+) -> dict:
+    now = datetime.utcnow()
+    if current_user.plan_type == "premium" and current_user.premium_expires_at and current_user.premium_expires_at > now:
+        raise HTTPException(status_code=400, detail="Tài khoản đã có premium đang hiệu lực")
+
+    token_cost = PREMIUM_SELF_SUBSCRIBE_TOKEN_COST
+    if current_user.token_balance < token_cost:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Không đủ token để đăng ký premium. Cần {token_cost} token",
+        )
+
+    current_user.token_balance -= token_cost
+    current_user.plan_type = "premium"
+    current_user.premium_started_at = now
+    current_user.premium_expires_at = now + timedelta(days=PREMIUM_SELF_SUBSCRIBE_DAYS)
+
+    db.add(
+        models.TokenLedger(
+            user_id=current_user.id,
+            delta_token=-token_cost,
+            balance_after=current_user.token_balance,
+            reason="premium_subscribe",
+            meta_json=f"days={PREMIUM_SELF_SUBSCRIBE_DAYS}",
+        )
+    )
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "thanh_cong": True,
+        "thong_bao": "Đăng ký premium thành công",
+        "goi": {
+            "so_ngay": PREMIUM_SELF_SUBSCRIBE_DAYS,
+            "token_cost": token_cost,
+        },
+        "user": _serialize_user(current_user),
     }
 
 
@@ -222,10 +290,17 @@ def cap_nhat_thong_tin_ban_than(
     if not co_thay_doi:
         raise HTTPException(status_code=400, detail="Không có thông tin nào để cập nhật")
 
-    if not req.current_password:
+    la_tai_khoan_google = (current_user.auth_provider or "").strip().lower() == "google"
+
+    if la_tai_khoan_google and req.new_password is not None:
+        raise HTTPException(status_code=400, detail="Tài khoản Google không hỗ trợ đổi mật khẩu tại đây")
+
+    can_xac_nhan_mat_khau = not la_tai_khoan_google
+
+    if can_xac_nhan_mat_khau and not req.current_password:
         raise HTTPException(status_code=400, detail="Vui lòng nhập mật khẩu hiện tại để xác nhận")
 
-    if not auth.xac_minh_mat_khau(req.current_password, current_user.hashed_password):
+    if can_xac_nhan_mat_khau and not auth.xac_minh_mat_khau(req.current_password, current_user.hashed_password):
         raise HTTPException(status_code=401, detail="Mật khẩu hiện tại không đúng")
 
     if req.username is not None:
@@ -264,18 +339,7 @@ def cap_nhat_thong_tin_ban_than(
 
     return {
         "thanh_cong": True,
-        "user": {
-            "id": current_user.id,
-            "username": current_user.username,
-            "email": current_user.email,
-            "role": current_user.role,
-            "plan_type": current_user.plan_type,
-            "token_balance": current_user.token_balance,
-            "premium_started_at": current_user.premium_started_at.isoformat() if current_user.premium_started_at else None,
-            "premium_expires_at": current_user.premium_expires_at.isoformat() if current_user.premium_expires_at else None,
-            "auth_provider": current_user.auth_provider,
-            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
-        },
+        "user": _serialize_user(current_user),
     }
 
 

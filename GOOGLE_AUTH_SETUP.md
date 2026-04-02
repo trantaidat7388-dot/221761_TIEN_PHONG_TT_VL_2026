@@ -33,6 +33,11 @@ Ket qua ban nhan duoc:
 - Client ID (dung duoc o frontend va backend verify audience)
 - Client Secret (khong bat buoc cho flow id_token hien tai)
 
+Luu y bao mat:
+- Khong paste Client Secret len chat/repo.
+- Flow dang nhap hien tai cua du an chi can Client ID, khong can Client Secret.
+- Neu secret da bi lo, hay rotate ngay trong Google Cloud Console.
+
 ## 4) Set bien moi truong cho du an nay
 
 Backend (.env hoac env runtime):

@@ -7,6 +7,7 @@ import {
   FileText,
   Upload,
   History,
+  Crown,
   Settings,
   LogOut,
   User,
@@ -30,6 +31,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
   const danhSachMenuCoBan = [
     { duongDan: '/chuyen-doi', nhan: 'Chuyển đổi', icon: Upload },
     { duongDan: '/lich-su', nhan: 'Lịch sử', icon: History },
+    { duongDan: '/premium', nhan: 'Premium', icon: Crown },
     { duongDan: '/tai-khoan', nhan: 'Tài khoản', icon: Settings },
   ]
   const danhSachMenu = nguoiDung?.role === 'admin'
