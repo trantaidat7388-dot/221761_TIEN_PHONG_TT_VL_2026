@@ -141,6 +141,34 @@ Thiết lập tối thiểu:
 - `JWT_PREVIOUS_SECRET_KEYS`: danh sách khóa cũ (phân tách dấu phẩy) để hỗ trợ rotate key không làm người dùng đăng xuất ngay
 - `APP_ENV=production`: bật chế độ production
 
+### 6. Cấu hình Google OAuth (khi clone sang máy/ổ đĩa khác)
+
+Sau khi clone dự án, bạn cần tạo đủ 2 file env đúng vị trí trong thư mục gốc dự án:
+
+- `backend/.env`
+- `frontend/.env`
+
+Tạo nhanh từ file mẫu:
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
+
+Trên Windows PowerShell:
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+Copy-Item frontend/.env.example frontend/.env
+```
+
+Giá trị bắt buộc:
+
+- `backend/.env`: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `FRONTEND_URL`
+- `frontend/.env`: `VITE_GOOGLE_CLIENT_ID`
+
+Xem hướng dẫn đầy đủ tại: `HUONG_DAN_LAY_GOOGLE_OAUTH_KEY.md`
+
 #### Quy trình rotate key an toàn
 
 1. Tạo khóa mới và gán vào `JWT_SECRET_KEY`.
