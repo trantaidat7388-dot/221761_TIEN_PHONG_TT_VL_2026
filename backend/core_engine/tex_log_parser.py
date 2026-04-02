@@ -1,6 +1,6 @@
 import re
 
-def parse_latex_log(log_text: str) -> dict:
+def phan_tich_log_latex(log_text: str) -> dict:
     """
     Phân tích file .log của XeLaTeX để trích xuất dòng lỗi và nguyên nhân cụ thể,
     phục vụ cho Visual Debugger trên Frontend.

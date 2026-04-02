@@ -1,6 +1,6 @@
 import re
 
-def predict_node_type(text, index, is_bold=False):
+def du_doan_loai_node(text, index, is_bold=False):
     """
     Sử dụng TF-IDF & Heuristics nhẹ rút gọn thay vì Machine Learning nặng
     Nhận diện tự động: TITLE, AUTHOR, AFFILIATION, ABSTRACT, KEYWORDS, HEADING

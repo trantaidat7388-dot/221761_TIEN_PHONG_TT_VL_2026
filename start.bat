@@ -19,10 +19,6 @@ echo [1/5] Freeing ports 3000, 5173, 8000 and killing Node...
 REM Tat cac cua so CMD cu
 taskkill /fi "WINDOWTITLE eq Word2LaTeX*" /f >nul 2>&1
 
-REM Ban rung Node.js va Python (Tranh ket port)
-taskkill /F /IM node.exe >nul 2>&1
-taskkill /F /IM python.exe >nul 2>&1
-
 REM San lung tien trinh ngam dang chiem port
 for %%T in (8000 5173 3000) do (
     for /f "tokens=5 delims= " %%P in ('netstat -ano 2^>nul ^| findstr /R ":%%T " ^| findstr "LISTENING"') do (

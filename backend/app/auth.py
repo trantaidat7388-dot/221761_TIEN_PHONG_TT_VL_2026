@@ -12,7 +12,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from . import models
-from .database import get_db
+from .database import lay_db
 
 # ── CONFIG ──────────────────────────────────────────────────────────────────
 logger = logging.getLogger(__name__)
@@ -38,23 +38,23 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7   # 7 ngày
 # ── PASSWORD HASHING ─────────────────────────────────────────────────────────
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def hash_password(plain: str) -> str:
+def bam_mat_khau(plain: str) -> str:
     return pwd_context.hash(plain)
 
-def verify_password(plain: str, hashed: str) -> bool:
+def xac_minh_mat_khau(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def tao_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def _decode_with_rotated_keys(token: str) -> dict:
+def _giai_ma_voi_nhieu_khoa(token: str) -> dict:
     """Try current key first, then previous keys to support key rotation."""
     secrets_to_try = [SECRET_KEY, *PREVIOUS_SECRET_KEYS]
     for secret in secrets_to_try:
@@ -64,9 +64,9 @@ def _decode_with_rotated_keys(token: str) -> dict:
             continue
     raise JWTError("Token signature validation failed for all configured keys")
 
-def get_current_user(
+def lay_nguoi_dung_hien_tai(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    db: Session = Depends(lay_db)
 ) -> models.User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -74,7 +74,7 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = _decode_with_rotated_keys(token)
+        payload = _giai_ma_voi_nhieu_khoa(token)
         user_id: int = payload.get("sub")
         if user_id is None:
             raise credentials_exception
@@ -85,3 +85,4 @@ def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+

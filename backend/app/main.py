@@ -4,15 +4,33 @@ main.py
 """
 
 from datetime import datetime
+import logging
+import time
+import uuid
 from fastapi import FastAPI, Response
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from . import database
 from . import models
-from .config import CORS_ALLOW_ALL, CORS_ORIGINS, TEMP_TTL_HOURS, OUTPUT_TTL_HOURS, TEMP_FOLDER, OUTPUTS_FOLDER
+from .config import (
+    CORS_ALLOW_ALL,
+    CORS_ORIGINS,
+    TEMP_TTL_HOURS,
+    OUTPUT_TTL_HOURS,
+    TEMP_FOLDER,
+    OUTPUTS_FOLDER,
+    LOG_LEVEL,
+)
 from .utils.api_utils import quet_xoa_thu_muc_mo_coi
 from .routers import templates, chuyen_doi, auth_routes
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 # Khởi tạo FastAPI app
 app = FastAPI(title="Word2LaTeX API", version="1.0.0")
@@ -34,13 +52,32 @@ app.include_router(templates.router)
 app.include_router(chuyen_doi.router)
 app.include_router(auth_routes.router)
 
+
+@app.middleware("http")
+async def gan_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
+    return response
+
 @app.on_event("startup")
 def xu_ly_don_dep_khi_khoi_dong():
     """Startup hook: in route POST và dọn rác."""
-    print("Registered POST routes:")
+    logger.info("Registered POST routes:")
     for route in app.routes:
         if getattr(route, "methods", None) and "POST" in route.methods:
-            print(f" - {route.path}")
+            logger.info(" - %s", route.path)
 
     # Dọn dẹp các thư mục/file mồ côi trong temp khi server khởi động
     quet_xoa_thu_muc_mo_coi(TEMP_FOLDER, TEMP_TTL_HOURS)

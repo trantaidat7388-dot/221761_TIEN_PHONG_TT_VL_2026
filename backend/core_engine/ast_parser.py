@@ -13,7 +13,7 @@ from docx.oxml.ns import qn
 from .utils import loc_ky_tu
 from .xu_ly_toan import BoXuLyToan
 from .xu_ly_ole_equation import ole_equation_to_latex
-from .semantic_parser import predict_node_type
+from .semantic_parser import du_doan_loai_node
 
 class WordASTParser:
     """
@@ -44,10 +44,10 @@ class WordASTParser:
         
     def parse(self) -> Dict[str, Any]:
         """Main entry point to parse the document."""
-        from .utils import fix_macro_enabled_docx
+        from .utils import sua_docx_co_macro
         
         try:
-            fix_macro_enabled_docx(self.doc_path)
+            sua_docx_co_macro(self.doc_path)
             # Reload to make sure docx is fresh
             import time
             time.sleep(0.1)
@@ -385,7 +385,7 @@ class WordASTParser:
                     if r.text.strip() and r.bold:
                         is_bold = True
                         break
-                prediction = predict_node_type(text, idx, is_bold)
+                prediction = du_doan_loai_node(text, idx, is_bold)
 
                 # State Transitions
                 if state == "pre_title":

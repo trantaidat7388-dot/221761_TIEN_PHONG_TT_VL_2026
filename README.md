@@ -162,6 +162,37 @@ Nhấp đúp vào **`start.bat`** ở thư mục gốc. Script sẽ tự động
 
 Nhấn phím bất kỳ trong cửa sổ `start.bat` để dừng cả hai server.
 
+### Khởi động nhanh (Linux/macOS)
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+Script sẽ:
+
+1. Giải phóng các cổng `8000`, `5173`, `3000`
+2. Dọn thư mục `__pycache__`
+3. Kích hoạt hoặc tạo `.venv` rồi cài dependencies backend
+4. Chạy backend và frontend ở chế độ nền
+5. Ghi log vào `outputs/backend.log` và `outputs/frontend.log`
+
+---
+
+## Biến Môi Trường Backend
+
+Các biến chính (xem đầy đủ trong `backend/.env.example`):
+
+- `APP_ENV`: `development` hoặc `production`
+- `JWT_SECRET_KEY`: khóa ký token hiện tại
+- `JWT_PREVIOUS_SECRET_KEYS`: danh sách khóa cũ để hỗ trợ rotate key
+- `LOG_LEVEL`: mức log (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
+- `CORS_ALLOW_ALL`, `CORS_ORIGINS`: cấu hình CORS
+- `MAX_DOC_UPLOAD_MB`, `MAX_TEMPLATE_UPLOAD_MB`: giới hạn upload
+- `SSE_CLEANUP_DELAY_SECONDS`: thời gian giữ job SSE trước khi dọn
+- `LATEX_COMPILE_TIMEOUT_SECONDS`: timeout compile LaTeX
+- `TEMP_TTL_HOURS`, `OUTPUT_TTL_HOURS`: TTL dọn dữ liệu tạm/output
+
 ### Khởi động thủ công
 
 **Backend:**

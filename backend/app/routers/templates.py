@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 
-from ..config import CUSTOM_TEMPLATE_FOLDER
+from ..config import CUSTOM_TEMPLATE_FOLDER, MAX_TEMPLATE_UPLOAD_MB
 from ..utils.api_utils import doc_noi_dung_tex_an_toan, in_log_loi
 
 router = APIRouter(prefix="/api/templates", tags=["Templates"])
@@ -80,8 +80,8 @@ def _safe_extract_template_zip(zip_bytes: bytes, target_dir: Path):
 def lay_danh_sach_template():
     """Lấy danh sách template LaTeX mặc định và tùy chỉnh (không cache)."""
     
-    # Import find_main_tex local để tránh import cycles
-    from backend.core_engine.utils import find_main_tex
+    # Import tim_file_tex_chinh local để tránh import cycles
+    from backend.core_engine.utils import tim_file_tex_chinh
     
     templates = []
 
@@ -95,7 +95,7 @@ def lay_danh_sach_template():
         dir_path = CUSTOM_TEMPLATE_FOLDER / tpl_dir
         if dir_path.is_dir():
             try:
-                find_main_tex(str(dir_path))  # validate
+                tim_file_tex_chinh(str(dir_path))  # validate
                 kich_thuoc = sum(f.stat().st_size for f in dir_path.rglob('*') if f.is_file())
                 templates.append({"id": tpl_id, "ten": tpl_label, "loai": "mac_dinh", "kichThuoc": kich_thuoc})
             except Exception:
@@ -118,11 +118,11 @@ def lay_danh_sach_template():
                 "kichThuoc": tpl_path.stat().st_size
             })
         elif tpl_path.is_dir():
-            # Validate: must have at least one .tex file (find_main_tex preferred,
-            # fallback to any .tex so silently-broken dirs still surface in UI)
+            # Xac thuc: phai co it nhat 1 file .tex (uu tien tim_file_tex_chinh,
+            # fallback ve bat ky .tex de thu muc loi van hien thi tren UI)
             has_tex = False
             try:
-                find_main_tex(str(tpl_path))
+                tim_file_tex_chinh(str(tpl_path))
                 has_tex = True
             except Exception:
                 has_tex = any(tpl_path.rglob("*.tex"))
@@ -151,8 +151,8 @@ async def tai_len_template(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .tex hoặc .zip")
     
     contents = await file.read()
-    if len(contents) > 20 * 1024 * 1024:  # 20MB
-        raise HTTPException(status_code=400, detail="File template quá lớn (tối đa 20MB)")
+    if len(contents) > MAX_TEMPLATE_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File template quá lớn (tối đa {MAX_TEMPLATE_UPLOAD_MB}MB)")
     
     safe_name = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in Path(file.filename).stem)
     safe_name = safe_name.strip('_') or "template"

@@ -6,16 +6,19 @@ Các hàm tiện ích cho riêng Web API.
 import shutil
 import asyncio
 import time
+import logging
 from pathlib import Path
 
 from ..config import CUSTOM_TEMPLATE_FOLDER, TEMPLATE_FOLDER, TEMP_FOLDER
 
+logger = logging.getLogger(__name__)
+
 def in_log_loi(thong_diep: str, loi: Exception = None):
     """In log lỗi ra console để developer dễ debug."""
     if loi is not None:
-        print(f"[LOI] {thong_diep}: {loi}")
+        logger.error("%s: %s", thong_diep, loi)
     else:
-        print(f"[LOI] {thong_diep}")
+        logger.error(thong_diep)
 
 def doc_noi_dung_tex_an_toan(duong_dan: Path) -> str:
     """Đọc nội dung .tex an toàn với fallback encoding."""
@@ -84,8 +87,8 @@ _BUILTIN_TEMPLATE_MAP = {
 
 def _resolve_template_path(template_type: str) -> Path | None:
     """Resolve a built-in OR custom template type → absolute path of the main .tex file."""
-    # Nhập `find_main_tex` từ core engine tại đây để tránh vòng lặp logic
-    from backend.core_engine.utils import find_main_tex
+    # Nhập `tim_file_tex_chinh` từ core engine tại đây để tránh vòng lặp logic
+    from backend.core_engine.utils import tim_file_tex_chinh
 
     # ── Handle custom_* template IDs ──
     if template_type.startswith("custom_"):
@@ -94,7 +97,7 @@ def _resolve_template_path(template_type: str) -> Path | None:
         dir_path = CUSTOM_TEMPLATE_FOLDER / custom_name
         if dir_path.is_dir():
             try:
-                return Path(find_main_tex(str(dir_path)))
+                return Path(tim_file_tex_chinh(str(dir_path)))
             except FileNotFoundError:
                 # Fallback: first .tex found
                 first_tex = next(dir_path.rglob("*.tex"), None)
@@ -120,7 +123,7 @@ def _resolve_template_path(template_type: str) -> Path | None:
     dir_path = CUSTOM_TEMPLATE_FOLDER / tpl_name
     if dir_path.is_dir():
         try:
-            return Path(find_main_tex(str(dir_path)))
+            return Path(tim_file_tex_chinh(str(dir_path)))
         except FileNotFoundError:
             return next(dir_path.rglob("*.tex"), None)
             

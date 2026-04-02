@@ -1,12 +1,12 @@
 // api.js - Service gọi API backend Python
-import { API_BASE_URL } from '../config/apiConfig'
+import { DIA_CHI_API_GOC } from '../config/apiConfig'
 
 const TOKEN_KEY = 'word2latex_token'
 
-export const getToken = () => localStorage.getItem(TOKEN_KEY)
+export const layToken = () => localStorage.getItem(TOKEN_KEY)
 
-const authHeaders = () => {
-  const token = getToken()
+const taoHeaderXacThuc = () => {
+  const token = layToken()
   return token ? { 'Authorization': `Bearer ${token}` } : {}
 }
 
@@ -45,10 +45,10 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
       resolve({ thanhCong: false, loiMessage: 'Xử lý quá lâu (>3 phút). Vui lòng thử lại.' })
     }, 180000)
 
-    const url = `${API_BASE_URL}/api/chuyen-doi-stream?template_type=${encodeURIComponent(templateType)}`
+    const url = `${DIA_CHI_API_GOC}/api/chuyen-doi-stream?template_type=${encodeURIComponent(templateType)}`
     fetch(url, {
       method: 'POST',
-      headers: authHeaders(),   // 🔑 Tự động đính Bearer token
+      headers: taoHeaderXacThuc(),
       body: formData,
       signal: controller.signal,
     }).then(async (response) => {
@@ -115,7 +115,7 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
 
 export const taiFile = async (duongDan, tenFile) => {
   try {
-    const response = await fetch(duongDan, { headers: authHeaders() })
+    const response = await fetch(duongDan, { headers: taoHeaderXacThuc() })
     if (!response.ok) throw new Error('Không thể tải file')
     const blob = await response.blob()
     luuBlobThanhFile(blob, tenFile)
@@ -130,14 +130,14 @@ export const taiFileZip = async (jobId, tenFileZipFallback = '') => {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
 
     // Thử endpoint mới /api/download/{job_id} trước (yêu cầu auth)
-    const downloadUrl = `${API_BASE_URL}/api/download/${jobId}`
+    const downloadUrl = `${DIA_CHI_API_GOC}/api/download/${jobId}`
     const response = await fetch(downloadUrl, {
       method: 'GET',
-      headers: authHeaders()
+      headers: taoHeaderXacThuc()
     })
 
     // Fallback sang endpoint cũ nếu chưa đăng nhập
-    const finalResponse = response.ok ? response : await fetch(`${API_BASE_URL}/api/tai-ve-zip/${jobId}`)
+    const finalResponse = response.ok ? response : await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-zip/${jobId}`)
     if (!finalResponse.ok) {
       const message = await docLoiJsonTuResponse(finalResponse)
       throw new Error(message)
@@ -163,10 +163,10 @@ export const bienDichPDF = async (jobId, signal = null) => {
 
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
-    const response = await fetch(`${API_BASE_URL}/api/compile-pdf/${jobId}`, {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/compile-pdf/${jobId}`, {
       method: 'POST',
       headers: {
-        ...authHeaders(),
+        ...taoHeaderXacThuc(),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({}), // Gửi body rỗng để tránh 422 trên một số cấu hình server/proxy
@@ -185,7 +185,7 @@ export const bienDichPDF = async (jobId, signal = null) => {
       thanhCong: true,
       soTrang: data.so_trang,
       tenFilePDF: data.ten_file_pdf,
-      pdfUrl: `${API_BASE_URL}${data.pdf_url}`,
+      pdfUrl: `${DIA_CHI_API_GOC}${data.pdf_url}`,
     }
   } catch (loi) {
     clearTimeout(timeoutId)
@@ -199,8 +199,8 @@ export const bienDichPDF = async (jobId, signal = null) => {
 export const taiFilePDF = async (jobId) => {
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
-    const response = await fetch(`${API_BASE_URL}/api/tai-ve-pdf/${jobId}`, {
-      headers: authHeaders(),
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-pdf/${jobId}`, {
+      headers: taoHeaderXacThuc(),
     })
     if (!response.ok) throw new Error('Không thể tải file PDF')
     const blob = await response.blob()
@@ -218,7 +218,7 @@ export const taiFilePDF = async (jobId) => {
 
 export const layDanhSachTemplate = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/templates`, { cache: 'no-store' })
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/templates`, { cache: 'no-store' })
     if (!response.ok) throw new Error('Không thể tải danh sách template')
     const data = await response.json()
     return { thanhCong: true, templates: data.templates || [] }
@@ -231,9 +231,9 @@ export const taiLenTemplate = async (file) => {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await fetch(`${API_BASE_URL}/api/templates/upload`, {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/templates/upload`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: taoHeaderXacThuc(),
       body: formData,
     })
     if (!response.ok) {
@@ -249,9 +249,9 @@ export const taiLenTemplate = async (file) => {
 
 export const xoaTemplate = async (templateId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/templates/${templateId}`, {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/templates/${templateId}`, {
       method: 'DELETE',
-      headers: authHeaders(),
+      headers: taoHeaderXacThuc(),
     })
     if (!response.ok) {
       const err = await response.json().catch(() => ({}))
@@ -265,7 +265,7 @@ export const xoaTemplate = async (templateId) => {
 
 export const kiemTraServer = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`, { method: 'GET' })
+    const response = await fetch(`${DIA_CHI_API_GOC}/health`, { method: 'GET' })
     return response.ok
   } catch {
     return false
@@ -276,8 +276,8 @@ export const kiemTraServer = async () => {
 
 export const layLichSuChuyenDoi = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/history`, {
-      headers: authHeaders()
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/history`, {
+      headers: taoHeaderXacThuc()
     })
     if (!response.ok) throw new Error('Không thể lấy lịch sử')
     const data = await response.json()
@@ -293,9 +293,9 @@ export const layLichSuChuyenDoi = async () => {
 
 export const xoaLichSuChuyenDoi = async (recordId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/history/${recordId}`, {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/history/${recordId}`, {
       method: 'DELETE',
-      headers: authHeaders()
+      headers: taoHeaderXacThuc()
     })
     if (!response.ok) throw new Error('Không thể xóa lịch sử')
     return { thanhCong: true }
@@ -309,7 +309,7 @@ export const xoaLichSuChuyenDoi = async (recordId) => {
 // These are kept for backward-compat imports in components
 
 export const dangNhapVoiEmail = async (email, password) => {
-  const resp = await fetch(`${API_BASE_URL}/api/auth/login`, {
+  const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
@@ -322,7 +322,7 @@ export const dangNhapVoiEmail = async (email, password) => {
 }
 
 export const dangKyVoiEmail = async (username, email, password) => {
-  const resp = await fetch(`${API_BASE_URL}/api/auth/register`, {
+  const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, email, password })

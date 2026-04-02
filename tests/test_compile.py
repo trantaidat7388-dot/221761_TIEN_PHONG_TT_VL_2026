@@ -4,7 +4,7 @@ import asyncio
 
 sys.stdout.reconfigure(encoding='utf-8')
 from backend.core_engine.chuyen_doi import ChuyenDoiWordSangLatex
-from backend.core_engine.utils import bien_dich_latex, find_main_tex, extract_zip_template
+from backend.core_engine.utils import bien_dich_latex, tim_file_tex_chinh, giai_nen_mau_zip
 
 def main():
     docx_path = r"c:\221761_TIEN_PHONG_TT_VL_2026\input_data\Template_word\acm_submission_template.docx"
@@ -15,11 +15,11 @@ def main():
 
     print("Extracting template...")
     try:
-        extract_zip_template(template_zip, out_dir)
+        giai_nen_mau_zip(template_zip, out_dir)
     except Exception as e:
         pass
     
-    template_path = find_main_tex(out_dir)
+    template_path = tim_file_tex_chinh(out_dir)
     out_tex = os.path.join(out_dir, "output.tex")
 
     print(f"Starting conversion with docx: {docx_path}")

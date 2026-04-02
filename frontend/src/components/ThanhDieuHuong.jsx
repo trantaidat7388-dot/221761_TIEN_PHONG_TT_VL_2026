@@ -14,11 +14,11 @@ import {
   ChevronDown
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useAuth } from '../context/AuthContext'
+import { dungXacThuc } from '../context/AuthContext'
 
 const ThanhDieuHuong = ({ nguoiDung }) => {
   // Component thanh điều hướng với menu responsive và dropdown user
-  const { logout } = useAuth()
+  const { dangXuat } = dungXacThuc()
   const location = useLocation()
   const navigate = useNavigate()
   const [menuMo, setMenuMo] = useState(false)
@@ -33,7 +33,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
   const xuLyDangXuat = () => {
     // Đăng xuất bằng JWT
     try {
-      logout()
+    dangXuat()
       toast.success('Đã đăng xuất')
       navigate('/dang-nhap')
     } catch {

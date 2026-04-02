@@ -9,21 +9,21 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from .. import auth
-from ..database import get_db
+from ..database import lay_db
 
 router = APIRouter(prefix="/api", tags=["Auth & History"])
 
-class RegisterRequest(BaseModel):
+class YeuCauDangKy(BaseModel):
     username: str
     email: str
     password: str
 
-class LoginRequest(BaseModel):
+class YeuCauDangNhap(BaseModel):
     email: str
     password: str
 
 @router.post("/auth/register")
-def dang_ky(req: RegisterRequest, db: Session = Depends(get_db)):
+def dang_ky(req: YeuCauDangKy, db: Session = Depends(lay_db)):
     """Tạo tài khoản mới, trả về JWT token."""
     if db.query(models.User).filter(models.User.email == req.email).first():
         raise HTTPException(status_code=400, detail="Email này đã được đăng ký")
@@ -35,13 +35,13 @@ def dang_ky(req: RegisterRequest, db: Session = Depends(get_db)):
     user = models.User(
         username=req.username,
         email=req.email,
-        hashed_password=auth.hash_password(req.password)
+        hashed_password=auth.bam_mat_khau(req.password)
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    token = auth.create_access_token({"sub": str(user.id)})
+    token = auth.tao_access_token({"sub": str(user.id)})
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -53,13 +53,13 @@ def dang_ky(req: RegisterRequest, db: Session = Depends(get_db)):
     }
 
 @router.post("/auth/login")
-def dang_nhap(req: LoginRequest, db: Session = Depends(get_db)):
+def dang_nhap(req: YeuCauDangNhap, db: Session = Depends(lay_db)):
     """Đăng nhập bằng email + mật khẩu, trả về JWT token."""
     user = db.query(models.User).filter(models.User.email == req.email).first()
-    if not user or not auth.verify_password(req.password, user.hashed_password):
+    if not user or not auth.xac_minh_mat_khau(req.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
 
-    token = auth.create_access_token({"sub": str(user.id)})
+    token = auth.tao_access_token({"sub": str(user.id)})
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -71,7 +71,7 @@ def dang_nhap(req: LoginRequest, db: Session = Depends(get_db)):
     }
 
 @router.get("/auth/me")
-def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.get_current_user)):
+def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)):
     """Trả về thông tin người dùng đang đăng nhập dựa trên JWT token."""
     return {
         "id": current_user.id,
@@ -84,7 +84,7 @@ def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.get_current_
 # ── HISTORY ENDPOINTS ───────────────────────────────────────────────────
 
 @router.get("/history")
-def lay_lich_su(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def lay_lich_su(db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)):
     """Lấy lịch sử chuyển đổi của người dùng đang đăng nhập."""
     records = (
         db.query(models.ConversionHistory)
@@ -108,7 +108,7 @@ def lay_lich_su(db: Session = Depends(get_db), current_user: models.User = Depen
     }
 
 @router.delete("/history/{record_id}")
-def xoa_lich_su(record_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def xoa_lich_su(record_id: int, db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)):
     """Xóa một bản ghi lịch sử (chỉ của người dùng hiện tại)."""
     record = db.query(models.ConversionHistory).filter(
         models.ConversionHistory.id == record_id,

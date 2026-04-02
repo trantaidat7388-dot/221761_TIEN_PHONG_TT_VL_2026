@@ -1,7 +1,7 @@
 import re
 import json
 import os
-from .utils import detect_doc_class
+from .utils import phat_hien_loai_tai_lieu
 
 MANIFEST_PATH = os.path.join(os.path.dirname(__file__), 'publishers_manifest.json')
 try:
@@ -21,7 +21,7 @@ class TemplatePreprocessor:
     @classmethod
     def auto_tag(cls, tex_content: str, config: dict = None) -> str:
         # 1. Detect publisher logic
-        doc_class = detect_doc_class(tex_content)
+        doc_class = phat_hien_loai_tai_lieu(tex_content)
         pub_config = PUBLISHERS_MANIFEST.get(doc_class, {})
         
         # Merge provided config with manifest-based defaults

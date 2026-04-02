@@ -10,19 +10,19 @@
 
 ## P1 - On dinh va van hanh
 
-- [ ] Chuan hoa logging (thay print bang logging co cap do INFO/WARN/ERROR).
-- [ ] Gan request_id/job_id cho log de truy vet loi theo phien.
-- [ ] Tach cau hinh CORS, TTL, timeout qua bien moi truong co gia tri mac dinh ro rang.
-- [ ] Dieu chinh `start.bat` tranh kill tat ca python.exe/node.exe toan he thong.
-- [ ] Them script start cho Linux/macOS de de van hanh da nen tang.
+- [x] Chuan hoa logging (thay print bang logging co cap do INFO/WARN/ERROR).
+- [x] Gan request_id/job_id cho log de truy vet loi theo phien.
+- [x] Tach cau hinh CORS, TTL, timeout qua bien moi truong co gia tri mac dinh ro rang.
+- [x] Dieu chinh `start.bat` tranh kill tat ca python.exe/node.exe toan he thong.
+- [x] Them script start cho Linux/macOS de de van hanh da nen tang.
 
 ## P2 - Chat luong ma va bao tri
 
-- [ ] Han che monkey patch global `python-docx` hoac dong goi patch thanh module rieng co test.
-- [ ] Tach bot logic dai trong `core_engine/chuyen_doi.py` thanh nhieu service nho theo SRP.
+- [x] Han che monkey patch global `python-docx` hoac dong goi patch thanh module rieng co test.
+- [x] Tach bot logic dai trong `core_engine/chuyen_doi.py` thanh nhieu service nho theo SRP.
 - [ ] Chuan hoa dat ten ham/bien (de doc hon khi team phat trien mo rong).
 - [ ] Bo sung type hints day du cho cac ham public trong backend.
-- [ ] Bo sung docs cho cac branch fallback quan trong (docm, strict XML, compile fallback).
+- [x] Bo sung docs cho cac branch fallback quan trong (docm, strict XML, compile fallback).
 
 ## P3 - Test va CI/CD
 
@@ -42,7 +42,7 @@
 ## Theo doi tien do
 
 - [ ] Dat moc hoan thanh P0
-- [ ] Dat moc hoan thanh P1
+- [x] Dat moc hoan thanh P1
 - [ ] Dat moc hoan thanh P2
 - [ ] Dat moc hoan thanh P3
 - [ ] Dat moc hoan thanh P4

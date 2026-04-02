@@ -14,11 +14,11 @@ import {
   Loader2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useAuth } from '../../context/AuthContext'
+import { dungXacThuc } from '../../context/AuthContext'
 
 const TrangDangNhap = () => {
   const navigate = useNavigate()
-  const { login, register } = useAuth()
+  const { dangNhap, dangKy } = dungXacThuc()
   const [cheDoForm, setCheDoForm] = useState('dangNhap')
   const [hienMatKhau, setHienMatKhau] = useState(false)
   const [dangXuLy, setDangXuLy] = useState(false)
@@ -60,10 +60,10 @@ const TrangDangNhap = () => {
     setDangXuLy(true)
     try {
       if (cheDoForm === 'dangNhap') {
-        await login(formData.email, formData.matKhau)
+        await dangNhap(formData.email, formData.matKhau)
         toast.success('Đăng nhập thành công!')
       } else {
-        await register(formData.username, formData.email, formData.matKhau)
+        await dangKy(formData.username, formData.email, formData.matKhau)
         toast.success('Đăng ký thành công!')
       }
       navigate('/chuyen-doi')

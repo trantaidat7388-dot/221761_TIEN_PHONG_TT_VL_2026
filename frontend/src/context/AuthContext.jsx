@@ -1,16 +1,16 @@
 // AuthContext.jsx - Quản lý trạng thái xác thực JWT toàn ứng dụng
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { API_BASE_URL } from '../config/apiConfig'
+import { DIA_CHI_API_GOC } from '../config/apiConfig'
 
 const TOKEN_KEY = 'word2latex_token'
 const USER_KEY = 'word2latex_user'
 
-const AuthContext = createContext(null)
+const NguCanhXacThuc = createContext(null)
 
-export const AuthProvider = ({ children }) => {
-    const [token, setTokenState] = useState(() => localStorage.getItem(TOKEN_KEY))
-    const [user, setUser] = useState(() => {
+export const BoBaoBocXacThuc = ({ children }) => {
+    const [token, datToken] = useState(() => localStorage.getItem(TOKEN_KEY))
+    const [nguoiDung, datNguoiDung] = useState(() => {
         try {
             const raw = localStorage.getItem(USER_KEY)
             return raw ? JSON.parse(raw) : null
@@ -18,81 +18,81 @@ export const AuthProvider = ({ children }) => {
             return null
         }
     })
-    const [loading, setLoading] = useState(true)
+    const [dangTai, datDangTai] = useState(true)
 
-    const saveSession = (accessToken, userData) => {
+    const luuPhien = (accessToken, duLieuNguoiDung) => {
         localStorage.setItem(TOKEN_KEY, accessToken)
-        localStorage.setItem(USER_KEY, JSON.stringify(userData))
-        setTokenState(accessToken)
-        setUser(userData)
+        localStorage.setItem(USER_KEY, JSON.stringify(duLieuNguoiDung))
+        datToken(accessToken)
+        datNguoiDung(duLieuNguoiDung)
     }
 
-    const clearSession = () => {
+    const xoaPhien = () => {
         localStorage.removeItem(TOKEN_KEY)
         localStorage.removeItem(USER_KEY)
-        setTokenState(null)
-        setUser(null)
+        datToken(null)
+        datNguoiDung(null)
     }
 
     // Validate token on mount by calling /api/auth/me
     useEffect(() => {
-        const validateToken = async () => {
-            const savedToken = localStorage.getItem(TOKEN_KEY)
-            if (!savedToken) {
-                setLoading(false)
+        const xacThucTokenDaLuu = async () => {
+            const tokenDaLuu = localStorage.getItem(TOKEN_KEY)
+            if (!tokenDaLuu) {
+                datDangTai(false)
                 return
             }
             try {
                 const controller = new AbortController()
                 const timeoutId = setTimeout(() => controller.abort(), 5000)
-                const resp = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                    headers: { 'Authorization': `Bearer ${savedToken}` },
+                const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/me`, {
+                    headers: { 'Authorization': `Bearer ${tokenDaLuu}` },
                     signal: controller.signal
                 })
                 clearTimeout(timeoutId)
                 if (resp.ok) {
-                    const userData = await resp.json()
-                    saveSession(savedToken, userData)
+                    const duLieuNguoiDung = await resp.json()
+                    luuPhien(tokenDaLuu, duLieuNguoiDung)
                 } else {
-                    clearSession()
+                    xoaPhien()
                 }
             } catch {
                 // Server unreachable - keep local state
             }
-            setLoading(false)
+            datDangTai(false)
         }
-        validateToken()
+        xacThucTokenDaLuu()
     }, [])
 
-    const login = async (email, password) => {
-        const resp = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    const dangNhap = async (email, password) => {
+        const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
         })
         const data = await resp.json()
         if (!resp.ok) throw new Error(data.detail || 'Đăng nhập thất bại')
-        saveSession(data.access_token, data.user)
+        luuPhien(data.access_token, data.user)
         return data.user
     }
 
-    const register = async (username, email, password) => {
-        const resp = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    const dangKy = async (username, email, password) => {
+        const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, email, password })
         })
         const data = await resp.json()
         if (!resp.ok) throw new Error(data.detail || 'Đăng ký thất bại')
-        saveSession(data.access_token, data.user)
+        luuPhien(data.access_token, data.user)
         return data.user
     }
 
-    const logout = () => {
-        clearSession()
+    const dangXuat = () => {
+        xoaPhien()
     }
 
-    if (loading) {
+    if (dangTai) {
         return (
             <div className="min-h-screen bg-slate-900 flex items-center justify-center">
                 <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
@@ -101,16 +101,17 @@ export const AuthProvider = ({ children }) => {
     }
 
     return (
-        <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+        <NguCanhXacThuc.Provider
+            value={{ nguoiDung, token, dangTai, dangNhap, dangKy, dangXuat }}
+        >
             {children}
-        </AuthContext.Provider>
+        </NguCanhXacThuc.Provider>
     )
 }
 
-export const useAuth = () => {
-    const ctx = useContext(AuthContext)
-    if (!ctx) throw new Error('useAuth phải được dùng bên trong AuthProvider')
-    return ctx
+export const dungXacThuc = () => {
+    const nguCanh = useContext(NguCanhXacThuc)
+    if (!nguCanh) throw new Error('dungXacThuc phải được dùng bên trong BoBaoBocXacThuc')
+    return nguCanh
 }
-
-export default AuthContext
+export default NguCanhXacThuc
