@@ -13,7 +13,7 @@ from ..config import CUSTOM_TEMPLATE_FOLDER, TEMPLATE_FOLDER, TEMP_FOLDER
 
 logger = logging.getLogger(__name__)
 
-def in_log_loi(thong_diep: str, loi: Exception = None):
+def in_log_loi(thong_diep: str, loi: Exception | None = None) -> None:
     """In log lỗi ra console để developer dễ debug."""
     if loi is not None:
         logger.error("%s: %s", thong_diep, loi)
@@ -34,7 +34,7 @@ def doc_noi_dung_tex_an_toan(duong_dan: Path) -> str:
             in_log_loi(f"Không thể đọc tex bằng encoding={enc}: {duong_dan}", loi)
     return ''
 
-def xoa_thu_muc_an_toan(duong_dan: Path):
+def xoa_thu_muc_an_toan(duong_dan: Path) -> None:
     """Xóa thư mục an toàn và không làm crash server nếu có lỗi."""
     try:
         if duong_dan.exists():
@@ -42,7 +42,7 @@ def xoa_thu_muc_an_toan(duong_dan: Path):
     except Exception as loi:
         in_log_loi(f"Không thể xóa thư mục: {duong_dan}", loi)
 
-async def don_dep_sau_thoi_gian(duong_dan: Path, giay: int = 3600):
+async def don_dep_sau_thoi_gian(duong_dan: Path, giay: int = 3600) -> None:
     """Dọn dẹp thư mục job sau TTL (mặc định 1 giờ) để user có thời gian tải ZIP."""
     try:
         await asyncio.sleep(giay)
@@ -50,11 +50,11 @@ async def don_dep_sau_thoi_gian(duong_dan: Path, giay: int = 3600):
         in_log_loi(f"Lỗi sleep cleanup: {duong_dan}", loi)
     xoa_thu_muc_an_toan(duong_dan)
 
-async def don_dep_sau_15_phut(duong_dan: Path):
+async def don_dep_sau_15_phut(duong_dan: Path) -> None:
     """Alias backward-compatible cho tác vụ dọn dẹp hệ thống cũ (15 phút)."""
     await don_dep_sau_thoi_gian(duong_dan, 900)
 
-def quet_xoa_thu_muc_mo_coi(thu_muc_goc: Path, so_gio_ton_tai_toi_da: int):
+def quet_xoa_thu_muc_mo_coi(thu_muc_goc: Path, so_gio_ton_tai_toi_da: int) -> None:
     """Quét và xóa các thư mục/file cũ còn tồn đọng để tránh tràn ổ đĩa."""
     if not thu_muc_goc.exists():
         return

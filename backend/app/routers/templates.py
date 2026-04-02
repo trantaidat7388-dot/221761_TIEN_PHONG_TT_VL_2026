@@ -39,7 +39,7 @@ _MAX_ZIP_EXTRACT_SIZE = 80 * 1024 * 1024  # 80MB uncompressed
 _MAX_SINGLE_ZIP_ENTRY_SIZE = 20 * 1024 * 1024  # 20MB
 
 
-def _safe_extract_template_zip(zip_bytes: bytes, target_dir: Path):
+def _safe_extract_template_zip(zip_bytes: bytes, target_dir: Path) -> None:
     """Extract template ZIP safely with path traversal and extension checks."""
     total_size = 0
     try:
@@ -77,7 +77,7 @@ def _safe_extract_template_zip(zip_bytes: bytes, target_dir: Path):
         raise HTTPException(status_code=400, detail="File ZIP không hợp lệ")
 
 @router.get("")
-def lay_danh_sach_template():
+def lay_danh_sach_template() -> JSONResponse:
     """Lấy danh sách template LaTeX mặc định và tùy chỉnh (không cache)."""
     
     # Import tim_file_tex_chinh local để tránh import cycles
@@ -144,7 +144,7 @@ def lay_danh_sach_template():
 
 
 @router.post("/upload")
-async def tai_len_template(file: UploadFile = File(...)):
+async def tai_len_template(file: UploadFile = File(...)) -> dict:
     """Upload template LaTeX tùy chỉnh (hỗ trợ .tex và .zip)"""
     is_zip = file.filename.lower().endswith('.zip')
     if not (file.filename.lower().endswith('.tex') or is_zip):
@@ -219,7 +219,7 @@ async def tai_len_template(file: UploadFile = File(...)):
 
 
 @router.delete("/{template_id}")
-def xoa_template(template_id: str):
+def xoa_template(template_id: str) -> dict:
     """Xóa một template tùy chỉnh"""
     if not template_id.startswith("custom_"):
         raise HTTPException(status_code=400, detail="Không thể xóa template mặc định")

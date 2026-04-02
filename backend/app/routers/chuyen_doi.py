@@ -43,7 +43,7 @@ async def chuyen_doi_file(
     file: UploadFile = File(...),
     template_type: str = Query("ieee_conference", description="ieee_conference hoặc custom_xxx"),
     template_file: UploadFile = File(None, description="Tùy chọn: file .tex hoặc .zip chứa template")
-):
+) -> JSONResponse:
     """Endpoint chuyển đổi file Word → LaTeX (chế độ thường)."""
     
     ten_file = file.filename.lower()
@@ -230,7 +230,7 @@ async def chuyen_doi_file_stream(
     template_type: str = Query("ieee_conference"),
     template_file: UploadFile = File(None),
     db: Session = Depends(lay_db)
-):
+) -> StreamingResponse:
     """SSE endpoint: trả về Server-Sent Events cho tiến trình chuyển đổi real-time."""
     current_user = None
     auth_header = request.headers.get("Authorization", "")
@@ -404,7 +404,7 @@ async def chuyen_doi_file_stream(
 
 
 @router.api_route("/tai-ve-zip/{job_id}", methods=["GET", "HEAD"])
-def tai_ve_zip_theo_job(job_id: str):
+def tai_ve_zip_theo_job(job_id: str) -> FileResponse:
     job_folder = TEMP_FOLDER / f"job_{job_id}"
     if not job_folder.exists() or not job_folder.is_dir():
         raise HTTPException(status_code=404, detail="Job không tồn tại hoặc đã bị dọn")
@@ -421,7 +421,7 @@ def tai_ve_zip_theo_job(job_id: str):
 
 
 @router.api_route("/download/{job_id}", methods=["GET", "HEAD"])
-def tai_ve_theo_job(job_id: str, db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)):
+def tai_ve_theo_job(job_id: str, db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> FileResponse:
     """Tải file ZIP từ đường dẫn được lưu trong DB (yêu cầu auth)."""
     record = db.query(models.ConversionHistory).filter(models.ConversionHistory.job_id == job_id, models.ConversionHistory.user_id == current_user.id).first()
     if not record:
@@ -444,7 +444,7 @@ def tai_ve_theo_job(job_id: str, db: Session = Depends(lay_db), current_user: mo
 
 
 @router.post("/compile-pdf/{job_id}")
-async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = Body(None)):
+async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = Body(None)) -> JSONResponse:
     """Biên dịch PDF từ file .tex đã tạo (step 2 — tách riêng khỏi conversion)."""
     request_id = getattr(request.state, "request_id", "-")
     logger.info("request_id=%s job_id=%s Triggering PDF compilation", request_id, job_id)
@@ -532,7 +532,7 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = 
 
 
 @router.api_route("/tai-ve-pdf/{job_id}", methods=["GET", "HEAD"])
-def tai_ve_pdf_theo_job(job_id: str):
+def tai_ve_pdf_theo_job(job_id: str) -> FileResponse:
     """Tải file PDF đã biên dịch từ job folder."""
     job_folder = TEMP_FOLDER / f"job_{job_id}"
     if not job_folder.exists() or not job_folder.is_dir():

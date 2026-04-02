@@ -20,17 +20,17 @@
 
 - [x] Han che monkey patch global `python-docx` hoac dong goi patch thanh module rieng co test.
 - [x] Tach bot logic dai trong `core_engine/chuyen_doi.py` thanh nhieu service nho theo SRP.
-- [ ] Chuan hoa dat ten ham/bien (de doc hon khi team phat trien mo rong).
-- [ ] Bo sung type hints day du cho cac ham public trong backend.
+- [x] Chuan hoa dat ten ham/bien (de doc hon khi team phat trien mo rong).
+- [x] Bo sung type hints day du cho cac ham public trong backend.
 - [x] Bo sung docs cho cac branch fallback quan trong (docm, strict XML, compile fallback).
 
 ## P3 - Test va CI/CD
 
-- [ ] Chuyen cac test script thu cong thanh test co the chay tu dong voi pytest.
-- [ ] Loai bo hard-coded path trong test, dung fixture va duong dan tuong doi.
-- [ ] Them smoke test cho cac endpoint chinh (`/api/chuyen-doi-stream`, `/api/templates/upload`).
-- [ ] Tao workflow CI (lint + test) tren GitHub Actions.
-- [ ] Them regression test cho cac loi da gap (math, table, template injection).
+- [x] Chuyen cac test script thu cong thanh test co the chay tu dong voi pytest.
+- [x] Loai bo hard-coded path trong test, dung fixture va duong dan tuong doi.
+- [x] Them smoke test cho cac endpoint chinh (`/api/chuyen-doi-stream`, `/api/templates/upload`).
+- [x] Tao workflow CI (lint + test) tren GitHub Actions.
+- [x] Them regression test cho cac loi da gap (math, table, template injection).
 
 ## P4 - Frontend va bao mat phien dang nhap
 
@@ -43,6 +43,6 @@
 
 - [ ] Dat moc hoan thanh P0
 - [x] Dat moc hoan thanh P1
-- [ ] Dat moc hoan thanh P2
-- [ ] Dat moc hoan thanh P3
+- [x] Dat moc hoan thanh P2
+- [x] Dat moc hoan thanh P3
 - [ ] Dat moc hoan thanh P4

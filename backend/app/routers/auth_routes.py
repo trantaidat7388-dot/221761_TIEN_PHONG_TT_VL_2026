@@ -23,7 +23,7 @@ class YeuCauDangNhap(BaseModel):
     password: str
 
 @router.post("/auth/register")
-def dang_ky(req: YeuCauDangKy, db: Session = Depends(lay_db)):
+def dang_ky(req: YeuCauDangKy, db: Session = Depends(lay_db)) -> dict:
     """Tạo tài khoản mới, trả về JWT token."""
     if db.query(models.User).filter(models.User.email == req.email).first():
         raise HTTPException(status_code=400, detail="Email này đã được đăng ký")
@@ -53,7 +53,7 @@ def dang_ky(req: YeuCauDangKy, db: Session = Depends(lay_db)):
     }
 
 @router.post("/auth/login")
-def dang_nhap(req: YeuCauDangNhap, db: Session = Depends(lay_db)):
+def dang_nhap(req: YeuCauDangNhap, db: Session = Depends(lay_db)) -> dict:
     """Đăng nhập bằng email + mật khẩu, trả về JWT token."""
     user = db.query(models.User).filter(models.User.email == req.email).first()
     if not user or not auth.xac_minh_mat_khau(req.password, user.hashed_password):
@@ -71,7 +71,7 @@ def dang_nhap(req: YeuCauDangNhap, db: Session = Depends(lay_db)):
     }
 
 @router.get("/auth/me")
-def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)):
+def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> dict:
     """Trả về thông tin người dùng đang đăng nhập dựa trên JWT token."""
     return {
         "id": current_user.id,
@@ -84,7 +84,7 @@ def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.lay_nguoi_du
 # ── HISTORY ENDPOINTS ───────────────────────────────────────────────────
 
 @router.get("/history")
-def lay_lich_su(db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)):
+def lay_lich_su(db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> dict:
     """Lấy lịch sử chuyển đổi của người dùng đang đăng nhập."""
     records = (
         db.query(models.ConversionHistory)
@@ -108,7 +108,7 @@ def lay_lich_su(db: Session = Depends(lay_db), current_user: models.User = Depen
     }
 
 @router.delete("/history/{record_id}")
-def xoa_lich_su(record_id: int, db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)):
+def xoa_lich_su(record_id: int, db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> dict:
     """Xóa một bản ghi lịch sử (chỉ của người dùng hiện tại)."""
     record = db.query(models.ConversionHistory).filter(
         models.ConversionHistory.id == record_id,

@@ -1,6 +1,8 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from typing import Generator
+from sqlalchemy.orm import Session
 
 import os
 from .config import BASE_DIR
@@ -14,7 +16,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-def lay_db():
+def lay_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db

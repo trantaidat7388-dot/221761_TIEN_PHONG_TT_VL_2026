@@ -54,7 +54,7 @@ app.include_router(auth_routes.router)
 
 
 @app.middleware("http")
-async def gan_request_id(request: Request, call_next):
+async def gan_request_id(request: Request, call_next) -> Response:
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     request.state.request_id = request_id
     started = time.perf_counter()
@@ -72,7 +72,7 @@ async def gan_request_id(request: Request, call_next):
     return response
 
 @app.on_event("startup")
-def xu_ly_don_dep_khi_khoi_dong():
+def xu_ly_don_dep_khi_khoi_dong() -> None:
     """Startup hook: in route POST và dọn rác."""
     logger.info("Registered POST routes:")
     for route in app.routes:
@@ -84,7 +84,7 @@ def xu_ly_don_dep_khi_khoi_dong():
     quet_xoa_thu_muc_mo_coi(OUTPUTS_FOLDER, OUTPUT_TTL_HOURS)
 
 @app.get("/")
-def doc_api():
+def doc_api() -> dict:
     """Endpoint gốc - hướng dẫn sử dụng API."""
     return {
         "message": "Word2LaTeX API đang hoạt động",
@@ -95,7 +95,7 @@ def doc_api():
     }
 
 @app.get("/health")
-def kiem_tra_suc_khoe():
+def kiem_tra_suc_khoe() -> dict:
     """Health check endpoint"""
     return {
         "status": "healthy",
@@ -103,7 +103,7 @@ def kiem_tra_suc_khoe():
     }
 
 @app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
+async def favicon() -> Response:
     """Trả về 204 No Content để tắt lỗi 404 từ trình duyệt."""
     return Response(status_code=204)
 
