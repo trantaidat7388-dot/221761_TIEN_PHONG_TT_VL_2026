@@ -390,6 +390,8 @@ Phase E gate:
 | 2026-04-03 | SEC-001/002 + REL-001 | Da them rate limiting middleware theo nhom endpoint, them admin audit logs + endpoint xem log, va tao release runbook rollback | Bo sung test cho auth/convert rate limit va danh dau DONE khi qua review van hanh |  |
 | 2026-04-03 | QA security | Da them test_rate_limit_auth.py va chay cung test_admin_token_audit.py, ket qua 2 passed | Bo sung them test rate-limit cho convert endpoint o buoc tiep theo |  |
 | 2026-04-03 | REL-001 | Da them script backend/run_schema_migration.py va cap nhat runbook cach chay migration thu cong | Chot quy trinh backup/restore trong tai lieu van hanh cua team |  |
+| 2026-04-03 | QA security + integration | Da them test_rate_limit_convert_admin.py va test_token_deduct_refund.py, chay bo test moi: 6 passed | Co the danh dau SEC-001 va QA-002 sang REVIEW |  |
+| 2026-04-03 | Google setup docs | Da them tai lieu lay Google Client ID va cau hinh env | Team ops cap key that de test FE-004 tren staging |  |
 
 ## 4. Risk watchlist
 
