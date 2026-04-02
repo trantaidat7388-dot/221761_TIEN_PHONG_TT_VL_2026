@@ -1,5 +1,7 @@
 # auth.py - JWT + bcrypt authentication helpers
 
+import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -11,8 +13,25 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .database import get_db
+
 # ── CONFIG ──────────────────────────────────────────────────────────────────
-SECRET_KEY = "word2latex-super-secret-key-change-in-production-2026"
+logger = logging.getLogger(__name__)
+
+APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "").strip()
+PREVIOUS_SECRET_KEYS = [
+    key.strip() for key in os.getenv("JWT_PREVIOUS_SECRET_KEYS", "").split(",") if key.strip()
+]
+
+if not SECRET_KEY:
+    if APP_ENV in {"production", "prod"}:
+        raise RuntimeError("JWT_SECRET_KEY is required in production environment")
+    SECRET_KEY = "dev-only-change-me-before-deploy"
+    logger.warning(
+        "JWT_SECRET_KEY is not set. Using insecure development fallback key. "
+        "Set JWT_SECRET_KEY in environment before deploying."
+    )
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7   # 7 ngày
 
@@ -34,6 +53,17 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+
+def _decode_with_rotated_keys(token: str) -> dict:
+    """Try current key first, then previous keys to support key rotation."""
+    secrets_to_try = [SECRET_KEY, *PREVIOUS_SECRET_KEYS]
+    for secret in secrets_to_try:
+        try:
+            return jwt.decode(token, secret, algorithms=[ALGORITHM])
+        except JWTError:
+            continue
+    raise JWTError("Token signature validation failed for all configured keys")
+
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
@@ -44,7 +74,7 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = _decode_with_rotated_keys(token)
         user_id: int = payload.get("sub")
         if user_id is None:
             raise credentials_exception

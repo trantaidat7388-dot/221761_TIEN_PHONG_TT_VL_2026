@@ -7,6 +7,7 @@ import uuid
 import time
 import json
 import shutil
+import logging
 from datetime import datetime
 from pathlib import Path
 import re
@@ -29,6 +30,8 @@ from backend.core_engine.utils import (
     extract_zip_template, package_output_directory
 )
 from backend.core_engine.tex_log_parser import parse_latex_log
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api", tags=["Chuyển Đổi"])
@@ -97,7 +100,7 @@ async def chuyen_doi_file(
                 try:
                     shutil.copytree(str(template_tex_dir), str(job_folder), dirs_exist_ok=True)
                 except Exception as e:
-                    print(f"[WARN] copytree ZIP template thất bại: {e}")
+                    logger.warning("copytree ZIP template thất bại", exc_info=e)
                 
                 # Update template_path to point to the new location in job_folder
                 template_path = job_folder / template_path.name
@@ -121,7 +124,8 @@ async def chuyen_doi_file(
                         target_file = job_folder / item.relative_to(template_dir_actual)
                         target_file.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(item, target_file)
-                    except Exception: pass
+                    except Exception as e:
+                        logger.warning("Fallback copy file thất bại: %s", item, exc_info=e)
         template_path = job_folder / template_path.name
 
     zip_filename = output_filename.replace('.tex', '.zip')
@@ -153,7 +157,8 @@ async def chuyen_doi_file(
             tex_raw = tex_raw.replace(images_abs_win + '\\', 'images/').replace(images_abs_win, 'images')
             tex_raw = tex_raw.replace(job_abs_win + '\\', '').replace(job_abs_win, '')
             output_path.write_text(tex_raw, encoding='utf-8')
-        except Exception: pass
+        except Exception as e:
+            logger.warning("Không thể chuẩn hóa đường dẫn trong file tex đầu ra", exc_info=e)
 
         # SKIP PDF compilation — only convert Word → LaTeX
         if not output_path.exists(): raise Exception("Không tạo được file .tex đầu ra")
@@ -175,8 +180,10 @@ async def chuyen_doi_file(
         da_thanh_cong = True
         background_tasks.add_task(don_dep_sau_15_phut, job_folder)
         
-        try: shutil.copy2(zip_path, OUTPUTS_FOLDER / zip_filename)
-        except Exception: pass
+        try:
+            shutil.copy2(zip_path, OUTPUTS_FOLDER / zip_filename)
+        except Exception as e:
+            logger.warning("Không thể copy ZIP sang outputs", exc_info=e)
 
         return JSONResponse(status_code=200, content={
             "thanh_cong": True,
@@ -215,7 +222,8 @@ async def chuyen_doi_file_stream(
         token = auth_header.split(" ", 1)[1]
         try:
             current_user = auth.get_current_user(token=token, db=db)
-        except Exception: pass
+        except Exception as e:
+            logger.warning("Bearer token không hợp lệ cho SSE request", exc_info=e)
 
     ten_file = file.filename.lower()
     if not (ten_file.endswith('.docx') or ten_file.endswith('.docm')):
@@ -273,8 +281,8 @@ async def chuyen_doi_file_stream(
                     if template_tex_dir != job_folder:
                         try:
                             shutil.copytree(str(template_tex_dir), str(job_folder), dirs_exist_ok=True)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("copytree SSE ZIP template thất bại", exc_info=e)
                         template_path = job_folder / template_path.name
                 else:
                     template_path = job_folder / "custom_uploaded_template.tex"
@@ -292,7 +300,8 @@ async def chuyen_doi_file_stream(
                                 target_file = job_folder / item.relative_to(template_dir_actual)
                                 target_file.parent.mkdir(parents=True, exist_ok=True)
                                 shutil.copy2(item, target_file)
-                            except Exception: pass
+                            except Exception as e:
+                                logger.warning("Fallback copy SSE file thất bại: %s", item, exc_info=e)
                 template_path = job_folder / template_path.name
 
             yield sse_event(2, "Đang xây dựng cây AST & Phân tích ngữ nghĩa...")
@@ -321,7 +330,8 @@ async def chuyen_doi_file_stream(
                 tex_raw = tex_raw.replace(images_abs_win + '\\', 'images/').replace(images_abs_win, 'images')
                 tex_raw = tex_raw.replace(job_abs_win + '\\', '').replace(job_abs_win, '')
                 output_path.write_text(tex_raw, encoding='utf-8')
-            except Exception: pass
+            except Exception as e:
+                logger.warning("Không thể chuẩn hóa đường dẫn trong file tex SSE", exc_info=e)
 
             # SKIP PDF compilation — only convert Word → LaTeX
             if not output_path.exists():

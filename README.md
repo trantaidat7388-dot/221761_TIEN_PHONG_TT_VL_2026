@@ -117,6 +117,34 @@ npm install
 cd ..
 ```
 
+### 5. Cấu hình biến môi trường backend (bảo mật JWT)
+
+Tạo file `.env` cho backend từ mẫu:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Trên Windows PowerShell:
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+```
+
+Thiết lập tối thiểu:
+
+- `JWT_SECRET_KEY`: khóa ký JWT hiện tại (bắt buộc ở production)
+- `JWT_PREVIOUS_SECRET_KEYS`: danh sách khóa cũ (phân tách dấu phẩy) để hỗ trợ rotate key không làm người dùng đăng xuất ngay
+- `APP_ENV=production`: bật chế độ production
+
+#### Quy trình rotate key an toàn
+
+1. Tạo khóa mới và gán vào `JWT_SECRET_KEY`.
+2. Chuyển khóa cũ sang `JWT_PREVIOUS_SECRET_KEYS`.
+3. Deploy backend.
+4. Chờ hết thời gian sống token (mặc định 7 ngày).
+5. Xóa khóa cũ khỏi `JWT_PREVIOUS_SECRET_KEYS`.
+
 ---
 
 ## Sử Dụng

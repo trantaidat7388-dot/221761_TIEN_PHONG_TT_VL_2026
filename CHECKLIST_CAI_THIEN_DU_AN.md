@@ -2,11 +2,11 @@
 
 ## P0 - Bat buoc lam truoc (bao mat va an toan)
 
-- [ ] Chuyen SECRET_KEY JWT sang bien moi truong, khong hardcode trong ma nguon.
-- [ ] Them co che rotate key va tai lieu huong dan cap nhat key an toan.
-- [ ] Va loi Zip Slip trong API upload template (chan path traversal truoc khi extract).
-- [ ] Bo sung kiem tra kich thuoc va whitelist duoi file khi upload ZIP/Template.
-- [ ] Ra soat va giam cac diem `except Exception: pass` trong luong chuyen doi.
+- [x] Chuyen SECRET_KEY JWT sang bien moi truong, khong hardcode trong ma nguon.
+- [x] Them co che rotate key va tai lieu huong dan cap nhat key an toan.
+- [x] Va loi Zip Slip trong API upload template (chan path traversal truoc khi extract).
+- [x] Bo sung kiem tra kich thuoc va whitelist duoi file khi upload ZIP/Template.
+- [x] Ra soat va giam cac diem `except Exception: pass` trong luong chuyen doi.
 
 ## P1 - On dinh va van hanh
 
