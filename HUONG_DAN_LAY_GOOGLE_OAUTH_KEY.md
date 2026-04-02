@@ -2,6 +2,32 @@
 
 Tai lieu nay huong dan tao key cho Google Dang nhap (Redirect Flow) de dung voi du an Word2LaTeX.
 
+## 0) Sau khi clone ve may moi/odia khac, tao file env dung vi tri
+
+Vi du ban clone vao:
+
+D:\du-an\221761_TIEN_PHONG_TT_VL_2026
+
+Thi bat buoc phai co 2 file sau:
+
+- D:\du-an\221761_TIEN_PHONG_TT_VL_2026\backend\.env
+- D:\du-an\221761_TIEN_PHONG_TT_VL_2026\frontend\.env
+
+Neu thieu 1 trong 2 file nay, he thong se bao thieu key.
+
+### Cach tao nhanh (PowerShell - Windows)
+
+1. Mo terminal tai thu muc goc du an.
+2. Chay lenh:
+
+Copy-Item backend/.env.example backend/.env
+Copy-Item frontend/.env.example frontend/.env
+
+### Cach tao nhanh (macOS/Linux)
+
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+
 ## 1) Tao hoac chon Project tren Google Cloud
 1. Mo trang: https://console.cloud.google.com/
 2. Chon project san co hoac tao project moi.
@@ -45,6 +71,11 @@ Cap nhat:
 
 VITE_GOOGLE_CLIENT_ID=your_google_client_id
 
+Luu y:
+- `backend/.env` chua key backend (GOOGLE_CLIENT_SECRET) va backend doc file nay luc khoi dong.
+- `frontend/.env` chi can `VITE_GOOGLE_CLIENT_ID`.
+- Neu doi o dia hoac doi thu muc clone, van phai tao 2 file tren theo duong dan moi.
+
 ## 6) Khoi dong lai he thong
 Sau khi doi key, can restart backend va frontend de nap lai cau hinh.
 
@@ -52,6 +83,11 @@ Sau khi doi key, can restart backend va frontend de nap lai cau hinh.
 1. Mo trinh duyet tai http://localhost:5173
 2. Bam Dang nhap Google theo Redirect Flow.
 3. Neu cau hinh dung, se di qua Google va quay ve app thanh cong.
+
+Kiem tra backend da nhan key chua:
+- Mo URL: http://localhost:8000/api/auth/google/login
+- Neu backend redirect sang `accounts.google.com` la da doc duoc `backend/.env`.
+- Neu bao thieu `GOOGLE_CLIENT_ID` thi ban dang tao sai vi tri file `backend/.env` hoac chua restart backend.
 
 ## Loi thuong gap
 - "Thieu cau hinh GOOGLE_CLIENT_ID": backend chua nap dung bien env hoac chua restart.
