@@ -6,16 +6,19 @@ Các hàm tiện ích cho riêng Web API.
 import shutil
 import asyncio
 import time
+import logging
 from pathlib import Path
 
-from ..config import CUSTOM_TEMPLATE_FOLDER, TEMPLATE_FOLDER, TEMP_FOLDER
+from ..config import CUSTOM_TEMPLATE_FOLDER, TEMPLATE_FOLDER
 
-def in_log_loi(thong_diep: str, loi: Exception = None):
+logger = logging.getLogger(__name__)
+
+def in_log_loi(thong_diep: str, loi: Exception | None = None) -> None:
     """In log lỗi ra console để developer dễ debug."""
     if loi is not None:
-        print(f"[LOI] {thong_diep}: {loi}")
+        logger.error("%s: %s", thong_diep, loi)
     else:
-        print(f"[LOI] {thong_diep}")
+        logger.error(thong_diep)
 
 def doc_noi_dung_tex_an_toan(duong_dan: Path) -> str:
     """Đọc nội dung .tex an toàn với fallback encoding."""
@@ -31,7 +34,7 @@ def doc_noi_dung_tex_an_toan(duong_dan: Path) -> str:
             in_log_loi(f"Không thể đọc tex bằng encoding={enc}: {duong_dan}", loi)
     return ''
 
-def xoa_thu_muc_an_toan(duong_dan: Path):
+def xoa_thu_muc_an_toan(duong_dan: Path) -> None:
     """Xóa thư mục an toàn và không làm crash server nếu có lỗi."""
     try:
         if duong_dan.exists():
@@ -39,7 +42,7 @@ def xoa_thu_muc_an_toan(duong_dan: Path):
     except Exception as loi:
         in_log_loi(f"Không thể xóa thư mục: {duong_dan}", loi)
 
-async def don_dep_sau_thoi_gian(duong_dan: Path, giay: int = 3600):
+async def don_dep_sau_thoi_gian(duong_dan: Path, giay: int = 3600) -> None:
     """Dọn dẹp thư mục job sau TTL (mặc định 1 giờ) để user có thời gian tải ZIP."""
     try:
         await asyncio.sleep(giay)
@@ -47,11 +50,11 @@ async def don_dep_sau_thoi_gian(duong_dan: Path, giay: int = 3600):
         in_log_loi(f"Lỗi sleep cleanup: {duong_dan}", loi)
     xoa_thu_muc_an_toan(duong_dan)
 
-async def don_dep_sau_15_phut(duong_dan: Path):
+async def don_dep_sau_15_phut(duong_dan: Path) -> None:
     """Alias backward-compatible cho tác vụ dọn dẹp hệ thống cũ (15 phút)."""
     await don_dep_sau_thoi_gian(duong_dan, 900)
 
-def quet_xoa_thu_muc_mo_coi(thu_muc_goc: Path, so_gio_ton_tai_toi_da: int):
+def quet_xoa_thu_muc_mo_coi(thu_muc_goc: Path, so_gio_ton_tai_toi_da: int) -> None:
     """Quét và xóa các thư mục/file cũ còn tồn đọng để tránh tràn ổ đĩa."""
     if not thu_muc_goc.exists():
         return
@@ -84,8 +87,8 @@ _BUILTIN_TEMPLATE_MAP = {
 
 def _resolve_template_path(template_type: str) -> Path | None:
     """Resolve a built-in OR custom template type → absolute path of the main .tex file."""
-    # Nhập `find_main_tex` từ core engine tại đây để tránh vòng lặp logic
-    from backend.core_engine.utils import find_main_tex
+    # Nhập `tim_file_tex_chinh` từ core engine tại đây để tránh vòng lặp logic
+    from backend.core_engine.utils import tim_file_tex_chinh
 
     # ── Handle custom_* template IDs ──
     if template_type.startswith("custom_"):
@@ -94,7 +97,7 @@ def _resolve_template_path(template_type: str) -> Path | None:
         dir_path = CUSTOM_TEMPLATE_FOLDER / custom_name
         if dir_path.is_dir():
             try:
-                return Path(find_main_tex(str(dir_path)))
+                return Path(tim_file_tex_chinh(str(dir_path)))
             except FileNotFoundError:
                 # Fallback: first .tex found
                 first_tex = next(dir_path.rglob("*.tex"), None)
@@ -120,7 +123,7 @@ def _resolve_template_path(template_type: str) -> Path | None:
     dir_path = CUSTOM_TEMPLATE_FOLDER / tpl_name
     if dir_path.is_dir():
         try:
-            return Path(find_main_tex(str(dir_path)))
+            return Path(tim_file_tex_chinh(str(dir_path)))
         except FileNotFoundError:
             return next(dir_path.rglob("*.tex"), None)
             

@@ -8,7 +8,19 @@ import zipfile
 import shutil
 import tempfile
 
-def fix_macro_enabled_docx(doc_path: str):
+
+def _lay_so_nguyen_tu_env(name: str, default: int, min_value: int = 1) -> int:
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = default
+    return max(min_value, value)
+
+
+LATEX_COMPILE_TIMEOUT_SECONDS = _lay_so_nguyen_tu_env("LATEX_COMPILE_TIMEOUT_SECONDS", 30, min_value=5)
+
+def sua_docx_co_macro(doc_path: str):
     """
     Tẩy rửa file Word có chứa Macro (.docm hoặc .docx dính macro):
     - Mở file dưới dạng ZIP, sửa [Content_Types].xml (content type macro → chuẩn).
@@ -249,7 +261,7 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
             text=True,
             encoding='utf-8',
             errors='ignore',
-            timeout=30, # ⏱️ Backend timeout: 30s
+            timeout=LATEX_COMPILE_TIMEOUT_SECONDS,
         )
         duration = time.time() - t_start
         print(f"--- [LATEX] FINISHED in {duration:.2f}s (Exit code: {ket_qua.returncode}) ---")
@@ -266,7 +278,7 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
             print(f"[LATEX] SUCCESS: {ten_file.replace('.tex', '.pdf')}")
             return True, ""
         elif pdf_exists:
-            print(f"[LATEX] WARNING: PDF created with minor errors.")
+            print("[LATEX] WARNING: PDF created with minor errors.")
             return True, ""
         else:
             print(f"[LATEX] FAILED: {ten_file} (exit code: {ket_qua.returncode})")
@@ -289,7 +301,10 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
         msg = f"LỖI: Không tìm thấy '{engine}'. Kiểm tra PATH hoặc cài đặt LaTeX."
         return False, msg
     except subprocess.TimeoutExpired as e:
-        msg = f"TIMEOUT: Quá 30s. Output log:\n{(e.stdout or '').decode('utf-8', 'ignore')}"
+        timeout_output = e.stdout or ''
+        if isinstance(timeout_output, bytes):
+            timeout_output = timeout_output.decode('utf-8', 'ignore')
+        msg = f"TIMEOUT: Quá {LATEX_COMPILE_TIMEOUT_SECONDS}s. Output log:\n{timeout_output}"
         return False, msg
     except Exception as e:
         import traceback
@@ -297,7 +312,7 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
         return False, msg
 
 
-def detect_doc_class(template_src: str) -> str:
+def phat_hien_loai_tai_lieu(template_src: str) -> str:
     """Detect document class from template source. Returns normalized class name.
     Shared between preprocessor and renderer.
     """
@@ -323,7 +338,7 @@ def detect_doc_class(template_src: str) -> str:
     else:
         return "generic"
 
-def extract_zip_template(zip_path: str, target_dir: str = None) -> str:
+def giai_nen_mau_zip(zip_path: str, target_dir: str = None) -> str:
     """Giải nén file ZIP template vào thư mục đích.
 
     - Kiểm tra bảo mật path traversal trước khi giải nén.
@@ -368,7 +383,7 @@ def extract_zip_template(zip_path: str, target_dir: str = None) -> str:
     return os.path.abspath(target_dir)
 
 
-def find_main_tex(directory: str) -> str:
+def tim_file_tex_chinh(directory: str) -> str:
     """Tìm file .tex chính trong thư mục (đệ quy bằng os.walk).
 
     File chính được xác định bằng việc chứa ``\\documentclass``.
@@ -418,7 +433,7 @@ def find_main_tex(directory: str) -> str:
     return os.path.abspath(candidates[0][0])
 
 
-def package_output_directory(work_dir: str, output_zip_path: str,
+def dong_goi_thu_muc_dau_ra(work_dir: str, output_zip_path: str,
                              exclude_suffixes: set = None, generated_tex_name: str = None) -> str:
     """Đóng gói thư mục làm việc thành file ZIP (dành cho Overleaf upload).
 

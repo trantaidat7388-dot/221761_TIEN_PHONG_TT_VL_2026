@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion'
 import { FileText } from 'lucide-react'
 
-export const LoadingSpinner = ({ 
+export const VongTronTai = ({ 
   kichThuoc = 'md', 
   className = '' 
 }) => {
@@ -26,7 +26,7 @@ export const LoadingSpinner = ({
   )
 }
 
-export const LoadingManHinh = ({ thongBao = 'Đang tải...' }) => {
+export const TaiToanManHinh = ({ thongBao = 'Đang tải...' }) => {
   // Loading toàn màn hình với logo animation
   return (
     <div className="min-h-screen bg-gradient-animated flex items-center justify-center">
@@ -50,7 +50,7 @@ export const LoadingManHinh = ({ thongBao = 'Đang tải...' }) => {
           <FileText className="w-8 h-8 text-white" />
         </motion.div>
         <div className="flex items-center gap-2">
-          <LoadingSpinner kichThuoc="sm" />
+          <VongTronTai kichThuoc="sm" />
           <p className="text-white/60">{thongBao}</p>
         </div>
       </motion.div>
@@ -58,7 +58,7 @@ export const LoadingManHinh = ({ thongBao = 'Đang tải...' }) => {
   )
 }
 
-export const LoadingXuLy = ({ 
+export const TaiKhiXuLy = ({ 
   tienTrinh = 0, 
   thongBao = 'Đang xử lý...',
   chiTiet = ''
@@ -102,4 +102,4 @@ export const LoadingXuLy = ({
   )
 }
 
-export default LoadingSpinner
+export default VongTronTai

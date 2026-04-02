@@ -1,6 +1,6 @@
-// TrangDangNhap.jsx - Trang đăng nhập / đăng ký với JWT (không Firebase)
+// TrangDangNhap.jsx - Trang đăng nhập / đăng ký với JWT + Google
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -14,11 +14,11 @@ import {
   Loader2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useAuth } from '../../context/AuthContext'
+import { dungXacThuc } from '../../context/AuthContext'
 
 const TrangDangNhap = () => {
   const navigate = useNavigate()
-  const { login, register } = useAuth()
+  const { dangNhap, dangKy, dangNhapGoogle } = dungXacThuc()
   const [cheDoForm, setCheDoForm] = useState('dangNhap')
   const [hienMatKhau, setHienMatKhau] = useState(false)
   const [dangXuLy, setDangXuLy] = useState(false)
@@ -60,10 +60,10 @@ const TrangDangNhap = () => {
     setDangXuLy(true)
     try {
       if (cheDoForm === 'dangNhap') {
-        await login(formData.email, formData.matKhau)
+        await dangNhap(formData.email, formData.matKhau)
         toast.success('Đăng nhập thành công!')
       } else {
-        await register(formData.username, formData.email, formData.matKhau)
+        await dangKy(formData.username, formData.email, formData.matKhau)
         toast.success('Đăng ký thành công!')
       }
       navigate('/chuyen-doi')
@@ -78,6 +78,53 @@ const TrangDangNhap = () => {
     setCheDoForm(prev => prev === 'dangNhap' ? 'dangKy' : 'dangNhap')
     setFormData({ username: '', email: '', matKhau: '', xacNhanMatKhau: '' })
   }
+
+  useEffect(() => {
+    const clientId = import.meta.env?.VITE_GOOGLE_CLIENT_ID
+    if (!clientId) return
+
+    const setupGoogleButton = () => {
+      if (!window.google?.accounts?.id) return
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response) => {
+          const idToken = response?.credential
+          if (!idToken) {
+            toast.error('Không nhận được Google token')
+            return
+          }
+          try {
+            await dangNhapGoogle(idToken)
+            toast.success('Đăng nhập Google thành công!')
+            navigate('/chuyen-doi')
+          } catch (err) {
+            toast.error(err.message || 'Đăng nhập Google thất bại')
+          }
+        }
+      })
+      const target = document.getElementById('google-signin-btn')
+      if (target) {
+        target.innerHTML = ''
+        window.google.accounts.id.renderButton(target, {
+          theme: 'outline',
+          size: 'large',
+          width: 320,
+          text: 'continue_with'
+        })
+      }
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = setupGoogleButton
+    document.body.appendChild(script)
+
+    return () => {
+      if (script.parentNode) script.parentNode.removeChild(script)
+    }
+  }, [dangNhapGoogle, navigate])
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -261,6 +308,16 @@ const TrangDangNhap = () => {
               </motion.button>
             </motion.form>
           </AnimatePresence>
+
+          <div className="mt-5 pt-5 border-t border-white/10">
+            <p className="text-white/50 text-xs text-center mb-3">Hoặc tiếp tục với Google</p>
+            <div id="google-signin-btn" className="flex justify-center" />
+            {!import.meta.env?.VITE_GOOGLE_CLIENT_ID && (
+              <p className="text-xs text-amber-300/80 text-center mt-2">
+                Chưa cấu hình VITE_GOOGLE_CLIENT_ID
+              </p>
+            )}
+          </div>
         </motion.div>
 
         {/* Link chuyển mode */}

@@ -1,5 +1,4 @@
 from TexSoup import TexSoup
-import os
 
 latex_text = r"\Title{Original Title}"
 soup = TexSoup(latex_text)

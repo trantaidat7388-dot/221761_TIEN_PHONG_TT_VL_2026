@@ -99,6 +99,6 @@ try:
         deleted = tex[start:end]
         print(f"op: start={start} end={end} repl={text!r}")
         print(f"Content deleted: {deleted!r:.100}...")
-except Exception as e:
+except Exception:
     import traceback
     traceback.print_exc()

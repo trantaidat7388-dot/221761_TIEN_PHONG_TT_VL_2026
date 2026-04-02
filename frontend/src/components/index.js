@@ -3,8 +3,8 @@
 export { default as NutBam } from './NutBam'
 export { default as KhungThongBao } from './KhungThongBao'
 export { 
-  default as LoadingSpinner, 
-  LoadingManHinh, 
-  LoadingXuLy 
+  VongTronTai,
+  TaiToanManHinh,
+  TaiKhiXuLy,
 } from './Loading'
 export { default as ThanhDieuHuong } from './ThanhDieuHuong'

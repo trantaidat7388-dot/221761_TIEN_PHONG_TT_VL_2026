@@ -6,7 +6,7 @@ template_path = r'backend\storage\custom_templates\OSCM_Journal\main.tex'
 with open(template_path, 'r', encoding='utf-8') as f:
     tex = f.read()
 
-from pylatexenc.latexwalker import LatexWalker, LatexMacroNode
+from pylatexenc.latexwalker import LatexWalker
 walker = LatexWalker(tex)
 nodelist, _, _ = walker.get_latex_nodes()
 
@@ -51,7 +51,7 @@ for i, node in enumerate(author_nodes):
             elif next_char == '[':
                 closing = tex.find(']', end_pos + skip_len)
                 if closing != -1:
-                    print(f"    Consumed Bracket block.")
+                    print("    Consumed Bracket block.")
                     end_pos = closing + 1
                     continue
             elif next_char in ('*', ']'):

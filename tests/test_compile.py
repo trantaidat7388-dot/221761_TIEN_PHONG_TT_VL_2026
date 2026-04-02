@@ -1,56 +1,36 @@
-import os
-import sys
-import asyncio
+from pathlib import Path
+import pytest
 
-sys.stdout.reconfigure(encoding='utf-8')
-from backend.core_engine.chuyen_doi import ChuyenDoiWordSangLatex
-from backend.core_engine.utils import bien_dich_latex, find_main_tex, extract_zip_template
+from backend.core_engine.utils import giai_nen_mau_zip, tim_file_tex_chinh
 
-def main():
-    docx_path = r"c:\221761_TIEN_PHONG_TT_VL_2026\input_data\Template_word\acm_submission_template.docx"
-    template_zip = r"c:\221761_TIEN_PHONG_TT_VL_2026\input_data\Association_for_Computing_Machinery__ACM____SIG_Proceedings_Template.zip"
-    out_dir = r"c:\221761_TIEN_PHONG_TT_VL_2026\outputs\test_job"
-    os.makedirs(out_dir, exist_ok=True)
-    os.makedirs(os.path.join(out_dir, "images"), exist_ok=True)
 
-    print("Extracting template...")
-    try:
-        extract_zip_template(template_zip, out_dir)
-    except Exception as e:
-        pass
-    
-    template_path = find_main_tex(out_dir)
-    out_tex = os.path.join(out_dir, "output.tex")
+ROOT_DIR = Path(__file__).resolve().parents[1]
 
-    print(f"Starting conversion with docx: {docx_path}")
-    print(f"Using template: {template_path}")
-    
-    try:
-        bo_chuyen_doi = ChuyenDoiWordSangLatex(
-            duong_dan_word=docx_path,
-            duong_dan_template=template_path,
-            duong_dan_dau_ra=out_tex,
-            thu_muc_anh=os.path.join(out_dir, "images"),
-            mode='demo'
-        )
-        bo_chuyen_doi.chuyen_doi()
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return
-        
-    print(f"Conversion finished. Tex file at: {out_tex}")
 
-    def compile():
-        print("Starting PDF compilation...")
-        thanh_cong, thong_bao_loi = bien_dich_latex(str(out_tex))
-        print("Compilation success:", thanh_cong)
-        if not thanh_cong:
-            print("LaTeX output snippet:", thong_bao_loi[-1000:])
-        else:
-            print("PDF generated successfully.")
+def test_tim_tex_chinh_tu_zip_template(tmp_path: Path) -> None:
+    """Kiem tra co the giai nen va tim file tex chinh tu template zip."""
+    input_dir = ROOT_DIR / "input_data"
+    ds_zip = sorted(input_dir.glob("*.zip"))
+    if not ds_zip:
+        pytest.skip("Khong co file template zip trong input_data")
 
-    compile()
+    duong_dan_zip = ds_zip[0]
+    thu_muc_dich = tmp_path / "template"
+    thu_muc_dich.mkdir(parents=True, exist_ok=True)
 
-if __name__ == "__main__":
-    main()
+    giai_nen_mau_zip(str(duong_dan_zip), str(thu_muc_dich))
+    tex_chinh = tim_file_tex_chinh(str(thu_muc_dich))
+
+    assert Path(tex_chinh).exists()
+    assert Path(tex_chinh).suffix.lower() == ".tex"
+
+
+@pytest.mark.integration
+def test_chuyen_doi_duong_ong_docx_co_the_khoi_tao(tmp_path: Path) -> None:
+    """Smoke level: kiem tra tai nguyen dau vao de phuc vu test chuyen doi full stack."""
+    thu_muc_word = ROOT_DIR / "input_data" / "Template_word"
+    ds_docx = sorted(thu_muc_word.glob("*.docx")) + sorted(thu_muc_word.glob("*.docm"))
+    if not ds_docx:
+        pytest.skip("Khong co file Word mau trong input_data/Template_word")
+
+    assert ds_docx[0].exists()

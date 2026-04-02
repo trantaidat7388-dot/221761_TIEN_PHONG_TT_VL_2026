@@ -10,119 +10,30 @@
 
 import os
 import re
-import zipfile
 import shutil
-import tempfile
 
-import docx
-from docx.opc.constants import CONTENT_TYPE as CT
-from docx.opc.part import PartFactory
-from docx.parts.document import DocumentPart
-from docx.package import Package
 from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
-from docx.text.run import Run
-
-# --- MONKEY PATCH docx cho MIME type (.docm) ---
-DOCM_CONTENT_TYPE = 'application/vnd.ms-word.document.macroEnabled.main+xml'
-PartFactory.part_type_for[DOCM_CONTENT_TYPE] = DocumentPart
-
-def _patched_Document(docx_path=None):
-    from docx.api import _default_docx_path
-    docx_path = _default_docx_path() if docx_path is None else docx_path
-    document_part = Package.open(docx_path).main_document_part
-    
-    allowedWordMimeTypes = [
-        CT.WML_DOCUMENT_MAIN,
-        DOCM_CONTENT_TYPE
-    ]
-    
-    if document_part.content_type not in allowedWordMimeTypes:
-        tmpl = "file '%s' is not a Word file, content type is '%s'"
-        raise ValueError(tmpl % (docx_path, document_part.content_type))
-    return document_part.document
-
-import docx.api
-docx.Document = _patched_Document
-docx.api.Document = _patched_Document
-Document = _patched_Document
-
-
-# --- MONKEY PATCH docx ---
-# Vá lỗi python-docx bỏ qua nội dung nằm trong thẻ Content Control (w:sdt) inline
-@property
-def get_full_text(self):
-    return ''.join(node.text for node in self._element.xpath('.//w:t') if node.text)
-
-@property
-def get_all_runs(self):
-    return [Run(r, self) for r in self._element.xpath('.//w:r')]
-
-Paragraph.text = get_full_text
-Paragraph.runs = get_all_runs
-# -------------------------
 
 from .config import (
-    OMML_NAMESPACE, W_NAMESPACE, OLE_NAMESPACE, VML_NAMESPACE,
-    R_NAMESPACE, A_NAMESPACE, REL_NAMESPACE,
+    W_NAMESPACE, R_NAMESPACE, A_NAMESPACE, REL_NAMESPACE,
     WP_NAMESPACE, WP14_NAMESPACE,
     MAP_STYLE, HEADING_PATTERNS, DEFAULT_OMML2MML_XSL,
 )
 from .xu_ly_anh import BoLocAnh
 from .xu_ly_bang import BoXuLyBang
 from .xu_ly_toan import BoXuLyToan
-from .xu_ly_ole_equation import ole_equation_to_latex
-from .utils import loc_ky_tu, bien_dich_latex, don_dep_file_rac, extract_zip_template, find_main_tex
+from .utils import loc_ky_tu, giai_nen_mau_zip, tim_file_tex_chinh
 from .ast_parser import WordASTParser
 from .jinja_renderer import JinjaLaTeXRenderer
 from .template_preprocessor import TemplatePreprocessor
+from .docx_compat import ap_dung_ban_va_tuong_thich_docx
+from .word_loader import (
+    mo_tai_lieu_word_co_fallback,
+)
 
-
-def chuyen_docm_sang_docx(duong_dan_docm: str) -> str:
-    """Chuyển file .docm (macro-enabled) thành .docx bằng cách loại bỏ VBA macros.
-    Sử dụng logic dùng chung từ utils.py để đảm bảo sạch triệt để các relationship.
-    """
-    from .utils import fix_macro_enabled_docx
-    duong_dan_docx = duong_dan_docm.rsplit('.', 1)[0] + '_converted.docx'
-    
-    # Copy file gốc sang tên mới trước khi fix
-    shutil.copy2(duong_dan_docm, duong_dan_docx)
-    
-    # Sử dụng logic tẩy rửa nâng cao (xóa binary + xóa quan hệ trong .rels)
-    fix_macro_enabled_docx(duong_dan_docx)
-    
-    return duong_dan_docx
-
-def chuyen_strict_sang_transitional(duong_dan_strict: str) -> str:
-    r"""Chuyển đổi file Word định dạng Strict Open XML sang Transitional
-    vì \python-docx\ hiện tại không hỗ trợ trực tiếp các namespace của Strict Open XML.
-    """
-    duong_dan_docx = duong_dan_strict.rsplit('.', 1)[0] + '_transitional.docx'
-    
-    mapping = {
-        b'http://purl.oclc.org/ooxml/drawingml/main': b'http://schemas.openxmlformats.org/drawingml/2006/main',
-        b'http://purl.oclc.org/ooxml/drawingml/wordprocessingDrawing': b'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
-        b'http://purl.oclc.org/ooxml/officeDocument/extendedProperties': b'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties',
-        b'http://purl.oclc.org/ooxml/officeDocument/math': b'http://schemas.openxmlformats.org/officeDocument/2006/math',
-        b'http://purl.oclc.org/ooxml/wordprocessingml/main': b'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
-        b'http://purl.oclc.org/ooxml/officeDocument/customXml': b'http://schemas.openxmlformats.org/officeDocument/2006/customXml',
-        b'http://purl.oclc.org/ooxml/officeDocument/docPropsVTypes': b'http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes',
-        b'http://purl.oclc.org/ooxml/officeDocument/relationships/extendedProperties': b'http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties',
-        b'http://purl.oclc.org/ooxml/officeDocument/relationships': b'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
-        b'http://purl.oclc.org/ooxml/': b'http://schemas.openxmlformats.org/',
-    }
-    
-    with zipfile.ZipFile(duong_dan_strict, 'r') as zin:
-        with zipfile.ZipFile(duong_dan_docx, 'w', zipfile.ZIP_DEFLATED) as zout:
-            for item in zin.infolist():
-                du_lieu = zin.read(item.filename)
-                if item.filename.lower().endswith(('.xml', '.rels')):
-                    for k, v in mapping.items():
-                        du_lieu = du_lieu.replace(k, v)
-                zout.writestr(item, du_lieu)
-                
-    return duong_dan_docx
+ap_dung_ban_va_tuong_thich_docx()
 
 class ChuyenDoiWordSangLatex:
     # Lớp chính chuyển đổi file Word (.docx) sang LaTeX (.tex)
@@ -137,6 +48,7 @@ class ChuyenDoiWordSangLatex:
         self.thu_muc_anh = thu_muc_anh
         self.mode = mode
         self.tai_lieu = None
+        self._temp_word_files = []
 
         # Bộ đếm
         self.dem_anh = 0
@@ -182,14 +94,13 @@ class ChuyenDoiWordSangLatex:
         self.bo_bang = BoXuLyBang(self)
 
     def __del__(self):
-        # Dọn dẹp file .docx tạm tạo ra từ .docm (nếu có)
-        duong_dan_tam = getattr(self, "_file_docm_tam", None)
-        if duong_dan_tam:
+        # Dọn dẹp toàn bộ file Word tạm phát sinh trong pipeline load fallback.
+        for duong_dan_tam in getattr(self, "_temp_word_files", []):
             try:
                 if os.path.exists(duong_dan_tam):
                     os.remove(duong_dan_tam)
             except Exception as e:
-                print(f'[Cảnh báo] Lỗi dọn dẹp file .docm tạm: {e}')
+                print(f'[Cảnh báo] Lỗi dọn dẹp file Word tạm: {e}')
 
         # Dọn dẹp thư mục làm việc ZIP tạm (nếu có)
         thu_muc_zip = getattr(self, "_thu_muc_zip_lam_viec", None)
@@ -208,48 +119,11 @@ class ChuyenDoiWordSangLatex:
             return f.read()
 
     def doc_file_word(self):
-        # Đọc file Word (.docx / .docm) bằng python-docx
-        if not os.path.exists(self.duong_dan_word):
-            raise FileNotFoundError(f"Không tìm thấy file: {self.duong_dan_word}")
-
-        duong_dan_thuc = self.duong_dan_word
-        self._file_docm_tam = None  # Lưu đường dẫn tạm để dọn sau
-
-        # Nếu file .docm (macro-enabled), chuyển sang .docx trước
-        if self.duong_dan_word.lower().endswith('.docm'):
-            try:
-                duong_dan_thuc = chuyen_docm_sang_docx(self.duong_dan_word)
-                self._file_docm_tam = duong_dan_thuc
-                print(f"[INFO] Đã chuyển .docm → .docx: {duong_dan_thuc}")
-            except Exception as e:
-                raise RuntimeError(f"Lỗi chuyển đổi .docm sang .docx: {e}")
-
-        try:
-            from .utils import fix_macro_enabled_docx
-            fix_macro_enabled_docx(duong_dan_thuc)
-            import time
-            time.sleep(0.1)
-        except Exception as e:
-            print(f"[WARN] Lỗi khi làm sạch file Word trước khi parse: {e}")
-
-        try:
-            self.tai_lieu = Document(duong_dan_thuc)
-            return self.tai_lieu
-        except KeyError as e:
-            if "officeDocument" in str(e):
-                # Thường do lỗi docx thuộc chuẩn Strict Open XML, không tương thích python-docx
-                print(f"[INFO] Bắt được lỗi Strict Open XML, chuyển đổi sang Transitional.")
-                duong_dan_thuc = chuyen_strict_sang_transitional(duong_dan_thuc)
-                if getattr(self, '_file_docm_tam', None) is None:
-                    self._file_docm_tam = duong_dan_thuc
-                try:
-                    self.tai_lieu = Document(duong_dan_thuc)
-                    return self.tai_lieu
-                except Exception as ex:
-                    raise RuntimeError(f"Chuyển đổi Strict→Transitional thất bại: {ex}")
-            raise RuntimeError(f"Lỗi mở file: {e}")
-        except Exception as e:
-            raise RuntimeError(f"Lỗi mở file: {e}")
+        # Đọc file Word qua loader service (docm/strict fallback + cleanup tracking).
+        tai_lieu, temp_files = mo_tai_lieu_word_co_fallback(self.duong_dan_word)
+        self.tai_lieu = tai_lieu
+        self._temp_word_files = temp_files
+        return self.tai_lieu
 
     # XỬ LÝ RUN (formatting: bold, italic, màu, highlight, hyperlink)
 
@@ -1100,7 +974,6 @@ class ChuyenDoiWordSangLatex:
     def lay_thu_tu_phan_tu(self):
         # Lấy danh sách phần tử (paragraph / table) theo thứ tự trong body,
         # bao gồm cả các phần tử nằm trong Content Control (sdt)
-        from docx.text.paragraph import Paragraph
         from docx.table import Table
         body = self.tai_lieu.element.body
         thu_tu = []
@@ -1666,14 +1539,11 @@ class ChuyenDoiWordSangLatex:
         # Trường hợp 2: Nhiều \author{} rời rạc (ACM / onecolumn / IEEE trơn)
         matches = list(re.finditer(r'\\author\s*\{', template))
         if len(matches) > 1 or (len(matches) == 1 and '\\and' not in template) or '\\institute' in template:
-            is_elsarticle = 'elsarticle' in template
-            is_acm = '\\affiliation' in template and not is_elsarticle
             is_springer = '\\institute' in template and any(cls in template for cls in ('llncs', 'svjour', 'svmono', 'svmult', 'Springer'))
             
             # Khóa cứng: Template JAISD không bao giờ dùng \and
             if 'JAISD' in template:
                 is_springer = False
-                is_acm = False # JAISD có thể có cấu trúc giống ACM nhưng dùng dấu phẩy
 
             
             # Xoá TẤT CẢ các thẻ tác giả cũ (bao gồm cả các thẻ của ACM/Springer)
@@ -2062,8 +1932,8 @@ class ChuyenDoiWordSangLatex:
 
         if self.duong_dan_template.lower().endswith('.zip'):
             print("[*] Phát hiện template dạng ZIP, đang giải nén...")
-            thu_muc_lam_viec = extract_zip_template(self.duong_dan_template)
-            duong_dan_tex_chinh = find_main_tex(thu_muc_lam_viec)
+            thu_muc_lam_viec = giai_nen_mau_zip(self.duong_dan_template)
+            duong_dan_tex_chinh = tim_file_tex_chinh(thu_muc_lam_viec)
             self._thu_muc_zip_lam_viec = thu_muc_lam_viec
             # Cập nhật output path: ghi đè file .tex chính trong thư mục đã giải nén
             self.duong_dan_dau_ra = duong_dan_tex_chinh

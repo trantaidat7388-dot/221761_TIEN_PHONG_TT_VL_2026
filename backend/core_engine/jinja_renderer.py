@@ -1,7 +1,7 @@
 import jinja2
 import os
 import re
-from .utils import loc_ky_tu, detect_doc_class
+from .utils import phat_hien_loai_tai_lieu
 from .author_strategies import (
     IEEEAuthorStrategy,
     SpringerAuthorStrategy,
@@ -162,7 +162,7 @@ class JinjaLaTeXRenderer:
         except Exception:
             template_src = ""
         
-        doc_class = detect_doc_class(template_src)
+        doc_class = phat_hien_loai_tai_lieu(template_src)
 
         references_block = self._generate_thebibliography(ir_data.get('references', []), doc_class)
         

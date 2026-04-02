@@ -87,3 +87,9 @@ word2latex.db
 
 # Logs
 server_log.txt
+
+# Local environment files (secrets)
+.env
+.env.*
+backend/.env
+frontend/.env

@@ -450,6 +450,8 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
 
   // Check if we have a structured error (for Visual Debugger)
   const isStructuredError = error && typeof error === 'object' && (error.loai_loi || error.errorType || error.details)
+  const thongDiepLoi = typeof error === 'string' ? error : (error?.loiMessage || '')
+  const laLoiKetNoiSSE = /SSE|Kết nối bị gián đoạn|mất kết nối|Không nhận được dữ liệu/i.test(thongDiepLoi)
 
   return (
     <div className="min-h-screen bg-gradient-animated pt-20 pb-12 px-4">
@@ -895,14 +897,28 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                   {isStructuredError ? (
                     <BoGiLoi error={error} />
                   ) : (
-                    <p className="text-red-300/80 bg-red-500/10 p-4 rounded-lg break-words text-sm border border-red-500/20">
-                      {typeof error === 'string' ? error : 'Không thể chuyển đổi file. Vui lòng thử lại.'}
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-red-300/80 bg-red-500/10 p-4 rounded-lg break-words text-sm border border-red-500/20">
+                        {typeof error === 'string' ? error : 'Không thể chuyển đổi file. Vui lòng thử lại.'}
+                      </p>
+                      {laLoiKetNoiSSE && (
+                        <p className="text-amber-200/80 bg-amber-500/10 p-3 rounded-lg text-xs border border-amber-400/20">
+                          Mẹo kết nối: kiểm tra mạng, tắt VPN/proxy không ổn định, sau đó bấm Thử lại để nối lại tiến trình.
+                        </p>
+                      )}
+                    </div>
                   )}
 
-                  <NutBam onClick={xuLyChuyenDoiMoi} icon={RefreshCw}>
-                    Thử lại
-                  </NutBam>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <NutBam onClick={xuLyChuyenDoiMoi} icon={RefreshCw} className="flex-1">
+                      Thử lại
+                    </NutBam>
+                    {laLoiKetNoiSSE && fileChon && (
+                      <NutBam onClick={xuLyChuyenDoi} bienThe="secondary" icon={ChevronRight} className="flex-1">
+                        Kết nối lại SSE
+                      </NutBam>
+                    )}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>

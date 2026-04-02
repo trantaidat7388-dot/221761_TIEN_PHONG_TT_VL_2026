@@ -1,12 +1,49 @@
 // api.js - Service gọi API backend Python
-import { API_BASE_URL } from '../config/apiConfig'
+import { DIA_CHI_API_GOC } from '../config/apiConfig'
 
 const TOKEN_KEY = 'word2latex_token'
+const SU_KIEN_PHIEN_HET_HAN = 'xac-thuc:het-han'
 
-export const getToken = () => localStorage.getItem(TOKEN_KEY)
+export const layToken = () => localStorage.getItem(TOKEN_KEY)
 
-const authHeaders = () => {
-  const token = getToken()
+const giaiMaPayloadJWT = (token) => {
+  try {
+    const payloadBase64 = token.split('.')[1]
+    if (!payloadBase64) return null
+    const normalized = payloadBase64.replace(/-/g, '+').replace(/_/g, '/')
+    const decoded = window.atob(normalized)
+    return JSON.parse(decoded)
+  } catch {
+    return null
+  }
+}
+
+const tokenDaHetHan = (token) => {
+  const payload = giaiMaPayloadJWT(token)
+  if (!payload?.exp) return false
+  const nowInSeconds = Math.floor(Date.now() / 1000)
+  return payload.exp <= nowInSeconds
+}
+
+const thongBaoPhienHetHan = () => {
+  window.dispatchEvent(new CustomEvent(SU_KIEN_PHIEN_HET_HAN))
+}
+
+const chuanHoaNgayGioApi = (rawValue) => {
+  if (!rawValue || typeof rawValue !== 'string') return null
+  const coTimezone = /[zZ]|[+\-]\d{2}:?\d{2}$/.test(rawValue)
+  const normalized = coTimezone ? rawValue : `${rawValue}Z`
+  const parsed = new Date(normalized)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed
+}
+
+const taoHeaderXacThuc = () => {
+  const token = layToken()
+  if (token && tokenDaHetHan(token)) {
+    thongBaoPhienHetHan()
+    return {}
+  }
   return token ? { 'Authorization': `Bearer ${token}` } : {}
 }
 
@@ -45,10 +82,10 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
       resolve({ thanhCong: false, loiMessage: 'Xử lý quá lâu (>3 phút). Vui lòng thử lại.' })
     }, 180000)
 
-    const url = `${API_BASE_URL}/api/chuyen-doi-stream?template_type=${encodeURIComponent(templateType)}`
+    const url = `${DIA_CHI_API_GOC}/api/chuyen-doi-stream?template_type=${encodeURIComponent(templateType)}`
     fetch(url, {
       method: 'POST',
-      headers: authHeaders(),   // 🔑 Tự động đính Bearer token
+      headers: taoHeaderXacThuc(),
       body: formData,
       signal: controller.signal,
     }).then(async (response) => {
@@ -62,10 +99,12 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let daNhanDuLieu = false
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
+        daNhanDuLieu = true
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop()
@@ -101,7 +140,12 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
           } catch { /* skip */ }
         }
       }
-      resolve({ thanhCong: false, loiMessage: 'Kết nối bị gián đoạn' })
+      resolve({
+        thanhCong: false,
+        loiMessage: daNhanDuLieu
+          ? 'Kết nối SSE bị gián đoạn trong lúc xử lý. Vui lòng kiểm tra mạng và bấm Thử lại.'
+          : 'Không nhận được dữ liệu từ SSE. Vui lòng thử lại sau ít phút.'
+      })
     }).catch((loi) => {
       clearTimeout(timeoutId)
       if (loi?.name === 'AbortError') {
@@ -115,7 +159,8 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
 
 export const taiFile = async (duongDan, tenFile) => {
   try {
-    const response = await fetch(duongDan, { headers: authHeaders() })
+    const response = await fetch(duongDan, { headers: taoHeaderXacThuc() })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) throw new Error('Không thể tải file')
     const blob = await response.blob()
     luuBlobThanhFile(blob, tenFile)
@@ -130,14 +175,15 @@ export const taiFileZip = async (jobId, tenFileZipFallback = '') => {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
 
     // Thử endpoint mới /api/download/{job_id} trước (yêu cầu auth)
-    const downloadUrl = `${API_BASE_URL}/api/download/${jobId}`
+    const downloadUrl = `${DIA_CHI_API_GOC}/api/download/${jobId}`
     const response = await fetch(downloadUrl, {
       method: 'GET',
-      headers: authHeaders()
+      headers: taoHeaderXacThuc()
     })
+    if (response.status === 401) thongBaoPhienHetHan()
 
     // Fallback sang endpoint cũ nếu chưa đăng nhập
-    const finalResponse = response.ok ? response : await fetch(`${API_BASE_URL}/api/tai-ve-zip/${jobId}`)
+    const finalResponse = response.ok ? response : await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-zip/${jobId}`)
     if (!finalResponse.ok) {
       const message = await docLoiJsonTuResponse(finalResponse)
       throw new Error(message)
@@ -163,15 +209,16 @@ export const bienDichPDF = async (jobId, signal = null) => {
 
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
-    const response = await fetch(`${API_BASE_URL}/api/compile-pdf/${jobId}`, {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/compile-pdf/${jobId}`, {
       method: 'POST',
       headers: {
-        ...authHeaders(),
+        ...taoHeaderXacThuc(),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({}), // Gửi body rỗng để tránh 422 trên một số cấu hình server/proxy
       signal: signal || controller.signal // 🧊 Support external cancellation
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     clearTimeout(timeoutId)
     const data = await response.json()
     if (!response.ok || !data.thanh_cong) {
@@ -185,7 +232,7 @@ export const bienDichPDF = async (jobId, signal = null) => {
       thanhCong: true,
       soTrang: data.so_trang,
       tenFilePDF: data.ten_file_pdf,
-      pdfUrl: `${API_BASE_URL}${data.pdf_url}`,
+      pdfUrl: `${DIA_CHI_API_GOC}${data.pdf_url}`,
     }
   } catch (loi) {
     clearTimeout(timeoutId)
@@ -199,9 +246,10 @@ export const bienDichPDF = async (jobId, signal = null) => {
 export const taiFilePDF = async (jobId) => {
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
-    const response = await fetch(`${API_BASE_URL}/api/tai-ve-pdf/${jobId}`, {
-      headers: authHeaders(),
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-pdf/${jobId}`, {
+      headers: taoHeaderXacThuc(),
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) throw new Error('Không thể tải file PDF')
     const blob = await response.blob()
     const contentDisposition = response.headers.get('content-disposition') || ''
@@ -218,7 +266,7 @@ export const taiFilePDF = async (jobId) => {
 
 export const layDanhSachTemplate = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/templates`, { cache: 'no-store' })
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/templates`, { cache: 'no-store' })
     if (!response.ok) throw new Error('Không thể tải danh sách template')
     const data = await response.json()
     return { thanhCong: true, templates: data.templates || [] }
@@ -231,11 +279,12 @@ export const taiLenTemplate = async (file) => {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await fetch(`${API_BASE_URL}/api/templates/upload`, {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/templates/upload`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: taoHeaderXacThuc(),
       body: formData,
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) {
       const err = await response.json().catch(() => ({}))
       throw new Error(err.detail || 'Không thể tải lên template')
@@ -249,10 +298,11 @@ export const taiLenTemplate = async (file) => {
 
 export const xoaTemplate = async (templateId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/templates/${templateId}`, {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/templates/${templateId}`, {
       method: 'DELETE',
-      headers: authHeaders(),
+      headers: taoHeaderXacThuc(),
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) {
       const err = await response.json().catch(() => ({}))
       throw new Error(err.detail || 'Không thể xóa template')
@@ -265,7 +315,7 @@ export const xoaTemplate = async (templateId) => {
 
 export const kiemTraServer = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`, { method: 'GET' })
+    const response = await fetch(`${DIA_CHI_API_GOC}/health`, { method: 'GET' })
     return response.ok
   } catch {
     return false
@@ -276,14 +326,17 @@ export const kiemTraServer = async () => {
 
 export const layLichSuChuyenDoi = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/history`, {
-      headers: authHeaders()
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/history`, {
+      headers: taoHeaderXacThuc()
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) throw new Error('Không thể lấy lịch sử')
     const data = await response.json()
     const danhSach = (data.danhSach || []).map(item => ({
       ...item,
-      thoiGian: item.thoiGian ? new Date(item.thoiGian) : new Date()
+      jobId: item.job_id || '',
+      duongDanTaiVe: item.file_path || '',
+      thoiGian: chuanHoaNgayGioApi(item.thoiGian) || new Date()
     }))
     return { thanhCong: true, danhSach }
   } catch (error) {
@@ -291,13 +344,338 @@ export const layLichSuChuyenDoi = async () => {
   }
 }
 
+export const capNhatThongTinTaiKhoan = async (payload) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/auth/me`, {
+      method: 'PATCH',
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, user: data.user }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const layThongTinGoiPremium = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/premium/options`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const dangKyGoiPremium = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/premium/subscribe`, {
+      method: 'POST',
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
 export const xoaLichSuChuyenDoi = async (recordId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/history/${recordId}`, {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/history/${recordId}`, {
       method: 'DELETE',
-      headers: authHeaders()
+      headers: taoHeaderXacThuc()
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) throw new Error('Không thể xóa lịch sử')
+    return { thanhCong: true }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+// ── ADMIN APIs ───────────────────────────────────────────────────────────────
+
+export const layTongQuanAdmin = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/overview`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const layDanhSachNguoiDungAdmin = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return {
+      thanhCong: true,
+      danhSach: (data.danh_sach || []).map(item => ({
+        ...item,
+        createdAt: chuanHoaNgayGioApi(item.created_at),
+      })),
+    }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message, danhSach: [] }
+  }
+}
+
+export const capNhatVaiTroNguoiDungAdmin = async (userId, role) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role }),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, user: data.user }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const capNhatPremiumNguoiDungAdmin = async (userId, enabled, soNgay = 30) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/${userId}/premium`, {
+      method: 'PATCH',
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ enabled, so_ngay: soNgay }),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, user: data.user }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const congTokenNguoiDungAdmin = async (userId, amount, reason = '') => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/${userId}/token/grant`, {
+      method: 'POST',
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ amount, reason }),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, tokenBalance: data.token_balance }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const truTokenNguoiDungAdmin = async (userId, amount, reason = '') => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/${userId}/token/deduct`, {
+      method: 'POST',
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ amount, reason }),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, tokenBalance: data.token_balance }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const layLichSuTheoNguoiDungAdmin = async (userId, limit = 100) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/${userId}/history?limit=${limit}`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return {
+      thanhCong: true,
+      danhSach: (data.danh_sach || []).map(item => ({
+        ...item,
+        createdAt: chuanHoaNgayGioApi(item.created_at),
+      })),
+    }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message, danhSach: [] }
+  }
+}
+
+export const layTokenLedgerTheoNguoiDungAdmin = async (userId, limit = 200) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/${userId}/token-ledger?limit=${limit}`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return {
+      thanhCong: true,
+      danhSach: (data.danh_sach || []).map(item => ({
+        ...item,
+        createdAt: chuanHoaNgayGioApi(item.created_at),
+      })),
+    }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message, danhSach: [] }
+  }
+}
+
+export const xoaNguoiDungAdmin = async (userId) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    return { thanhCong: true }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const layLichSuToanHeThongAdmin = async (limit = 200) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/history?limit=${limit}`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return {
+      thanhCong: true,
+      danhSach: (data.danh_sach || []).map(item => ({
+        ...item,
+        createdAt: chuanHoaNgayGioApi(item.created_at),
+      })),
+    }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message, danhSach: [] }
+  }
+}
+
+export const xoaBanGhiLichSuAdmin = async (recordId) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/history/${recordId}`, {
+      method: 'DELETE',
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    return { thanhCong: true }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const layDanhSachTemplateAdmin = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/templates`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, danhSach: data.danh_sach || [] }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message, danhSach: [] }
+  }
+}
+
+export const xoaTemplateAdmin = async (templateId) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/templates/${templateId}`, {
+      method: 'DELETE',
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
     return { thanhCong: true }
   } catch (error) {
     return { thanhCong: false, loiMessage: error.message }
@@ -309,7 +687,7 @@ export const xoaLichSuChuyenDoi = async (recordId) => {
 // These are kept for backward-compat imports in components
 
 export const dangNhapVoiEmail = async (email, password) => {
-  const resp = await fetch(`${API_BASE_URL}/api/auth/login`, {
+  const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
@@ -322,7 +700,7 @@ export const dangNhapVoiEmail = async (email, password) => {
 }
 
 export const dangKyVoiEmail = async (username, email, password) => {
-  const resp = await fetch(`${API_BASE_URL}/api/auth/register`, {
+  const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, email, password })
@@ -364,6 +742,22 @@ export default {
   kiemTraServer,
   layLichSuChuyenDoi,
   xoaLichSuChuyenDoi,
+  capNhatThongTinTaiKhoan,
+  layThongTinGoiPremium,
+  dangKyGoiPremium,
+  layTongQuanAdmin,
+  layDanhSachNguoiDungAdmin,
+  capNhatVaiTroNguoiDungAdmin,
+  capNhatPremiumNguoiDungAdmin,
+  congTokenNguoiDungAdmin,
+  truTokenNguoiDungAdmin,
+  layLichSuTheoNguoiDungAdmin,
+  layTokenLedgerTheoNguoiDungAdmin,
+  xoaNguoiDungAdmin,
+  layLichSuToanHeThongAdmin,
+  xoaBanGhiLichSuAdmin,
+  layDanhSachTemplateAdmin,
+  xoaTemplateAdmin,
   dangNhapVoiEmail,
   dangKyVoiEmail,
   dangXuat,

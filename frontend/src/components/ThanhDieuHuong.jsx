@@ -7,33 +7,41 @@ import {
   FileText,
   Upload,
   History,
+  Crown,
+  Settings,
   LogOut,
   User,
+  Shield,
   Menu,
   X,
   ChevronDown
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { useAuth } from '../context/AuthContext'
+import { dungXacThuc } from '../context/AuthContext'
 
 const ThanhDieuHuong = ({ nguoiDung }) => {
   // Component thanh điều hướng với menu responsive và dropdown user
-  const { logout } = useAuth()
+  const { dangXuat } = dungXacThuc()
   const location = useLocation()
   const navigate = useNavigate()
   const [menuMo, setMenuMo] = useState(false)
   const [dropdownMo, setDropdownMo] = useState(false)
   const [avatarLoi, setAvatarLoi] = useState(false)
 
-  const danhSachMenu = [
+  const danhSachMenuCoBan = [
     { duongDan: '/chuyen-doi', nhan: 'Chuyển đổi', icon: Upload },
     { duongDan: '/lich-su', nhan: 'Lịch sử', icon: History },
+    { duongDan: '/premium', nhan: 'Premium', icon: Crown },
+    { duongDan: '/tai-khoan', nhan: 'Tài khoản', icon: Settings },
   ]
+  const danhSachMenu = nguoiDung?.role === 'admin'
+    ? [...danhSachMenuCoBan, { duongDan: '/admin', nhan: 'Quản trị', icon: Shield }]
+    : danhSachMenuCoBan
 
   const xuLyDangXuat = () => {
     // Đăng xuất bằng JWT
     try {
-      logout()
+    dangXuat()
       toast.success('Đã đăng xuất')
       navigate('/dang-nhap')
     } catch {
