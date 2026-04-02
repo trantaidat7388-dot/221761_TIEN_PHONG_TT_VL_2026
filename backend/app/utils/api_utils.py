@@ -9,7 +9,7 @@ import time
 import logging
 from pathlib import Path
 
-from ..config import CUSTOM_TEMPLATE_FOLDER, TEMPLATE_FOLDER, TEMP_FOLDER
+from ..config import CUSTOM_TEMPLATE_FOLDER, TEMPLATE_FOLDER
 
 logger = logging.getLogger(__name__)
 

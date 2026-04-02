@@ -1,6 +1,5 @@
 import sys
 import os
-import re
 
 # Thêm thư mục gốc vào sys.path để import được core_engine
 sys.path.append(os.getcwd())

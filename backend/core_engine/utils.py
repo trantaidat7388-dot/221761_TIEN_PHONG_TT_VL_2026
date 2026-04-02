@@ -278,7 +278,7 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
             print(f"[LATEX] SUCCESS: {ten_file.replace('.tex', '.pdf')}")
             return True, ""
         elif pdf_exists:
-            print(f"[LATEX] WARNING: PDF created with minor errors.")
+            print("[LATEX] WARNING: PDF created with minor errors.")
             return True, ""
         else:
             print(f"[LATEX] FAILED: {ten_file} (exit code: {ket_qua.returncode})")

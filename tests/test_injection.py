@@ -1,6 +1,5 @@
 from TexSoup import TexSoup
 import os
-import re
 
 path = os.path.join('backend', 'storage', 'custom_templates', 'template.tex')
 with open(path, 'r', encoding='utf-8') as f:

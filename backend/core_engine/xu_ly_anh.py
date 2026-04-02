@@ -1,7 +1,6 @@
 # xu_ly_anh.py - Xử lý phân tích và lọc ảnh (trang trí vs nội dung)
 
 import math
-import re
 from PIL import Image, ImageStat, ImageFilter
 
 class BoLocAnh:

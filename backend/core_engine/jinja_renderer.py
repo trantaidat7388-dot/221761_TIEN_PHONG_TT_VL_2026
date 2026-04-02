@@ -1,7 +1,7 @@
 import jinja2
 import os
 import re
-from .utils import loc_ky_tu, phat_hien_loai_tai_lieu
+from .utils import phat_hien_loai_tai_lieu
 from .author_strategies import (
     IEEEAuthorStrategy,
     SpringerAuthorStrategy,

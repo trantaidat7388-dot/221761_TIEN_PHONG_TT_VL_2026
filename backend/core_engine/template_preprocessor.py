@@ -658,7 +658,7 @@ class TemplatePreprocessor:
             inner_text = env_match.group(1)
             has_keywords_inside = r'\keywords' in inner_text
 
-            repl = rf'\g<1>\n<< metadata.abstract >>\n'
+            repl = r'\g<1>\n<< metadata.abstract >>\n'
             if has_keywords_inside:
                 repl += r'\\keywords{<< metadata.keywords_str >>}\n'
             repl += r'\g<2>'

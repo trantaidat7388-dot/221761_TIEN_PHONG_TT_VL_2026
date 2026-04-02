@@ -4,7 +4,6 @@ from sqlalchemy.orm import sessionmaker
 from typing import Generator
 from sqlalchemy.orm import Session
 
-import os
 from .config import BASE_DIR
 
 db_path = BASE_DIR / "backend" / "word2latex.db"

@@ -10,33 +10,26 @@
 
 import os
 import re
-import zipfile
 import shutil
-import tempfile
 
 from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
-from docx.text.run import Run
 
 from .config import (
-    OMML_NAMESPACE, W_NAMESPACE, OLE_NAMESPACE, VML_NAMESPACE,
-    R_NAMESPACE, A_NAMESPACE, REL_NAMESPACE,
+    W_NAMESPACE, R_NAMESPACE, A_NAMESPACE, REL_NAMESPACE,
     WP_NAMESPACE, WP14_NAMESPACE,
     MAP_STYLE, HEADING_PATTERNS, DEFAULT_OMML2MML_XSL,
 )
 from .xu_ly_anh import BoLocAnh
 from .xu_ly_bang import BoXuLyBang
 from .xu_ly_toan import BoXuLyToan
-from .xu_ly_ole_equation import ole_equation_to_latex
-from .utils import loc_ky_tu, bien_dich_latex, don_dep_file_rac, giai_nen_mau_zip, tim_file_tex_chinh
+from .utils import loc_ky_tu, giai_nen_mau_zip, tim_file_tex_chinh
 from .ast_parser import WordASTParser
 from .jinja_renderer import JinjaLaTeXRenderer
 from .template_preprocessor import TemplatePreprocessor
 from .docx_compat import ap_dung_ban_va_tuong_thich_docx
 from .word_loader import (
-    chuyen_docm_sang_docx,
-    chuyen_strict_sang_transitional,
     mo_tai_lieu_word_co_fallback,
 )
 
@@ -981,7 +974,6 @@ class ChuyenDoiWordSangLatex:
     def lay_thu_tu_phan_tu(self):
         # Lấy danh sách phần tử (paragraph / table) theo thứ tự trong body,
         # bao gồm cả các phần tử nằm trong Content Control (sdt)
-        from docx.text.paragraph import Paragraph
         from docx.table import Table
         body = self.tai_lieu.element.body
         thu_tu = []
@@ -1547,14 +1539,11 @@ class ChuyenDoiWordSangLatex:
         # Trường hợp 2: Nhiều \author{} rời rạc (ACM / onecolumn / IEEE trơn)
         matches = list(re.finditer(r'\\author\s*\{', template))
         if len(matches) > 1 or (len(matches) == 1 and '\\and' not in template) or '\\institute' in template:
-            is_elsarticle = 'elsarticle' in template
-            is_acm = '\\affiliation' in template and not is_elsarticle
             is_springer = '\\institute' in template and any(cls in template for cls in ('llncs', 'svjour', 'svmono', 'svmult', 'Springer'))
             
             # Khóa cứng: Template JAISD không bao giờ dùng \and
             if 'JAISD' in template:
                 is_springer = False
-                is_acm = False # JAISD có thể có cấu trúc giống ACM nhưng dùng dấu phẩy
 
             
             # Xoá TẤT CẢ các thẻ tác giả cũ (bao gồm cả các thẻ của ACM/Springer)
