@@ -34,10 +34,10 @@
 
 ## P4 - Frontend va bao mat phien dang nhap
 
-- [ ] Danh gia chuyen tu localStorage token sang httpOnly cookie neu trien khai internet.
-- [ ] Them xu ly refresh token hoac silent re-auth.
-- [ ] Cai thien thong diep loi UX khi SSE mat ket noi giua chung.
-- [ ] Them e2e test cho dang nhap, chuyen doi, tai file zip/pdf.
+- [x] Danh gia chuyen tu localStorage token sang httpOnly cookie neu trien khai internet.
+- [x] Them xu ly refresh token hoac silent re-auth.
+- [x] Cai thien thong diep loi UX khi SSE mat ket noi giua chung.
+- [x] Them e2e test cho dang nhap, chuyen doi, tai file zip/pdf.
 
 ## Theo doi tien do
 
@@ -45,4 +45,4 @@
 - [x] Dat moc hoan thanh P1
 - [x] Dat moc hoan thanh P2
 - [x] Dat moc hoan thanh P3
-- [ ] Dat moc hoan thanh P4
+- [x] Dat moc hoan thanh P4

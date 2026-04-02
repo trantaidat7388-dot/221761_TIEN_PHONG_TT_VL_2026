@@ -2,11 +2,39 @@
 import { DIA_CHI_API_GOC } from '../config/apiConfig'
 
 const TOKEN_KEY = 'word2latex_token'
+const SU_KIEN_PHIEN_HET_HAN = 'xac-thuc:het-han'
 
 export const layToken = () => localStorage.getItem(TOKEN_KEY)
 
+const giaiMaPayloadJWT = (token) => {
+  try {
+    const payloadBase64 = token.split('.')[1]
+    if (!payloadBase64) return null
+    const normalized = payloadBase64.replace(/-/g, '+').replace(/_/g, '/')
+    const decoded = window.atob(normalized)
+    return JSON.parse(decoded)
+  } catch {
+    return null
+  }
+}
+
+const tokenDaHetHan = (token) => {
+  const payload = giaiMaPayloadJWT(token)
+  if (!payload?.exp) return false
+  const nowInSeconds = Math.floor(Date.now() / 1000)
+  return payload.exp <= nowInSeconds
+}
+
+const thongBaoPhienHetHan = () => {
+  window.dispatchEvent(new CustomEvent(SU_KIEN_PHIEN_HET_HAN))
+}
+
 const taoHeaderXacThuc = () => {
   const token = layToken()
+  if (token && tokenDaHetHan(token)) {
+    thongBaoPhienHetHan()
+    return {}
+  }
   return token ? { 'Authorization': `Bearer ${token}` } : {}
 }
 
@@ -62,10 +90,12 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let daNhanDuLieu = false
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
+        daNhanDuLieu = true
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop()
@@ -101,7 +131,12 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
           } catch { /* skip */ }
         }
       }
-      resolve({ thanhCong: false, loiMessage: 'Kết nối bị gián đoạn' })
+      resolve({
+        thanhCong: false,
+        loiMessage: daNhanDuLieu
+          ? 'Kết nối SSE bị gián đoạn trong lúc xử lý. Vui lòng kiểm tra mạng và bấm Thử lại.'
+          : 'Không nhận được dữ liệu từ SSE. Vui lòng thử lại sau ít phút.'
+      })
     }).catch((loi) => {
       clearTimeout(timeoutId)
       if (loi?.name === 'AbortError') {
@@ -116,6 +151,7 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
 export const taiFile = async (duongDan, tenFile) => {
   try {
     const response = await fetch(duongDan, { headers: taoHeaderXacThuc() })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) throw new Error('Không thể tải file')
     const blob = await response.blob()
     luuBlobThanhFile(blob, tenFile)
@@ -135,6 +171,7 @@ export const taiFileZip = async (jobId, tenFileZipFallback = '') => {
       method: 'GET',
       headers: taoHeaderXacThuc()
     })
+    if (response.status === 401) thongBaoPhienHetHan()
 
     // Fallback sang endpoint cũ nếu chưa đăng nhập
     const finalResponse = response.ok ? response : await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-zip/${jobId}`)
@@ -172,6 +209,7 @@ export const bienDichPDF = async (jobId, signal = null) => {
       body: JSON.stringify({}), // Gửi body rỗng để tránh 422 trên một số cấu hình server/proxy
       signal: signal || controller.signal // 🧊 Support external cancellation
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     clearTimeout(timeoutId)
     const data = await response.json()
     if (!response.ok || !data.thanh_cong) {
@@ -202,6 +240,7 @@ export const taiFilePDF = async (jobId) => {
     const response = await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-pdf/${jobId}`, {
       headers: taoHeaderXacThuc(),
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) throw new Error('Không thể tải file PDF')
     const blob = await response.blob()
     const contentDisposition = response.headers.get('content-disposition') || ''
@@ -236,6 +275,7 @@ export const taiLenTemplate = async (file) => {
       headers: taoHeaderXacThuc(),
       body: formData,
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) {
       const err = await response.json().catch(() => ({}))
       throw new Error(err.detail || 'Không thể tải lên template')
@@ -253,6 +293,7 @@ export const xoaTemplate = async (templateId) => {
       method: 'DELETE',
       headers: taoHeaderXacThuc(),
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) {
       const err = await response.json().catch(() => ({}))
       throw new Error(err.detail || 'Không thể xóa template')
@@ -279,6 +320,7 @@ export const layLichSuChuyenDoi = async () => {
     const response = await fetch(`${DIA_CHI_API_GOC}/api/history`, {
       headers: taoHeaderXacThuc()
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) throw new Error('Không thể lấy lịch sử')
     const data = await response.json()
     const danhSach = (data.danhSach || []).map(item => ({
@@ -297,6 +339,7 @@ export const xoaLichSuChuyenDoi = async (recordId) => {
       method: 'DELETE',
       headers: taoHeaderXacThuc()
     })
+    if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) throw new Error('Không thể xóa lịch sử')
     return { thanhCong: true }
   } catch (error) {

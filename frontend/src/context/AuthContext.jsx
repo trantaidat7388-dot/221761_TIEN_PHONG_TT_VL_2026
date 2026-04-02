@@ -5,6 +5,8 @@ import { DIA_CHI_API_GOC } from '../config/apiConfig'
 
 const TOKEN_KEY = 'word2latex_token'
 const USER_KEY = 'word2latex_user'
+const SU_KIEN_PHIEN_HET_HAN = 'xac-thuc:het-han'
+const CHU_KY_XAC_THUC_MS = 5 * 60 * 1000
 
 const NguCanhXacThuc = createContext(null)
 
@@ -19,6 +21,20 @@ export const BoBaoBocXacThuc = ({ children }) => {
         }
     })
     const [dangTai, datDangTai] = useState(true)
+
+    const goiApiThongTinNguoiDung = async (tokenDangDung) => {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        try {
+            const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/me`, {
+                headers: { 'Authorization': `Bearer ${tokenDangDung}` },
+                signal: controller.signal
+            })
+            return resp
+        } finally {
+            clearTimeout(timeoutId)
+        }
+    }
 
     const luuPhien = (accessToken, duLieuNguoiDung) => {
         localStorage.setItem(TOKEN_KEY, accessToken)
@@ -36,32 +52,70 @@ export const BoBaoBocXacThuc = ({ children }) => {
 
     // Validate token on mount by calling /api/auth/me
     useEffect(() => {
-        const xacThucTokenDaLuu = async () => {
+        let daHuy = false
+
+        const xacThucTokenDaLuu = async ({ imLang = false } = {}) => {
             const tokenDaLuu = localStorage.getItem(TOKEN_KEY)
             if (!tokenDaLuu) {
-                datDangTai(false)
+                if (!daHuy) datDangTai(false)
                 return
             }
             try {
-                const controller = new AbortController()
-                const timeoutId = setTimeout(() => controller.abort(), 5000)
-                const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/me`, {
-                    headers: { 'Authorization': `Bearer ${tokenDaLuu}` },
-                    signal: controller.signal
-                })
-                clearTimeout(timeoutId)
+                const resp = await goiApiThongTinNguoiDung(tokenDaLuu)
                 if (resp.ok) {
                     const duLieuNguoiDung = await resp.json()
-                    luuPhien(tokenDaLuu, duLieuNguoiDung)
+                    if (!daHuy) luuPhien(tokenDaLuu, duLieuNguoiDung)
                 } else {
-                    xoaPhien()
+                    if (!daHuy) xoaPhien()
                 }
             } catch {
                 // Server unreachable - keep local state
             }
-            datDangTai(false)
+            if (!imLang && !daHuy) datDangTai(false)
         }
+
         xacThucTokenDaLuu()
+
+        const xuLyTrangThaiTab = () => {
+            if (document.visibilityState === 'visible') {
+                xacThucTokenDaLuu({ imLang: true })
+            }
+        }
+        const xuLyDongBoStorage = (event) => {
+            if (event.key === TOKEN_KEY || event.key === USER_KEY) {
+                const tokenMoi = localStorage.getItem(TOKEN_KEY)
+                const userRaw = localStorage.getItem(USER_KEY)
+                if (!tokenMoi || !userRaw) {
+                    xoaPhien()
+                    return
+                }
+                try {
+                    datToken(tokenMoi)
+                    datNguoiDung(JSON.parse(userRaw))
+                } catch {
+                    xoaPhien()
+                }
+            }
+        }
+        const xuLyPhienHetHan = () => {
+            xoaPhien()
+        }
+
+        const intervalId = setInterval(() => {
+            xacThucTokenDaLuu({ imLang: true })
+        }, CHU_KY_XAC_THUC_MS)
+
+        document.addEventListener('visibilitychange', xuLyTrangThaiTab)
+        window.addEventListener('storage', xuLyDongBoStorage)
+        window.addEventListener(SU_KIEN_PHIEN_HET_HAN, xuLyPhienHetHan)
+
+        return () => {
+            daHuy = true
+            clearInterval(intervalId)
+            document.removeEventListener('visibilitychange', xuLyTrangThaiTab)
+            window.removeEventListener('storage', xuLyDongBoStorage)
+            window.removeEventListener(SU_KIEN_PHIEN_HET_HAN, xuLyPhienHetHan)
+        }
     }, [])
 
     const dangNhap = async (email, password) => {

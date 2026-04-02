@@ -193,6 +193,19 @@ Các biến chính (xem đầy đủ trong `backend/.env.example`):
 - `LATEX_COMPILE_TIMEOUT_SECONDS`: timeout compile LaTeX
 - `TEMP_TTL_HOURS`, `OUTPUT_TTL_HOURS`: TTL dọn dữ liệu tạm/output
 
+## Bao mat phien dang nhap (Frontend)
+
+- Hien tai frontend luu JWT o `localStorage` de phuc vu mo hinh dev/noi bo.
+- Da bo sung `silent re-auth`: frontend tu xac thuc lai token theo chu ky, khi quay lai tab, va tu dang xuat khi nhan su kien phien het han (`401`).
+- Khi trien khai ra Internet cong cong, khuyen nghi chuyen sang mo hinh `httpOnly + Secure + SameSite cookie` (kem CSRF protection) de giam rui ro XSS danh cap token.
+
+### Chay e2e test frontend
+
+```bash
+cd frontend
+npm run test:e2e
+```
+
 ### Khởi động thủ công
 
 **Backend:**
