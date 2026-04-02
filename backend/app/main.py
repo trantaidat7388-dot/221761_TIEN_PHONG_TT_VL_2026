@@ -3,7 +3,6 @@ main.py
 Điểm khởi đầu (Khởi tạo FastAPI, CORS, gán Router).
 """
 
-from datetime import datetime
 from collections import defaultdict, deque
 import logging
 import os
@@ -33,7 +32,7 @@ from .config import (
     RATE_LIMIT_ADMIN_PER_MINUTE,
 )
 from .utils.api_utils import quet_xoa_thu_muc_mo_coi
-from .routers import templates, chuyen_doi, auth_routes, admin_routes
+from .routers import admin_routes, auth_routes, base, file_upload
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -60,8 +59,8 @@ app.add_middleware(
 )
 
 # Gắn các routers
-app.include_router(templates.router)
-app.include_router(chuyen_doi.router)
+app.include_router(base.router)
+app.include_router(file_upload.router)
 app.include_router(auth_routes.router)
 app.include_router(admin_routes.router)
 
@@ -274,25 +273,6 @@ def xu_ly_don_dep_khi_khoi_dong() -> None:
     # Dọn dẹp các thư mục/file mồ côi trong temp khi server khởi động
     quet_xoa_thu_muc_mo_coi(TEMP_FOLDER, TEMP_TTL_HOURS)
     quet_xoa_thu_muc_mo_coi(OUTPUTS_FOLDER, OUTPUT_TTL_HOURS)
-
-@app.get("/")
-def doc_api() -> dict:
-    """Endpoint gốc - hướng dẫn sử dụng API."""
-    return {
-        "message": "Word2LaTeX API đang hoạt động",
-        "endpoints": {
-            "/api/chuyen-doi": "POST - Upload file .docx/.docm và chuyển đổi",
-            "/docs": "Xem Swagger documentation"
-        }
-    }
-
-@app.get("/health")
-def kiem_tra_suc_khoe() -> dict:
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat()
-    }
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> Response:

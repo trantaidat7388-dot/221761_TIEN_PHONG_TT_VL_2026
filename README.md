@@ -196,6 +196,9 @@ Các biến chính (xem đầy đủ trong `backend/.env.example`):
 - `SSE_CLEANUP_DELAY_SECONDS`: thời gian giữ job SSE trước khi dọn
 - `LATEX_COMPILE_TIMEOUT_SECONDS`: timeout compile LaTeX
 - `TEMP_TTL_HOURS`, `OUTPUT_TTL_HOURS`: TTL dọn dữ liệu tạm/output
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`: cấu hình Google OAuth
+- `GOOGLE_REDIRECT_URI`: callback URL cho redirect flow
+- `FRONTEND_URL`: URL frontend để backend redirect kèm token
 
 ## Bao mat phien dang nhap (Frontend)
 
@@ -269,6 +272,13 @@ Swagger UI tương tác: `http://localhost:8000/docs`
 | `GET` | `/health` | — | Kiểm tra trạng thái server |
 | `GET` | `/docs` | — | Swagger UI (Tài liệu API chi tiết) |
 
+### Auth Google (2 luồng)
+
+- Luồng 1 (ID Token): frontend lấy id_token từ Google Identity Services rồi gọi `POST /api/auth/google`.
+- Luồng 2 (Redirect Flow):
+    - `GET /api/auth/google/login` -> redirect sang Google consent screen
+    - `GET /api/auth/google/callback` -> backend đổi code, tạo JWT nội bộ, redirect về frontend với `?token=...`
+
 ---
 
 ## Lưu ý về Mẫu LaTeX (Custom Templates)
@@ -331,17 +341,29 @@ Khi tải lên mẫu LaTeX tùy chỉnh, hệ thống khuyến khích bạn đó
 ```
 Word2Latex/
 ├── start.bat                        # Trình khởi động 1-click (Windows)
-├── backend/                         # Source code Backend
+├── start.sh                         # Script khởi động cho Linux/macOS
+├── backend/                         # Mã nguồn backend
 │   ├── app/                         # Lớp Web API (FastAPI)
-│   │   ├── main.py                  # Entry point, cấu hình CORS, ghép Router
+│   │   ├── main.py                  # Điểm khởi chạy, cấu hình CORS, ghép router
 │   │   ├── config.py                # Cấu hình biến môi trường, đường dẫn
 │   │   ├── database.py              # Khởi tạo SQLite engine
-│   │   ├── models.py                # Các Model dữ liệu SQLAlchemy
-│   │   ├── auth.py                  # Helper functions xử lý JWT auth
+│   │   ├── models/                  # Các Model dữ liệu SQLAlchemy
+│   │   │   ├── __init__.py          # ORM entities (User, History, Ledger...)
+│   │   │   └── base_db.py           # Export Base/Session/engine/lay_db
+│   │   ├── auth.py                  # Hàm tiện ích xác thực JWT
+│   │   ├── security/                # Lớp bảo mật (JWT/hash/permission helpers)
+│   │   │   ├── __init__.py
+│   │   │   └── security.py
+│   │   ├── services/                # Dịch vụ nghiệp vụ dùng lại giữa các router
+│   │   │   ├── __init__.py
+│   │   │   └── token_service.py
 │   │   ├── routers/                 # Quản lý các endpoint riêng biệt
-│   │   │   ├── auth_routes.py       # API Đăng nhập, Đăng ký, Lịch sử
+│   │   │   ├── auth_routes.py       # API Đăng nhập, Đăng ký, Premium, Google
+│   │   │   ├── base.py              # API cơ bản (/, /health)
+│   │   │   ├── file_upload.py       # Facade upload/download (templates + convert)
 │   │   │   ├── chuyen_doi.py        # API Xử lý Word → LaTeX (Stream/Upload)
-│   │   │   └── templates.py         # API Quản lý mẫu LaTeX
+│   │   │   ├── templates.py         # API Quản lý mẫu LaTeX
+│   │   │   └── admin_routes.py      # API quản trị hệ thống
 │   │   └── utils/                   # Hàm phụ trợ riêng cho Web API
 │   │
 │   ├── core_engine/                 # Engine chuyển đổi cốt lõi (Python thuần)

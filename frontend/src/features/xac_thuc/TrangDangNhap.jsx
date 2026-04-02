@@ -15,10 +15,11 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dungXacThuc } from '../../context/AuthContext'
+import { DIA_CHI_API_GOC } from '../../config/apiConfig'
 
 const TrangDangNhap = () => {
   const navigate = useNavigate()
-  const { dangNhap, dangKy, dangNhapGoogle } = dungXacThuc()
+  const { nguoiDung, dangNhap, dangKy, dangNhapGoogle } = dungXacThuc()
   const [cheDoForm, setCheDoForm] = useState('dangNhap')
   const [hienMatKhau, setHienMatKhau] = useState(false)
   const [dangXuLy, setDangXuLy] = useState(false)
@@ -66,7 +67,7 @@ const TrangDangNhap = () => {
         await dangKy(formData.username, formData.email, formData.matKhau)
         toast.success('Đăng ký thành công!')
       }
-      navigate('/chuyen-doi')
+      window.location.replace('/chuyen-doi')
     } catch (loi) {
       toast.error(loi.message || 'Đã xảy ra lỗi')
     } finally {
@@ -96,7 +97,7 @@ const TrangDangNhap = () => {
           try {
             await dangNhapGoogle(idToken)
             toast.success('Đăng nhập Google thành công!')
-            navigate('/chuyen-doi')
+            window.location.replace('/chuyen-doi')
           } catch (err) {
             toast.error(err.message || 'Đăng nhập Google thất bại')
           }
@@ -125,6 +126,12 @@ const TrangDangNhap = () => {
       if (script.parentNode) script.parentNode.removeChild(script)
     }
   }, [dangNhapGoogle, navigate])
+
+  useEffect(() => {
+    if (nguoiDung) {
+      navigate('/chuyen-doi', { replace: true })
+    }
+  }, [nguoiDung, navigate])
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -312,6 +319,14 @@ const TrangDangNhap = () => {
           <div className="mt-5 pt-5 border-t border-white/10">
             <p className="text-white/50 text-xs text-center mb-3">Hoặc tiếp tục với Google</p>
             <div id="google-signin-btn" className="flex justify-center" />
+            <div className="flex justify-center mt-3">
+              <a
+                href={`${DIA_CHI_API_GOC}/api/auth/google/login`}
+                className="text-xs text-primary-300 hover:text-primary-200 underline"
+              >
+                Đăng nhập Google (Redirect Flow)
+              </a>
+            </div>
             {!import.meta.env?.VITE_GOOGLE_CLIENT_ID && (
               <p className="text-xs text-amber-300/80 text-center mt-2">
                 Chưa cấu hình VITE_GOOGLE_CLIENT_ID
