@@ -342,20 +342,22 @@ Khi tải lên mẫu LaTeX tùy chỉnh, hệ thống khuyến khích bạn đó
 Word2Latex/
 ├── start.bat                        # Trình khởi động 1-click (Windows)
 ├── start.sh                         # Script khởi động cho Linux/macOS
-├── backend/                         # Source code Backend
+├── backend/                         # Mã nguồn backend
 │   ├── app/                         # Lớp Web API (FastAPI)
-│   │   ├── main.py                  # Entry point, cấu hình CORS, ghép Router
+│   │   ├── main.py                  # Điểm khởi chạy, cấu hình CORS, ghép router
 │   │   ├── config.py                # Cấu hình biến môi trường, đường dẫn
 │   │   ├── database.py              # Khởi tạo SQLite engine
 │   │   ├── models/                  # Các Model dữ liệu SQLAlchemy
 │   │   │   ├── __init__.py          # ORM entities (User, History, Ledger...)
 │   │   │   └── base_db.py           # Export Base/Session/engine/lay_db
-│   │   ├── auth.py                  # Helper functions xử lý JWT auth
-│   │   ├── security/                # Facade bảo mật theo chuẩn cấu trúc
+│   │   ├── auth.py                  # Hàm tiện ích xác thực JWT
+│   │   ├── security/                # Lớp bảo mật (JWT/hash/permission helpers)
 │   │   │   ├── __init__.py
 │   │   │   └── security.py
+│   │   ├── services/                # Dịch vụ nghiệp vụ dùng lại giữa các router
+│   │   │   ├── __init__.py
+│   │   │   └── token_service.py
 │   │   ├── routers/                 # Quản lý các endpoint riêng biệt
-│   │   │   ├── auth.py              # Facade router auth
 │   │   │   ├── auth_routes.py       # API Đăng nhập, Đăng ký, Premium, Google
 │   │   │   ├── base.py              # API cơ bản (/, /health)
 │   │   │   ├── file_upload.py       # Facade upload/download (templates + convert)

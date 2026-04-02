@@ -1,4 +1,4 @@
-# auth.py - JWT + bcrypt authentication helpers
+"""Tiện ích xác thực: băm mật khẩu, JWT và kiểm soát quyền truy cập."""
 
 import logging
 import os
@@ -39,15 +39,19 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7   # 7 ngày
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def bam_mat_khau(plain: str) -> str:
+    """Băm mật khẩu thuần bằng bcrypt."""
     return pwd_context.hash(plain)
 
+
 def xac_minh_mat_khau(plain: str, hashed: str) -> bool:
+    """Xác minh mật khẩu thuần với giá trị đã băm."""
     return pwd_context.verify(plain, hashed)
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 def tao_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """Tạo access token JWT đã ký."""
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
@@ -55,7 +59,7 @@ def tao_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> s
 
 
 def _giai_ma_voi_nhieu_khoa(token: str) -> dict:
-    """Try current key first, then previous keys to support key rotation."""
+    """Giải mã token với khóa hiện tại, sau đó thử các khóa cũ để hỗ trợ xoay khóa."""
     secrets_to_try = [SECRET_KEY, *PREVIOUS_SECRET_KEYS]
     for secret in secrets_to_try:
         try:
@@ -68,6 +72,7 @@ def lay_nguoi_dung_hien_tai(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(lay_db)
 ) -> models.User:
+    """Lấy người dùng hiện tại từ bearer token."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Không thể xác thực thông tin đăng nhập",
@@ -88,6 +93,7 @@ def lay_nguoi_dung_hien_tai(
 
 
 def yeu_cau_quyen_admin(current_user: models.User = Depends(lay_nguoi_dung_hien_tai)) -> models.User:
+    """Bắt buộc quyền admin cho các endpoint được bảo vệ."""
     if (current_user.role or "user").lower() != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

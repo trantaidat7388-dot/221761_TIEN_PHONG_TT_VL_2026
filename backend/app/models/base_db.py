@@ -1,7 +1,7 @@
-"""Database base exports for standardized project structure.
+"""Export thành phần database theo cấu trúc dự án thống nhất.
 
-This module provides a stable location for DB session/base imports while
-reusing the existing implementation in backend.app.database.
+Module này cung cấp điểm import ổn định cho Base/Session/engine,
+đồng thời tái sử dụng triển khai hiện có trong backend.app.database.
 """
 
 from ..database import Base, SessionLocal, engine, lay_db

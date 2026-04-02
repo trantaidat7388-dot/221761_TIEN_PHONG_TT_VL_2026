@@ -7,6 +7,22 @@ import os
 from pathlib import Path
 
 
+def _nap_env_tu_file(file_path: Path) -> None:
+    if not file_path.exists():
+        return
+
+    for raw_line in file_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
 def _lay_so_nguyen_tu_env(name: str, default: int, min_value: int = 0) -> int:
     raw = os.getenv(name, str(default)).strip()
     try:
@@ -21,6 +37,9 @@ def _lay_chuoi_tu_env(name: str, default: str = "") -> str:
 
 # Thư mục gốc dự án
 BASE_DIR = Path(__file__).parent.parent.parent
+
+# Nạp biến môi trường local từ backend/.env (không ghi đè biến đã set trong hệ thống).
+_nap_env_tu_file(BASE_DIR / "backend" / ".env")
 
 # Các thư mục dữ liệu
 TEMPLATE_FOLDER = BASE_DIR / "input_data"
