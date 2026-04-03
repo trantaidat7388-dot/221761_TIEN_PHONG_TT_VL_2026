@@ -256,41 +256,6 @@ npm run dev
 
 Truy cập `http://localhost:5173` trên trình duyệt.
 
-### Chạy CLI cho developer (không cần UI kéo thả)
-
-One-shot command: đưa `docx/docm` + `template (.zip/.tex/thư mục)` và hệ thống tự tạo thư mục run mới, xuất `result.zip`.
-
-```bash
-python -m backend.cli_convert \
-    --input input_data/Template_word/sample.docx \
-    --template input_data/Template_word/splnproc2510.zip
-```
-
-Tùy chọn thư mục output gốc:
-
-```bash
-python -m backend.cli_convert \
-    --input path/to/file.docm \
-    --template path/to/template.tex \
-    --out-root outputs/cli_runs
-```
-
-Kết quả nằm trong thư mục tự sinh theo timestamp, ví dụ:
-
-```text
-outputs/cli_runs/run_20260403_141530/
-    result.zip
-    run-summary.json
-    output_141530.tex
-    output_141530.pdf
-```
-
-Nếu muốn bỏ qua bước compile PDF:
-
-```bash
-python -m backend.cli_convert --input file.docx --template template.zip --skip-compile
-```
-
 ---
 
 ## API Endpoints
