@@ -258,6 +258,53 @@ Truy cập `http://localhost:5173` trên trình duyệt.
 
 ---
 
+## Pipeline CLI (Không cần giao diện)
+
+Nếu người dùng không muốn vào web UI, có thể chạy pipeline chuyển đổi trực tiếp bằng script:
+
+- Input 1: 1 file Word (`.docx` hoặc `.docm`)
+- Input 2: 1 file ZIP template LaTeX
+- Output: thư mục kết quả chứa `.tex` và `.zip` (tùy chọn thêm `.pdf`)
+
+### Lệnh chạy cơ bản (PowerShell - Windows)
+
+```powershell
+python run_conversion_pipeline.py `
+    --word input_data/Template_word/<ten_file_word>.docx `
+    --template-zip <duong_dan_template_zip>.zip `
+    --output-dir outputs/pipeline_cli
+```
+
+### Tùy chọn biên dịch PDF (PowerShell - Windows)
+
+```powershell
+python run_conversion_pipeline.py `
+    --word input_data/Template_word/<ten_file_word>.docm `
+    --template-zip <duong_dan_template_zip>.zip `
+    --output-dir outputs/pipeline_cli `
+    --compile-pdf
+```
+
+### Giữ thư mục job để debug (PowerShell - Windows)
+
+```powershell
+python run_conversion_pipeline.py `
+    --word <duong_dan_file_word> `
+    --template-zip <duong_dan_template_zip>.zip `
+    --output-dir outputs/pipeline_cli `
+    --keep-workdir
+```
+
+Ghi chú:
+
+- Mặc định script sẽ dọn thư mục tạm và chỉ giữ file kết quả cuối cùng trong thư mục output.
+- Nếu bật `--keep-workdir`, hệ thống giữ nguyên `job_<...>` để kiểm tra trung gian.
+- Nếu bật `--compile-pdf`, máy cần có `xelatex`/`pdflatex` trong `PATH`.
+- `--template-zip` cần là file `.zip` thật. Nếu bạn đang có template ở dạng thư mục, hãy nén thư mục đó thành `.zip` trước khi chạy.
+- PowerShell không hỗ trợ ky tu `\` de xuong dong nhu Bash. Hay dung dau `` ` `` o cuoi dong nhu vi du tren hoac viet 1 dong lien tuc.
+
+---
+
 ## API Endpoints
 
 Swagger UI tương tác: `http://localhost:8000/docs`
