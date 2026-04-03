@@ -44,9 +44,37 @@ echo       OK - Cache cleared.
 echo.
 
 REM ============================================================
-REM STEP 3: ACTIVATE VENV & INSTALL DEPENDENCIES
+REM STEP 3: AUTO-CREATE .env FROM .env.example (IF MISSING)
 REM ============================================================
-echo [3/5] Installing Python dependencies...
+echo [3/6] Checking .env files...
+
+if not exist "%ROOT%backend\.env" (
+    if exist "%ROOT%backend\.env.example" (
+        copy "%ROOT%backend\.env.example" "%ROOT%backend\.env" >nul
+        echo       Created backend\.env from .env.example
+    ) else (
+        echo       WARNING: backend\.env.example not found!
+    )
+) else (
+    echo       OK - backend\.env already exists.
+)
+
+if not exist "%ROOT%frontend\.env" (
+    if exist "%ROOT%frontend\.env.example" (
+        copy "%ROOT%frontend\.env.example" "%ROOT%frontend\.env" >nul
+        echo       Created frontend\.env from .env.example
+    ) else (
+        echo       WARNING: frontend\.env.example not found!
+    )
+) else (
+    echo       OK - frontend\.env already exists.
+)
+echo.
+
+REM ============================================================
+REM STEP 4: ACTIVATE VENV & INSTALL DEPENDENCIES
+REM ============================================================
+echo [4/6] Installing Python dependencies...
 
 if exist "%ROOT%.venv\Scripts\activate.bat" (
     echo       OK - Environment activated.
@@ -73,9 +101,9 @@ echo       OK - Dependencies ready.
 echo.
 
 REM ============================================================
-REM STEP 4: START BACKEND
+REM STEP 5: START BACKEND
 REM ============================================================
-echo [4/5] Starting Backend (FastAPI on :8000)...
+echo [5/6] Starting Backend (FastAPI on :8000)...
 
 start "Word2LaTeX Backend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%"" & (if exist "".venv\Scripts\activate.bat"" call "".venv\Scripts\activate.bat"") & python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"
 
@@ -84,9 +112,9 @@ echo       OK - Backend window opened.
 echo.
 
 REM ============================================================
-REM STEP 5: START FRONTEND
+REM STEP 6: START FRONTEND
 REM ============================================================
-echo [5/5] Starting Frontend (Vite on :5173)...
+echo [6/6] Starting Frontend (Vite on :5173)...
 
 start "Word2LaTeX Frontend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%frontend"" & (if not exist node_modules npm install --prefer-offline) & npm run dev"
 
