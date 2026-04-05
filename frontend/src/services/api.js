@@ -383,11 +383,53 @@ export const layThongTinGoiPremium = async () => {
   }
 }
 
-export const dangKyGoiPremium = async () => {
+export const taoHoaDonNapTien = async (amount_vnd) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/payment/create`, {
+      method: 'POST',
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ amount_vnd })
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const kiemTraTrangThaiHoaDon = async (paymentId) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/payment/status/${paymentId}`, {
+      headers: taoHeaderXacThuc()
+    })
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const dangKyGoiPremium = async (planKey) => {
   try {
     const response = await fetch(`${DIA_CHI_API_GOC}/api/premium/subscribe`, {
       method: 'POST',
-      headers: taoHeaderXacThuc(),
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ plan_key: planKey })
     })
     if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) {
@@ -745,6 +787,8 @@ export default {
   capNhatThongTinTaiKhoan,
   layThongTinGoiPremium,
   dangKyGoiPremium,
+  taoHoaDonNapTien,
+  kiemTraTrangThaiHoaDon,
   layTongQuanAdmin,
   layDanhSachNguoiDungAdmin,
   capNhatVaiTroNguoiDungAdmin,

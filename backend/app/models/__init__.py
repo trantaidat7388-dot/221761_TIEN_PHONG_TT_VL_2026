@@ -88,3 +88,19 @@ class AdminAuditLog(Base):
     request_id = Column(String, nullable=True, index=True)
     ip_address = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class Payment(Base):
+    """Tracks token top-up payments via SePay."""
+
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    amount_vnd = Column(Integer, nullable=False)
+    token_amount = Column(Integer, nullable=False)
+    status = Column(String, default="pending", nullable=False, index=True)  # pending, completed, failed
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    owner = relationship("User")

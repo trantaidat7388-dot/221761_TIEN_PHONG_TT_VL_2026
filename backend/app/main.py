@@ -32,7 +32,7 @@ from .config import (
     RATE_LIMIT_ADMIN_PER_MINUTE,
 )
 from .utils.api_utils import quet_xoa_thu_muc_mo_coi
-from .routers import admin_routes, auth_routes, base, file_upload
+from .routers import admin_routes, auth_routes, base, file_upload, payment_routes
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -63,6 +63,7 @@ app.include_router(base.router)
 app.include_router(file_upload.router)
 app.include_router(auth_routes.router)
 app.include_router(admin_routes.router)
+app.include_router(payment_routes.router)
 
 
 def _dam_bao_cot_vai_tro_nguoi_dung() -> None:
