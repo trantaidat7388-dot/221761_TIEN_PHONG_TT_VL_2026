@@ -38,7 +38,7 @@ const PasswordStrengthMeter = ({ password }) => {
 
 const TrangDangNhap = () => {
   const navigate = useNavigate()
-  const { nguoiDung, dangNhap, dangKy, dangNhapGoogle } = dungXacThuc()
+  const { nguoiDung, dangNhap, dangKy } = dungXacThuc()
   const [cheDoForm, setCheDoForm] = useState('dangNhap')
   const [hienMatKhau, setHienMatKhau] = useState(false)
   const [dangXuLy, setDangXuLy] = useState(false)
@@ -89,42 +89,6 @@ const TrangDangNhap = () => {
     setCheDoForm(prev => prev === 'dangNhap' ? 'dangKy' : 'dangNhap')
     setFormData({ username: '', email: '', matKhau: '', xacNhanMatKhau: '' })
   }
-
-  useEffect(() => {
-    const clientId = import.meta.env?.VITE_GOOGLE_CLIENT_ID
-    if (!clientId) return
-
-    const setupGoogleButton = () => {
-      if (!window.google?.accounts?.id) return
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: async (response) => {
-          const idToken = response?.credential
-          if (!idToken) return
-          try {
-            await dangNhapGoogle(idToken)
-            toast.success('Đăng nhập Google thành công!')
-            window.location.replace('/chuyen-doi')
-          } catch (err) {
-            toast.error(err.message || 'Đăng nhập Google thất bại')
-          }
-        }
-      })
-      const target = document.getElementById('google-signin-btn')
-      if (target) {
-        target.innerHTML = ''
-        window.google.accounts.id.renderButton(target, { theme: 'outline', size: 'large', width: '100%', text: 'continue_with' })
-      }
-    }
-
-    const script = document.createElement('script')
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.defer = true
-    script.onload = setupGoogleButton
-    document.body.appendChild(script)
-    return () => { if (script.parentNode) script.parentNode.removeChild(script) }
-  }, [dangNhapGoogle, navigate])
 
   useEffect(() => {
     if (nguoiDung) navigate('/chuyen-doi', { replace: true })
@@ -223,11 +187,13 @@ const TrangDangNhap = () => {
             <span className="flex-1 h-px bg-white/10"></span>
           </div>
 
-          <div className="mt-6 flex flex-col items-center justify-center md:block">
-             <div id="google-signin-btn" className="w-full flex justify-center [&>div]:w-full" />
-             <a href={`${DIA_CHI_API_GOC}/api/auth/google/login`} className="mt-4 text-xs text-blue-400 hover:text-blue-300 block text-center">
-                 Dùng Redirect/Popup dự phòng
-             </a>
+          <div className="mt-6">
+            <a
+              href={`${DIA_CHI_API_GOC}/api/auth/google/login`}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 transition"
+            >
+              Đăng nhập với Google
+            </a>
           </div>
         </div>
       </div>

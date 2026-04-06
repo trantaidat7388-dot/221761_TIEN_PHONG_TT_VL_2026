@@ -182,7 +182,11 @@ async def chuyen_doi_file(
             with open(template_path, "wb") as f: f.write(template_contents)
     # 2. Template from system
     else:
-        template_path = _resolve_template_path(template_type) or _resolve_template_path("ieee_conference")
+        template_path = _resolve_template_path(
+            template_type,
+            current_user_id=current_user.id if current_user else None,
+            current_user_role=current_user.role if current_user else None,
+        ) or _resolve_template_path("ieee_conference")
         if not template_path or not template_path.exists():
             raise HTTPException(status_code=500, detail="Template không tồn tại hoặc lỗi cấu trúc thư mục.")
         
@@ -479,7 +483,11 @@ async def chuyen_doi_file_stream(
                     template_path = job_folder / "custom_uploaded_template.tex"
                     with open(template_path, "wb") as f: f.write(template_contents)
             else:
-                template_path = _resolve_template_path(template_type) or _resolve_template_path("ieee_conference")
+                template_path = _resolve_template_path(
+                    template_type,
+                    current_user_id=current_user.id if current_user else None,
+                    current_user_role=current_user.role if current_user else None,
+                ) or _resolve_template_path("ieee_conference")
                 if not template_path or not template_path.exists():
                     yield sse_event(-1, "Template không tồn tại", error=True); return
                 template_dir_actual = template_path.parent

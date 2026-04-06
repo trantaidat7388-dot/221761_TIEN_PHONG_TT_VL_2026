@@ -21,6 +21,7 @@ from ..config import (
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI,
+    FREE_PLAN_MAX_PAGES,
 )
 
 router = APIRouter(prefix="/api", tags=["Auth & History"])
@@ -137,7 +138,7 @@ def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, g
                 hashed_password=auth.bam_mat_khau(os.urandom(24).hex()),
                 role="user",
                 plan_type="free",
-                token_balance=5000,
+                token_balance=FREE_PLAN_MAX_PAGES,
                 auth_provider="google",
                 google_id=google_sub,
             )
@@ -218,7 +219,7 @@ def dang_ky(req: YeuCauDangKy, db: Session = Depends(lay_db)) -> dict:
         hashed_password=auth.bam_mat_khau(req.password),
         role="user",
         plan_type="free",
-        token_balance=5000,
+        token_balance=FREE_PLAN_MAX_PAGES,
         auth_provider="local",
     )
     db.add(user)
@@ -302,7 +303,7 @@ def google_callback(code: str, request: Request, db: Session = Depends(lay_db)) 
 
     payload = _tao_auth_payload(user)
     token = payload["access_token"]
-    return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/dang-nhap?token={parse.quote(token)}")
+    return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/?token={parse.quote(token)}")
 
 @router.get("/auth/me")
 def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> dict:

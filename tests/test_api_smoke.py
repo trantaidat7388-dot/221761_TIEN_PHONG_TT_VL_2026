@@ -50,8 +50,16 @@ def test_smoke_upload_template_tex(tmp_path, monkeypatch, client) -> None:
     monkeypatch.setattr(router_templates, "CUSTOM_TEMPLATE_FOLDER", tmp_path)
     tep_tex = b"\\documentclass{article}\\begin{document}A\\end{document}"
 
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "admin@word2latex.local", "password": "Admin@123456"},
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
     response = client.post(
         "/api/templates/upload",
+        headers={"Authorization": f"Bearer {token}"},
         files={"file": ("mau.tex", tep_tex, "application/x-tex")},
     )
 

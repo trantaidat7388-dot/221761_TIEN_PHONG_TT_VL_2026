@@ -8,7 +8,7 @@ import { TrangChuyenDoi } from './features/chuyen_doi'
 import { TrangLichSu } from './features/lich_su'
 import { TrangAdmin } from './features/admin'
 import { TrangTaiKhoan } from './features/tai_khoan'
-import { TrangPremium } from './features/premium'
+import { TrangPremium, TrangThanhToanPremium } from './features/premium'
 
 // Layout chung cho các trang có thanh điều hướng
 const BoCucChung = () => {
@@ -50,6 +50,10 @@ const CacTuyenUngDung = () => {
         <Route
           path="/premium"
           element={nguoiDung ? <TrangPremium /> : <Navigate to="/dang-nhap" replace />}
+        />
+        <Route
+          path="/thanh-toan"
+          element={nguoiDung ? <TrangThanhToanPremium /> : <Navigate to="/dang-nhap" replace />}
         />
         <Route
           path="/admin"

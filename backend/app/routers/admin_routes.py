@@ -31,6 +31,9 @@ _RESERVED_TEMPLATE_NAMES = {
     "IEEEtran",
     "llncs",
 }
+_USERS_TEMPLATE_DIRNAME = "users"
+_GLOBAL_TEMPLATE_PREFIX = "custom_global_"
+_PRIVATE_TEMPLATE_PREFIX = "custom_user_"
 
 
 class YeuCauCapNhatVaiTro(BaseModel):
@@ -472,10 +475,19 @@ def xoa_ban_ghi_lich_su(
 
 @router.get("/templates")
 def lay_danh_sach_template_admin(
+    db: Session = Depends(lay_db),
     _: models.User = Depends(auth.yeu_cau_quyen_admin),
 ) -> dict:
     danh_sach = []
+    users_map = {
+        u.id: u
+        for u in db.query(models.User).all()
+    }
+
+    users_root = CUSTOM_TEMPLATE_FOLDER / _USERS_TEMPLATE_DIRNAME
     for item in CUSTOM_TEMPLATE_FOLDER.iterdir():
+        if item.name == _USERS_TEMPLATE_DIRNAME:
+            continue
         if item.name in _RESERVED_TEMPLATE_NAMES or item.stem in _RESERVED_TEMPLATE_NAMES:
             continue
         if item.name.startswith('.'):
@@ -483,7 +495,8 @@ def lay_danh_sach_template_admin(
         if item.is_file() and item.suffix.lower() == '.tex':
             danh_sach.append(
                 {
-                    "id": f"custom_{item.stem}",
+                    "id": f"{_GLOBAL_TEMPLATE_PREFIX}{item.stem}",
+                    "scope": "global",
                     "ten": item.stem,
                     "duong_dan": str(item),
                     "loai": "file",
@@ -494,13 +507,54 @@ def lay_danh_sach_template_admin(
             kich_thuoc = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
             danh_sach.append(
                 {
-                    "id": f"custom_{item.name}",
+                    "id": f"{_GLOBAL_TEMPLATE_PREFIX}{item.name}",
+                    "scope": "global",
                     "ten": item.name,
                     "duong_dan": str(item),
                     "loai": "folder",
                     "kich_thuoc": kich_thuoc,
                 }
             )
+
+    if users_root.exists() and users_root.is_dir():
+        for user_dir in users_root.iterdir():
+            if not user_dir.is_dir() or not user_dir.name.startswith("u_"):
+                continue
+            user_id_raw = user_dir.name.replace("u_", "", 1)
+            if not user_id_raw.isdigit():
+                continue
+            owner_user_id = int(user_id_raw)
+            owner = users_map.get(owner_user_id)
+            owner_label = owner.email if owner else f"user#{owner_user_id}"
+
+            for item in user_dir.iterdir():
+                if item.is_file() and item.suffix.lower() == '.tex':
+                    danh_sach.append(
+                        {
+                            "id": f"{_PRIVATE_TEMPLATE_PREFIX}{owner_user_id}_{item.stem}",
+                            "scope": "private",
+                            "owner_user_id": owner_user_id,
+                            "owner_label": owner_label,
+                            "ten": item.stem,
+                            "duong_dan": str(item),
+                            "loai": "file",
+                            "kich_thuoc": item.stat().st_size,
+                        }
+                    )
+                elif item.is_dir():
+                    kich_thuoc = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
+                    danh_sach.append(
+                        {
+                            "id": f"{_PRIVATE_TEMPLATE_PREFIX}{owner_user_id}_{item.name}",
+                            "scope": "private",
+                            "owner_user_id": owner_user_id,
+                            "owner_label": owner_label,
+                            "ten": item.name,
+                            "duong_dan": str(item),
+                            "loai": "folder",
+                            "kich_thuoc": kich_thuoc,
+                        }
+                    )
 
     danh_sach.sort(key=lambda x: x["ten"].lower())
     return {"danh_sach": danh_sach}
@@ -513,15 +567,29 @@ def xoa_template_admin(
     db: Session = Depends(lay_db),
     current_admin: models.User = Depends(auth.yeu_cau_quyen_admin),
 ) -> dict:
-    if not template_id.startswith("custom_"):
-        raise HTTPException(status_code=400, detail="Không thể xóa template mặc định")
+    if template_id.startswith(_PRIVATE_TEMPLATE_PREFIX):
+        payload = template_id[len(_PRIVATE_TEMPLATE_PREFIX):]
+        owner_part, sep, name = payload.partition("_")
+        if not sep or not owner_part.isdigit() or not name:
+            raise HTTPException(status_code=400, detail="Template private không hợp lệ")
+        owner_user_id = int(owner_part)
+        user_root = CUSTOM_TEMPLATE_FOLDER / _USERS_TEMPLATE_DIRNAME / f"u_{owner_user_id}"
+        file_path = user_root / f"{name}.tex"
+        dir_path = user_root / name
+    else:
+        if template_id.startswith(_GLOBAL_TEMPLATE_PREFIX):
+            name = template_id[len(_GLOBAL_TEMPLATE_PREFIX):]
+        elif template_id.startswith("custom_"):
+            # backward-compat id
+            name = template_id.replace("custom_", "", 1)
+        else:
+            raise HTTPException(status_code=400, detail="Không thể xóa template mặc định")
 
-    name = template_id.replace("custom_", "", 1)
-    if name in _RESERVED_TEMPLATE_NAMES:
-        raise HTTPException(status_code=400, detail="Không thể xóa template mặc định")
+        if name in _RESERVED_TEMPLATE_NAMES:
+            raise HTTPException(status_code=400, detail="Không thể xóa template mặc định")
 
-    file_path = CUSTOM_TEMPLATE_FOLDER / f"{name}.tex"
-    dir_path = CUSTOM_TEMPLATE_FOLDER / name
+        file_path = CUSTOM_TEMPLATE_FOLDER / f"{name}.tex"
+        dir_path = CUSTOM_TEMPLATE_FOLDER / name
 
     if file_path.exists():
         file_path.unlink()

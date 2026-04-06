@@ -72,6 +72,7 @@ OUTPUT_TTL_HOURS = _lay_so_nguyen_tu_env('OUTPUT_TTL_HOURS', 24, min_value=1)
 
 # Logging
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').strip().upper() or 'INFO'
+APP_ENV = _lay_chuoi_tu_env('APP_ENV', 'development').lower() or 'development'
 
 # Frontend / OAuth URLs
 FRONTEND_URL = _lay_chuoi_tu_env('FRONTEND_URL', 'http://localhost:5173')
@@ -87,6 +88,7 @@ SSE_CLEANUP_DELAY_SECONDS = _lay_so_nguyen_tu_env('SSE_CLEANUP_DELAY_SECONDS', 3
 TOKEN_WORDS_PER_PAGE = _lay_so_nguyen_tu_env('TOKEN_WORDS_PER_PAGE', 450, min_value=100)
 TOKEN_WORDS_PER_UNIT = _lay_so_nguyen_tu_env('TOKEN_WORDS_PER_UNIT', 2250, min_value=100)
 TOKEN_MIN_COST = _lay_so_nguyen_tu_env('TOKEN_MIN_COST', 1, min_value=1)
+FREE_PLAN_MAX_PAGES = _lay_so_nguyen_tu_env('FREE_PLAN_MAX_PAGES', 60, min_value=1)
 
 # Cấu hình Gói Premium
 PREMIUM_PACKAGES = {

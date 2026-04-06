@@ -24,7 +24,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="user", nullable=False, index=True)
     plan_type = Column(String, default="free", nullable=False, index=True)
-    token_balance = Column(Integer, default=5000, nullable=False)
+    token_balance = Column(Integer, default=60, nullable=False)
     premium_started_at = Column(DateTime, nullable=True)
     premium_expires_at = Column(DateTime, nullable=True, index=True)
     auth_provider = Column(String, default="local", nullable=False)

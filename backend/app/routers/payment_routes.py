@@ -5,7 +5,7 @@ from datetime import datetime
 
 from .. import models, auth
 from ..database import lay_db
-from ..config import NAME_WEB
+from ..config import NAME_WEB, APP_ENV
 from ..services.sepay_sync import encode_payment_id, check_payment_status
 
 router = APIRouter(prefix="/api/payment", tags=["Payment"])
@@ -80,3 +80,40 @@ def kiem_tra_trang_thai_payment(payment_id: int, db: Session = Depends(lay_db), 
         return {"thanh_cong": True, "status": "completed", "token_nhan": payment.token_amount}
 
     return {"thanh_cong": True, "status": payment.status}
+
+
+@router.post("/dev/complete/{payment_id}")
+def xac_nhan_thanh_toan_thu_cong_dev(
+    payment_id: int,
+    db: Session = Depends(lay_db),
+    current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai),
+):
+    """Dev-only fallback: manually complete a payment when SePay/bank is unavailable."""
+    if APP_ENV in {"production", "prod"}:
+        raise HTTPException(status_code=403, detail="Endpoint này chỉ dùng ở môi trường development")
+
+    payment = db.query(models.Payment).filter(
+        models.Payment.id == payment_id,
+        models.Payment.user_id == current_user.id
+    ).first()
+
+    if not payment:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hóa đơn")
+
+    if payment.status == "completed":
+        return {"thanh_cong": True, "status": "completed", "token_nhan": payment.token_amount}
+
+    payment.status = "completed"
+    payment.updated_at = datetime.utcnow()
+    current_user.token_balance += payment.token_amount
+
+    db.add(models.TokenLedger(
+        user_id=current_user.id,
+        delta_token=payment.token_amount,
+        balance_after=current_user.token_balance,
+        reason="nạp token dev manual",
+        meta_json=f"payment_id={payment.id}"
+    ))
+
+    db.commit()
+    return {"thanh_cong": True, "status": "completed", "token_nhan": payment.token_amount}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Loader2, QrCode, Copy, CheckCircle2, CreditCard, Wallet } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { taoHoaDonNapTien, kiemTraTrangThaiHoaDon } from '../../services/api'
+import { taoHoaDonNapTien, kiemTraTrangThaiHoaDon, xacNhanHoaDonThuCongDev } from '../../services/api'
 import { dungXacThuc } from '../../context/AuthContext'
 
 const MENH_GIA = [
@@ -21,6 +21,7 @@ const NapTokenModal = ({ isOpen, onClose }) => {
   const [hoaDon, setHoaDon] = useState(null)
   const [trangThai, setTrangThai] = useState('chon_menh_gia') // 'chon_menh_gia' -> 'cho_thanh_toan' -> 'thanh_cong'
   const [demGiay, setDemGiay] = useState(0)
+  const [dangXacNhanThuCong, setDangXacNhanThuCong] = useState(false)
   
   // Reset khi đóng mở
   useEffect(() => {
@@ -85,6 +86,22 @@ const NapTokenModal = ({ isOpen, onClose }) => {
     toast.success('Đã sao chép!')
   }
 
+  const xuLyXacNhanThuCongDev = async () => {
+    if (!hoaDon?.payment_id) return
+    setDangXacNhanThuCong(true)
+    try {
+      const res = await xacNhanHoaDonThuCongDev(hoaDon.payment_id)
+      if (!res.thanhCong) throw new Error(res.loiMessage || 'Không thể xác nhận thủ công')
+      setTrangThai('thanh_cong')
+      toast.success('Đã xác nhận nạp tiền (chế độ dev)')
+      await lamMoiThongTinNguoiDung({ imLang: true })
+    } catch (e) {
+      toast.error(e.message || 'Xác nhận thủ công thất bại')
+    } finally {
+      setDangXacNhanThuCong(false)
+    }
+  }
+
   const dinhDangVND = (so) => new Intl.NumberFormat('vi-VN').format(so) + ' ₫'
 
   const formatTime = (s) => {
@@ -97,6 +114,7 @@ const NapTokenModal = ({ isOpen, onClose }) => {
   const bankBin = import.meta.env.VITE_BANK_BIN || '970422'
   const bankAccount = import.meta.env.VITE_BANK_ACCOUNT || '000000000'
   const bankName = import.meta.env.VITE_BANK_ACCOUNT_NAME || 'ADMIN'
+  const chuaCauHinhNganHang = bankAccount === '000000000'
 
   return (
     <AnimatePresence>
@@ -239,6 +257,19 @@ const NapTokenModal = ({ isOpen, onClose }) => {
                   <p className="text-[11px] text-white/25 text-center">
                     ⚠ Vui lòng chuyển đúng số tiền và nội dung. Hệ thống tự xác nhận trong 3-10 giây.
                   </p>
+
+                  {chuaCauHinhNganHang && (
+                    <div className="w-full rounded-xl border border-amber-400/30 bg-amber-500/10 p-3">
+                      <p className="text-xs text-amber-200/90 mb-2">Chưa cấu hình tài khoản ngân hàng SePay. Bạn có thể dùng xác nhận thủ công ở môi trường development.</p>
+                      <button
+                        onClick={xuLyXacNhanThuCongDev}
+                        disabled={dangXacNhanThuCong}
+                        className="w-full rounded-lg border border-amber-400/40 bg-amber-500/20 px-3 py-2 text-sm font-medium text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
+                      >
+                        {dangXacNhanThuCong ? 'Đang xác nhận...' : 'Xác nhận nạp thủ công (Dev)'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

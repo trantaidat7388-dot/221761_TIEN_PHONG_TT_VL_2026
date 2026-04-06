@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models
-from ..config import TOKEN_MIN_COST, TOKEN_WORDS_PER_PAGE, TOKEN_WORDS_PER_UNIT
+from ..config import FREE_PLAN_MAX_PAGES, TOKEN_MIN_COST, TOKEN_WORDS_PER_PAGE, TOKEN_WORDS_PER_UNIT
 
 
 def tinh_token_tieu_hao_theo_so_trang(so_trang: int) -> int:
@@ -56,15 +56,36 @@ def ghi_ledger_token(
 
 
 def tru_token_cho_chuyen_doi(db: Session, user_id: int, so_trang_uoc_tinh: int, job_id: str) -> dict:
-    token_cost = tinh_token_tieu_hao_theo_so_trang(so_trang_uoc_tinh)
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=401, detail="Không tìm thấy người dùng")
 
+    # Admin được miễn trừ token cho mọi lượt chuyển đổi.
+    if (user.role or "user").lower() == "admin":
+        return {
+            "pages_count": max(1, so_trang_uoc_tinh),
+            "token_cost": 0,
+            "balance_after": user.token_balance,
+        }
+
+    so_trang_uoc_tinh = max(1, so_trang_uoc_tinh)
+    if (user.plan_type or "free").lower() == "free":
+        # Gói thường dùng quota cố định theo trang: 1 trang = 1 token, tối đa 60 trang.
+        if user.token_balance > FREE_PLAN_MAX_PAGES:
+            user.token_balance = FREE_PLAN_MAX_PAGES
+            db.commit()
+        token_cost = so_trang_uoc_tinh
+    else:
+        token_cost = tinh_token_tieu_hao_theo_so_trang(so_trang_uoc_tinh)
+
     if user.token_balance < token_cost:
         raise HTTPException(
             status_code=402,
-            detail=f"Không đủ token để chuyển đổi. Cần {token_cost} token, còn {user.token_balance} token",
+            detail=(
+                f"Không đủ token để chuyển đổi. Cần {token_cost} token, còn {user.token_balance} token. "
+                "Gói thường tối đa 60 trang."
+            ) if (user.plan_type or "free").lower() == "free" else
+            f"Không đủ token để chuyển đổi. Cần {token_cost} token, còn {user.token_balance} token",
         )
 
     user.token_balance -= token_cost

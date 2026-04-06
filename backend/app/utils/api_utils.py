@@ -85,16 +85,66 @@ _BUILTIN_TEMPLATE_MAP = {
     "rho_article":      "Rho_Class_Extracted",
 }
 
-def _resolve_template_path(template_type: str) -> Path | None:
+_GLOBAL_TEMPLATE_PREFIX = "custom_global_"
+_PRIVATE_TEMPLATE_PREFIX = "custom_user_"
+_USERS_TEMPLATE_DIRNAME = "users"
+
+
+def _resolve_custom_template_name_and_scope(
+    template_type: str,
+    current_user_id: int | None,
+    current_user_role: str | None,
+) -> tuple[str | None, Path | None]:
+    """Phân tích ID template custom và trả về (scope, đường dẫn thư mục gốc template)."""
+    role = (current_user_role or "user").lower()
+
+    # custom_user_<owner_id>_<template_name>
+    if template_type.startswith(_PRIVATE_TEMPLATE_PREFIX):
+        payload = template_type[len(_PRIVATE_TEMPLATE_PREFIX):]
+        owner_part, sep, template_name = payload.partition("_")
+        if not sep or not owner_part.isdigit() or not template_name:
+            return (None, None)
+        owner_id = int(owner_part)
+        if current_user_id is None:
+            return (None, None)
+        if owner_id != current_user_id and role != "admin":
+            return (None, None)
+        return ("private", CUSTOM_TEMPLATE_FOLDER / _USERS_TEMPLATE_DIRNAME / f"u_{owner_id}" / template_name)
+
+    # custom_global_<template_name>
+    if template_type.startswith(_GLOBAL_TEMPLATE_PREFIX):
+        name = template_type[len(_GLOBAL_TEMPLATE_PREFIX):]
+        if not name:
+            return (None, None)
+        return ("global", CUSTOM_TEMPLATE_FOLDER / name)
+
+    # Legacy support: custom_<template_name> => global template
+    if template_type.startswith("custom_"):
+        legacy_name = template_type[len("custom_"):]
+        if not legacy_name:
+            return (None, None)
+        return ("global", CUSTOM_TEMPLATE_FOLDER / legacy_name)
+
+    return (None, None)
+
+def _resolve_template_path(
+    template_type: str,
+    current_user_id: int | None = None,
+    current_user_role: str | None = None,
+) -> Path | None:
     """Resolve a built-in OR custom template type → absolute path of the main .tex file."""
     # Nhập `tim_file_tex_chinh` từ core engine tại đây để tránh vòng lặp logic
     from backend.core_engine.utils import tim_file_tex_chinh
 
     # ── Handle custom_* template IDs ──
-    if template_type.startswith("custom_"):
-        custom_name = template_type[len("custom_"):]  # strip 'custom_' prefix
+    custom_scope, custom_path = _resolve_custom_template_name_and_scope(
+        template_type,
+        current_user_id=current_user_id,
+        current_user_role=current_user_role,
+    )
+    if custom_scope and custom_path is not None:
         # Try directory-based custom template
-        dir_path = CUSTOM_TEMPLATE_FOLDER / custom_name
+        dir_path = custom_path
         if dir_path.is_dir():
             try:
                 return Path(tim_file_tex_chinh(str(dir_path)))
@@ -103,7 +153,7 @@ def _resolve_template_path(template_type: str) -> Path | None:
                 first_tex = next(dir_path.rglob("*.tex"), None)
                 return first_tex
         # Try flat .tex file
-        tex_path = CUSTOM_TEMPLATE_FOLDER / f"{custom_name}.tex"
+        tex_path = dir_path.with_suffix(".tex")
         if tex_path.exists():
             return tex_path
         return None

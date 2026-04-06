@@ -131,6 +131,8 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   const [pdfLoi, setPdfLoi] = useState(null)
   const [thoiGianChay, setThoiGianChay] = useState(0)
   const abortControllerRef = useRef(null) // 🧊 Quản lý việc ngắt request biên dịch PDF
+  const laAdmin = nguoiDung?.role === 'admin'
+  const coTheQuanLyTemplate = Boolean(nguoiDung)
   
   // Tự động reset trạng thái khi đổi template hoặc file mới để người dùng bấm "Bắt đầu" lại được luôn
   useEffect(() => {
@@ -499,13 +501,15 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
             <div className="glass-card p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-white/70 text-sm font-medium">Template LaTeX</span>
-                <button
-                  onClick={() => setHienThiQuanLyTemplate(!hienThiQuanLyTemplate)}
-                  className="flex items-center gap-1 text-xs text-primary-400 hover:text-primary-300 transition-colors"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  Quản lý
-                </button>
+                {coTheQuanLyTemplate && (
+                  <button
+                    onClick={() => setHienThiQuanLyTemplate(!hienThiQuanLyTemplate)}
+                    className="flex items-center gap-1 text-xs text-primary-400 hover:text-primary-300 transition-colors"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    {laAdmin ? 'Quản lý' : 'Template của tôi'}
+                  </button>
+                )}
               </div>
 
               {/* All template buttons (default + custom) */}
@@ -566,7 +570,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
 
               {/* Template management panel */}
               <AnimatePresence>
-                {hienThiQuanLyTemplate && (
+                {coTheQuanLyTemplate && hienThiQuanLyTemplate && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
@@ -595,18 +599,28 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                           .tex có \documentclass hoặc .zip đầy đủ
                         </span>
                       </div>
+                      {!laAdmin && (
+                        <p className="text-[11px] text-white/45">
+                          Template bạn tải lên là riêng tư, chỉ tài khoản của bạn có thể dùng.
+                        </p>
+                      )}
                       {templateTuyChinh.length > 0 && (
                         <div className="space-y-1">
                           <p className="text-white/40 text-xs">Tùy chỉnh:</p>
                           {templateTuyChinh.map(t => (
                             <div key={t.id} className="flex items-center justify-between px-3 py-1.5 rounded bg-white/5">
-                              <span className="text-white/70 text-xs truncate">{t.ten} ({(t.kichThuoc / 1024).toFixed(1)}KB)</span>
-                              <button
-                                onClick={() => xuLyXoaTemplate(t.id)}
-                                className="text-red-400/60 hover:text-red-400 transition-colors ml-2"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <span className="text-white/70 text-xs truncate">
+                                {t.ten} ({(t.kichThuoc / 1024).toFixed(1)}KB){' '}
+                                <span className="text-white/45">[{t.phamVi === 'private' ? 'cá nhân' : 'global'}]</span>
+                              </span>
+                              {t.coTheXoa && (
+                                <button
+                                  onClick={() => xuLyXoaTemplate(t.id)}
+                                  className="text-red-400/60 hover:text-red-400 transition-colors ml-2"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           ))}
                         </div>
