@@ -27,12 +27,13 @@ from .config import (
     TEMP_FOLDER,
     OUTPUTS_FOLDER,
     LOG_LEVEL,
+    FREE_PLAN_MAX_PAGES,
     RATE_LIMIT_AUTH_PER_MINUTE,
     RATE_LIMIT_CONVERT_PER_MINUTE,
     RATE_LIMIT_ADMIN_PER_MINUTE,
 )
 from .utils.api_utils import quet_xoa_thu_muc_mo_coi
-from .routers import admin_routes, auth_routes, base, file_upload
+from .routers import admin_routes, auth_routes, base, file_upload, payment_routes
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -63,6 +64,7 @@ app.include_router(base.router)
 app.include_router(file_upload.router)
 app.include_router(auth_routes.router)
 app.include_router(admin_routes.router)
+app.include_router(payment_routes.router)
 
 
 def _dam_bao_cot_vai_tro_nguoi_dung() -> None:
@@ -84,7 +86,7 @@ def _dam_bao_schema_users_premium_token_google() -> None:
     if "plan_type" not in user_columns:
         alter_statements.append("ALTER TABLE users ADD COLUMN plan_type VARCHAR DEFAULT 'free' NOT NULL")
     if "token_balance" not in user_columns:
-        alter_statements.append("ALTER TABLE users ADD COLUMN token_balance INTEGER DEFAULT 5000 NOT NULL")
+        alter_statements.append(f"ALTER TABLE users ADD COLUMN token_balance INTEGER DEFAULT {FREE_PLAN_MAX_PAGES} NOT NULL")
     if "premium_started_at" not in user_columns:
         alter_statements.append("ALTER TABLE users ADD COLUMN premium_started_at DATETIME")
     if "premium_expires_at" not in user_columns:
@@ -99,7 +101,11 @@ def _dam_bao_schema_users_premium_token_google() -> None:
             conn.execute(text(stmt))
 
         conn.execute(text("UPDATE users SET plan_type='free' WHERE plan_type IS NULL OR TRIM(plan_type) = ''"))
-        conn.execute(text("UPDATE users SET token_balance=5000 WHERE token_balance IS NULL OR token_balance < 0"))
+        conn.execute(text(
+            f"UPDATE users SET token_balance={FREE_PLAN_MAX_PAGES} "
+            f"WHERE plan_type='free' AND (token_balance IS NULL OR token_balance < 0 OR token_balance > {FREE_PLAN_MAX_PAGES})"
+        ))
+        conn.execute(text("UPDATE users SET token_balance=25000 WHERE plan_type='premium' AND (token_balance IS NULL OR token_balance < 0)"))
         conn.execute(text("UPDATE users SET auth_provider='local' WHERE auth_provider IS NULL OR TRIM(auth_provider) = ''"))
 
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_plan_type ON users (plan_type)"))

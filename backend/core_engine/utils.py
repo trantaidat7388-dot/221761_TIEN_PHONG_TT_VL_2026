@@ -115,6 +115,11 @@ def loc_ky_tu(text: str) -> str:
     ]
     
     ket_qua = text
+
+    # Remove directional control chars and uncommon script noise that can break
+    # pdfLaTeX in otherwise Latin-based documents (e.g., stray Hebrew tokens).
+    ket_qua = re.sub(r'[\u200e\u200f\u202a-\u202e\u2066-\u2069]', '', ket_qua)
+    ket_qua = re.sub(r'[\u0590-\u05FF]+', ' ', ket_qua)
     
     # Thay Unicode đơn giản trước
     for ky_tu_u, thay_the_u in simple_unicode:
@@ -125,7 +130,6 @@ def loc_ky_tu(text: str) -> str:
         ket_qua = ket_qua.replace(ky_tu_u, placeholder)
     
     # BƯỚC 2: Escape ký tự đặc biệt LaTeX (Dùng Regex an toàn, tránh double-escape)
-    import re
     
     def replacer(match):
         char = match.group(0)
@@ -154,7 +158,6 @@ def loc_ky_tu(text: str) -> str:
         
     # Tự động bọc URL vào thẻ \url{} để tránh lỗi tràn lề (overflow) trong PDF
     # Bỏ qua nếu URL đã nằm trong \url{...} hoặc \href{...}
-    import re
     # Pattern tìm URL không nằm trong cấu trúc LaTeX URL
     url_pattern = r'(?<!\\url\{)(?<!\\href\{)(https?://[^\s<>"]+)'
     
@@ -232,7 +235,7 @@ def phat_hien_engine(duong_dan_tex: str) -> str:
     except Exception:
         pass
     
-    return 'xelatex' # Mặc định an toàn cho Unicode
+    return 'pdflatex' # Mặc định hệ thống: ưu tiên pdfLaTeX
 
 
 def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine: str = None) -> tuple[bool, str]:
@@ -243,19 +246,38 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
     """
     ten_file = os.path.basename(duong_dan_dau_ra)
     thu_muc = thu_muc_bien_dich or os.path.dirname(duong_dan_dau_ra)
+    thu_muc_goc = thu_muc
+    runtime_cwd = thu_muc
+    staging_dir = None
     
     if engine is None:
         engine = phat_hien_engine(duong_dan_dau_ra)
 
-    print(f"\n--- [LATEX] START: {engine} (file={ten_file}, cwd={thu_muc}) ---")
-    cmd = [engine, '-interaction=nonstopmode', '-halt-on-error', '-quiet', f"./{ten_file}"]
+    # Trên Windows, cwd quá dài có thể làm XeLaTeX không mở được file/ảnh.
+    if len(os.path.abspath(thu_muc)) > 180:
+        staging_dir = tempfile.mkdtemp(prefix="latex_job_")
+        shutil.copytree(thu_muc, staging_dir, dirs_exist_ok=True)
+        runtime_cwd = staging_dir
+
+    source_tex_path = os.path.join(runtime_cwd, ten_file)
+    compile_file = ten_file
+    compile_file_path = os.path.join(runtime_cwd, compile_file)
+
+    # Windows/XeLaTeX can fail with very long .tex filenames; compile via a short alias.
+    if len(ten_file) > 120:
+        compile_file = "__compile_main__.tex"
+        compile_file_path = os.path.join(runtime_cwd, compile_file)
+        shutil.copyfile(source_tex_path, compile_file_path)
+
+    print(f"\n--- [LATEX] START: {engine} (file={compile_file}, cwd={runtime_cwd}) ---")
+    cmd = [engine, '-interaction=nonstopmode', '-halt-on-error', compile_file]
     print(f"[LATEX] CMD: {' '.join(cmd)}")
     
     try:
         t_start = time.time()
         ket_qua = subprocess.run(
             cmd,
-            cwd=thu_muc if thu_muc else '.',
+            cwd=runtime_cwd if runtime_cwd else '.',
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -267,15 +289,23 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
         print(f"--- [LATEX] FINISHED in {duration:.2f}s (Exit code: {ket_qua.returncode}) ---")
 
         # Kiểm tra PDF tồn tại (nonstopmode có thể tạo PDF dù có lỗi nhỏ)
-        pdf_path = os.path.join(thu_muc, ten_file.replace('.tex', '.pdf'))
+        output_pdf_name = os.path.splitext(compile_file)[0] + '.pdf'
+        pdf_path = os.path.join(runtime_cwd, output_pdf_name)
         pdf_exists = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
 
         # Mặc định đọc log nếu thất bại
         error_msg = ""
-        log_path = os.path.join(thu_muc, ten_file.replace('.tex', '.log'))
+        log_path = os.path.join(runtime_cwd, os.path.splitext(compile_file)[0] + '.log')
+
+        if pdf_exists:
+            final_pdf_path = os.path.join(thu_muc_goc, os.path.splitext(ten_file)[0] + '.pdf')
+            src_pdf = os.path.normcase(os.path.abspath(pdf_path))
+            dst_pdf = os.path.normcase(os.path.abspath(final_pdf_path))
+            if src_pdf != dst_pdf:
+                shutil.copyfile(pdf_path, final_pdf_path)
 
         if ket_qua.returncode == 0:
-            print(f"[LATEX] SUCCESS: {ten_file.replace('.tex', '.pdf')}")
+            print(f"[LATEX] SUCCESS: {os.path.splitext(ten_file)[0] + '.pdf'}")
             return True, ""
         elif pdf_exists:
             print("[LATEX] WARNING: PDF created with minor errors.")
@@ -310,6 +340,9 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
         import traceback
         msg = f"CRITICAL CRASH: {str(e)}\n{traceback.format_exc()}"
         return False, msg
+    finally:
+        if staging_dir and os.path.isdir(staging_dir):
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
 
 def phat_hien_loai_tai_lieu(template_src: str) -> str:
@@ -323,7 +356,7 @@ def phat_hien_loai_tai_lieu(template_src: str) -> str:
     cls = m.group(1).rsplit('/', 1)[-1].lower()
     if cls in ('ieeetran',):
         return "ieee"
-    elif cls in ('llncs', 'svjour3', 'svmono', 'svmult'):
+    elif cls in ('llncs', 'svjour', 'svjour3', 'svmono', 'svmult'):
         return "springer"
     elif cls in ('elsarticle', 'cas-sc', 'cas-dc'):
         return "elsevier"

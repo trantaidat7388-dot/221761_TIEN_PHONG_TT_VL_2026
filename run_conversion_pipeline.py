@@ -58,8 +58,8 @@ def run_pipeline(
     if not template_zip.exists():
         raise FileNotFoundError(f"Khong tim thay file template ZIP: {template_zip}")
 
-    if word_file.suffix.lower() not in {".docx", ".docm"}:
-        raise ValueError("File Word dau vao phai co duoi .docx hoac .docm")
+    if word_file.suffix.lower() not in {".doc", ".docx", ".docm"}:
+        raise ValueError("File Word dau vao phai co duoi .doc, .docx hoac .docm")
     if template_zip.suffix.lower() != ".zip":
         raise ValueError("Template dau vao phai la file .zip")
 

@@ -266,7 +266,10 @@ export const taiFilePDF = async (jobId) => {
 
 export const layDanhSachTemplate = async () => {
   try {
-    const response = await fetch(`${DIA_CHI_API_GOC}/api/templates`, { cache: 'no-store' })
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/templates`, {
+      cache: 'no-store',
+      headers: taoHeaderXacThuc(),
+    })
     if (!response.ok) throw new Error('Không thể tải danh sách template')
     const data = await response.json()
     return { thanhCong: true, templates: data.templates || [] }
@@ -383,11 +386,71 @@ export const layThongTinGoiPremium = async () => {
   }
 }
 
-export const dangKyGoiPremium = async () => {
+export const taoHoaDonNapTien = async (amount_vnd) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/payment/create`, {
+      method: 'POST',
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ amount_vnd })
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const kiemTraTrangThaiHoaDon = async (paymentId) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/payment/status/${paymentId}`, {
+      headers: taoHeaderXacThuc()
+    })
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const xacNhanHoaDonThuCongDev = async (paymentId) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/payment/dev/complete/${paymentId}`, {
+      method: 'POST',
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const dangKyGoiPremium = async (planKey) => {
   try {
     const response = await fetch(`${DIA_CHI_API_GOC}/api/premium/subscribe`, {
       method: 'POST',
-      headers: taoHeaderXacThuc(),
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ plan_key: planKey })
     })
     if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) {
@@ -665,6 +728,29 @@ export const layDanhSachTemplateAdmin = async () => {
   }
 }
 
+export const layAuditLogsAdmin = async (limit = 200) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/audit-logs?limit=${limit}`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return {
+      thanhCong: true,
+      danhSach: (data.danh_sach || []).map(item => ({
+        ...item,
+        createdAt: chuanHoaNgayGioApi(item.created_at),
+      })),
+    }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message, danhSach: [] }
+  }
+}
+
 export const xoaTemplateAdmin = async (templateId) => {
   try {
     const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/templates/${templateId}`, {
@@ -677,6 +763,50 @@ export const xoaTemplateAdmin = async (templateId) => {
       throw new Error(msg)
     }
     return { thanhCong: true }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+// ── ADMIN PAYMENT APIs ────────────────────────────────────────────────────────
+
+export const layDanhSachPaymentsAdmin = async (limit = 200) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/payments?limit=${limit}`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return {
+      thanhCong: true,
+      danhSach: (data.danh_sach || []).map(item => ({
+        ...item,
+        createdAt: chuanHoaNgayGioApi(item.created_at),
+        updatedAt: chuanHoaNgayGioApi(item.updated_at),
+      })),
+    }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message, danhSach: [] }
+  }
+}
+
+export const xacNhanPaymentThuCongAdmin = async (paymentId) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/payments/${paymentId}/complete`, {
+      method: 'PATCH',
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
   } catch (error) {
     return { thanhCong: false, loiMessage: error.message }
   }
@@ -744,7 +874,10 @@ export default {
   xoaLichSuChuyenDoi,
   capNhatThongTinTaiKhoan,
   layThongTinGoiPremium,
+  xacNhanHoaDonThuCongDev,
   dangKyGoiPremium,
+  taoHoaDonNapTien,
+  kiemTraTrangThaiHoaDon,
   layTongQuanAdmin,
   layDanhSachNguoiDungAdmin,
   capNhatVaiTroNguoiDungAdmin,
@@ -757,7 +890,10 @@ export default {
   layLichSuToanHeThongAdmin,
   xoaBanGhiLichSuAdmin,
   layDanhSachTemplateAdmin,
+  layAuditLogsAdmin,
   xoaTemplateAdmin,
+  layDanhSachPaymentsAdmin,
+  xacNhanPaymentThuCongAdmin,
   dangNhapVoiEmail,
   dangKyVoiEmail,
   dangXuat,

@@ -24,7 +24,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="user", nullable=False, index=True)
     plan_type = Column(String, default="free", nullable=False, index=True)
-    token_balance = Column(Integer, default=5000, nullable=False)
+    token_balance = Column(Integer, default=60, nullable=False)
     premium_started_at = Column(DateTime, nullable=True)
     premium_expires_at = Column(DateTime, nullable=True, index=True)
     auth_provider = Column(String, default="local", nullable=False)
@@ -88,3 +88,19 @@ class AdminAuditLog(Base):
     request_id = Column(String, nullable=True, index=True)
     ip_address = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class Payment(Base):
+    """Tracks token top-up payments via SePay."""
+
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    amount_vnd = Column(Integer, nullable=False)
+    token_amount = Column(Integer, nullable=False)
+    status = Column(String, default="pending", nullable=False, index=True)  # pending, completed, failed
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    owner = relationship("User")

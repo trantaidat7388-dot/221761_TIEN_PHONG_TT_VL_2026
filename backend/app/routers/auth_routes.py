@@ -21,8 +21,7 @@ from ..config import (
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI,
-    PREMIUM_SELF_SUBSCRIBE_DAYS,
-    PREMIUM_SELF_SUBSCRIBE_TOKEN_COST,
+    FREE_PLAN_MAX_PAGES,
 )
 
 router = APIRouter(prefix="/api", tags=["Auth & History"])
@@ -139,7 +138,7 @@ def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, g
                 hashed_password=auth.bam_mat_khau(os.urandom(24).hex()),
                 role="user",
                 plan_type="free",
-                token_balance=5000,
+                token_balance=FREE_PLAN_MAX_PAGES,
                 auth_provider="google",
                 google_id=google_sub,
             )
@@ -220,7 +219,7 @@ def dang_ky(req: YeuCauDangKy, db: Session = Depends(lay_db)) -> dict:
         hashed_password=auth.bam_mat_khau(req.password),
         role="user",
         plan_type="free",
-        token_balance=5000,
+        token_balance=FREE_PLAN_MAX_PAGES,
         auth_provider="local",
     )
     db.add(user)
@@ -304,7 +303,7 @@ def google_callback(code: str, request: Request, db: Session = Depends(lay_db)) 
 
     payload = _tao_auth_payload(user)
     token = payload["access_token"]
-    return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/dang-nhap?token={parse.quote(token)}")
+    return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/?token={parse.quote(token)}")
 
 @router.get("/auth/me")
 def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> dict:
@@ -314,13 +313,9 @@ def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.lay_nguoi_du
 
 @router.get("/premium/options")
 def lay_goi_premium(current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> dict:
+    from ..config import PREMIUM_PACKAGES
     return {
-        "goi_mac_dinh": {
-            "plan_key": "premium_30d",
-            "name": "Premium 30 ngay",
-            "so_ngay": PREMIUM_SELF_SUBSCRIBE_DAYS,
-            "token_cost": PREMIUM_SELF_SUBSCRIBE_TOKEN_COST,
-        },
+        "danh_sach_goi": PREMIUM_PACKAGES,
         "nguoi_dung": {
             "id": current_user.id,
             "plan_type": current_user.plan_type,
@@ -330,26 +325,43 @@ def lay_goi_premium(current_user: models.User = Depends(auth.lay_nguoi_dung_hien
     }
 
 
+class YeuCauDangKyPremium(BaseModel):
+    plan_key: str
+
 @router.post("/premium/subscribe")
 def dang_ky_goi_premium(
+    req: YeuCauDangKyPremium,
     db: Session = Depends(lay_db),
     current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai),
 ) -> dict:
-    now = datetime.utcnow()
-    if current_user.plan_type == "premium" and current_user.premium_expires_at and current_user.premium_expires_at > now:
-        raise HTTPException(status_code=400, detail="Tài khoản đã có premium đang hiệu lực")
+    from ..config import PREMIUM_PACKAGES
+    
+    plan = PREMIUM_PACKAGES.get(req.plan_key)
+    if not plan:
+        raise HTTPException(status_code=400, detail="Gói Premium không hợp lệ")
 
-    token_cost = PREMIUM_SELF_SUBSCRIBE_TOKEN_COST
+    now = datetime.utcnow()
+    
+    # Cho phép cộng dồn ngày nếu đang có Premium
+    if current_user.plan_type == "premium" and current_user.premium_expires_at and current_user.premium_expires_at > now:
+        base_time = current_user.premium_expires_at
+    else:
+        base_time = now
+
+    token_cost = plan.get("token_cost", 0)
+    so_ngay = plan.get("so_ngay", 30)
+
     if current_user.token_balance < token_cost:
         raise HTTPException(
             status_code=400,
-            detail=f"Không đủ token để đăng ký premium. Cần {token_cost} token",
+            detail=f"Không đủ token để đăng ký. Cần {token_cost} token",
         )
 
     current_user.token_balance -= token_cost
     current_user.plan_type = "premium"
-    current_user.premium_started_at = now
-    current_user.premium_expires_at = now + timedelta(days=PREMIUM_SELF_SUBSCRIBE_DAYS)
+    if current_user.premium_expires_at is None or current_user.premium_expires_at < now:
+        current_user.premium_started_at = now
+    current_user.premium_expires_at = base_time + timedelta(days=so_ngay)
 
     db.add(
         models.TokenLedger(
@@ -357,7 +369,7 @@ def dang_ky_goi_premium(
             delta_token=-token_cost,
             balance_after=current_user.token_balance,
             reason="premium_subscribe",
-            meta_json=f"days={PREMIUM_SELF_SUBSCRIBE_DAYS}",
+            meta_json=f"plan={req.plan_key},days={so_ngay}",
         )
     )
     db.commit()
@@ -365,9 +377,9 @@ def dang_ky_goi_premium(
 
     return {
         "thanh_cong": True,
-        "thong_bao": "Đăng ký premium thành công",
+        "thong_bao": f"Đăng ký thành công {plan['name']}",
         "goi": {
-            "so_ngay": PREMIUM_SELF_SUBSCRIBE_DAYS,
+            "so_ngay": so_ngay,
             "token_cost": token_cost,
         },
         "user": _serialize_user(current_user),

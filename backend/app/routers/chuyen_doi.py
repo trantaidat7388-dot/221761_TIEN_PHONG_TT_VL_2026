@@ -38,6 +38,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Chuyển Đổi"])
 
 
+def _la_file_word_hop_le(ten_file: str) -> bool:
+    ten = (ten_file or "").lower()
+    return ten.endswith('.doc') or ten.endswith('.docx') or ten.endswith('.docm')
+
+
 def _ghi_lich_su_chuyen_doi(
     db: Session,
     user_id: int,
@@ -80,8 +85,8 @@ async def chuyen_doi_file(
     """Endpoint chuyển đổi file Word → LaTeX (chế độ thường)."""
     
     ten_file = file.filename.lower()
-    if not (ten_file.endswith('.docx') or ten_file.endswith('.docm')):
-        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .docx hoặc .docm")
+    if not _la_file_word_hop_le(ten_file):
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .doc, .docx hoac .docm")
     
     current_user = None
     auth_header = request.headers.get("Authorization", "")
@@ -182,7 +187,11 @@ async def chuyen_doi_file(
             with open(template_path, "wb") as f: f.write(template_contents)
     # 2. Template from system
     else:
-        template_path = _resolve_template_path(template_type) or _resolve_template_path("ieee_conference")
+        template_path = _resolve_template_path(
+            template_type,
+            current_user_id=current_user.id if current_user else None,
+            current_user_role=current_user.role if current_user else None,
+        ) or _resolve_template_path("ieee_conference")
         if not template_path or not template_path.exists():
             raise HTTPException(status_code=500, detail="Template không tồn tại hoặc lỗi cấu trúc thư mục.")
         
@@ -395,8 +404,8 @@ async def chuyen_doi_file_stream(
             logger.warning("Bearer token không hợp lệ cho SSE request", exc_info=e)
 
     ten_file = file.filename.lower()
-    if not (ten_file.endswith('.docx') or ten_file.endswith('.docm')):
-        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .docx hoặc .docm")
+    if not _la_file_word_hop_le(ten_file):
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .doc, .docx hoac .docm")
 
     contents = await file.read()
     if len(contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
@@ -479,7 +488,11 @@ async def chuyen_doi_file_stream(
                     template_path = job_folder / "custom_uploaded_template.tex"
                     with open(template_path, "wb") as f: f.write(template_contents)
             else:
-                template_path = _resolve_template_path(template_type) or _resolve_template_path("ieee_conference")
+                template_path = _resolve_template_path(
+                    template_type,
+                    current_user_id=current_user.id if current_user else None,
+                    current_user_role=current_user.role if current_user else None,
+                ) or _resolve_template_path("ieee_conference")
                 if not template_path or not template_path.exists():
                     yield sse_event(-1, "Template không tồn tại", error=True); return
                 template_dir_actual = template_path.parent

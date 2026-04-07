@@ -1,6 +1,7 @@
 import jinja2
 import os
 import re
+from bisect import bisect_right
 from .utils import phat_hien_loai_tai_lieu
 from .author_strategies import (
     IEEEAuthorStrategy,
@@ -40,7 +41,7 @@ class JinjaLaTeXRenderer:
         # LocKyTu inside AST parser handles most escapes.
         return str(text)
 
-    def render_body_nodes(self, body_nodes: list) -> str:
+    def render_body_nodes(self, body_nodes: list, doc_class: str = "generic") -> str:
         """Helper to render common semantic body nodes into standard LaTeX."""
         out = []
         table_counter = 0
@@ -53,21 +54,65 @@ class JinjaLaTeXRenderer:
                 elif lvl == 2: out.append(f"\\subsection{{{text}}}\n")
                 else: out.append(f"\\subsubsection{{{text}}}\n")
             elif t == "paragraph":
-                out.append(f"{node.get('text', '')}\n\n")
+                para_text = str(node.get('text', '') or '')
+                para_text = para_text.replace("\\n\\label{", " \\label{")
+                # Normalize accidental literal "\\n" tokens before core LaTeX commands.
+                para_text = re.sub(
+                    r'\\n(\\(?:label|caption|includegraphics|refstepcounter|begin|end)\b)',
+                    r'\n\1',
+                    para_text,
+                )
+                # Normalize hard line breaks from DOC/PDF-converted sources to avoid
+                # unintended visual line-spacing artifacts in LaTeX output.
+                para_text = re.sub(r'[\u200b\u200c\u200d\ufeff\xa0]+', ' ', para_text)
+                para_text = re.sub(r'\s*\n+\s*', ' ', para_text)
+                para_text = re.sub(r'[ \t]{2,}', ' ', para_text).strip()
+                if para_text:
+                    out.append(f"{para_text}\n\n")
             elif t == "table":
                 table_counter += 1
                 cols = node.get("cols", 1)
                 rows_data = node.get("data", [])
-                
-                # Setup proportional column width
-                width_frac = 0.98 / cols if cols > 0 else 0.15
-                col_def = "|" + "|".join([f"p{{{width_frac:.3f}\\linewidth}}" for _ in range(cols)]) + "|"
+
+                # Setup column widths. For common 3-column metadata tables
+                # (Feature/Type/Description), make the description column wider
+                # to avoid excessive line wrapping and tall rows.
+                col_widths = None
+                if cols == 3 and rows_data:
+                    first_row = rows_data[0]
+                    headers = []
+                    for c in first_row[:3]:
+                        headers.append((c.get("text") or "").strip().lower())
+                    joined = " | ".join(headers)
+                    if (
+                        ("feature" in joined or "đặc trưng" in joined)
+                        and ("type" in joined or "kiểu" in joined)
+                        and ("description" in joined or "mô tả" in joined)
+                    ):
+                        col_widths = [0.22, 0.20, 0.54]
+
+                if not col_widths:
+                    width_frac = 0.98 / cols if cols > 0 else 0.15
+                    col_widths = [width_frac] * cols
+
+                col_def = "|" + "|".join([f"p{{{w:.3f}\\linewidth}}" for w in col_widths]) + "|"
                 
                 # IEEE standard: caption ABOVE table
                 table_caption = node.get("caption", "Table")
-                out.append("\\begin{table}[htbp]\n\\centering\n")
+                table_width_ratio = node.get("width_ratio")
+                if isinstance(table_width_ratio, (int, float)) and table_width_ratio > 0:
+                    table_width_expr = f"{min(0.95, max(0.2, float(table_width_ratio))):.3f}\\columnwidth"
+                else:
+                    table_width_expr = "\\columnwidth"
+                # Keep IEEE tables anchored to preserve Word-like ordering.
+                if doc_class == "springer":
+                    table_pos = "[htbp]"
+                else:
+                    table_pos = "[H]"
+                out.append(f"\\begin{{table}}{table_pos}\n\\centering\n")
                 out.append(f"\\caption{{{table_caption}}}\\label{{tab{table_counter}}}\n")
-                out.append("\\resizebox{\\columnwidth}{!}{%\n")
+                out.append("\\begingroup\\small\\setlength{\\tabcolsep}{3pt}\\renewcommand{\\arraystretch}{0.95}\n")
+                out.append(f"\\resizebox{{{table_width_expr}}}{{!}}{{%\n")
                 out.append(f"\\begin{{tabular}}{{{col_def}}}\n\\hline\n")
                 
                 # Theo dõi các ô bị chiếm bởi rowspan từ các hàng phía trên
@@ -77,6 +122,7 @@ class JinjaLaTeXRenderer:
                     tex_cells = []
                     c_logical = 0   # Chỉ số cột thực tế trong LaTeX
                     cell_ptr = 0    # Con trỏ duyệt qua danh sách ô trong data của IR
+                    is_header_row = bool(node.get("has_header")) and r_idx == 0
                     
                     while c_logical < cols:
                         # Kiểm tra nếu ô này đã bị chiếm bởi rowspan từ phía trên
@@ -99,6 +145,8 @@ class JinjaLaTeXRenderer:
                             colspan = cell.get("colspan", 1)
                             rowspan = cell.get("rowspan", 1)
                             text = cell.get("text") or ""
+                            if is_header_row and text.strip() and "\\textbf{" not in text:
+                                text = f"\\textbf{{{text}}}"
                             
                             # Đánh dấu các ô bị chiếm trong tương lai (col/row span)
                             for dr in range(rowspan):
@@ -129,7 +177,6 @@ class JinjaLaTeXRenderer:
                             continue
                         dong_filtered.append(cell_str)
                         if "\\multicolumn{" in cell_str:
-                            import re
                             mc_match = re.search(r'\\multicolumn\{(\d+)\}', cell_str)
                             if mc_match:
                                 skip_mc = int(mc_match.group(1)) - 1
@@ -137,6 +184,7 @@ class JinjaLaTeXRenderer:
                     out.append(" & ".join(dong_filtered) + " \\\\\n\\hline\n")
                     
                 out.append("\\end{tabular}%\n}\n")
+                out.append("\\endgroup\n")
                 out.append("\\end{table}\n\n")
         
         # Ensure everything in `out` is strings
@@ -149,12 +197,7 @@ class JinjaLaTeXRenderer:
         """
         template = self.env.get_template(template_name)
         
-        # Pre-render body nodes so templates just drop << body >>
-        body_tex = self.render_body_nodes(ir_data.get('body', []))
-        
-        bib_file = self._generate_bib_file(ir_data.get('references', []), output_path)
-        
-        # Detect document class to generate format-appropriate author block
+        # Detect document class to generate format-appropriate output behavior
         try:
             template_path = os.path.join(self.env.loader.searchpath[0], template_name)
             with open(template_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -164,13 +207,21 @@ class JinjaLaTeXRenderer:
         
         doc_class = phat_hien_loai_tai_lieu(template_src)
 
+        # Pre-render body nodes so templates just drop << body >>
+        body_tex = self.render_body_nodes(ir_data.get('body', []), doc_class=doc_class)
+        if doc_class == "ieee":
+            body_tex = self._normalize_ieee_figure_placement(body_tex)
+            body_tex = self._remove_float_barriers(body_tex)
+        elif doc_class == "springer":
+            body_tex = self._normalize_springer_float_placement(body_tex)
+
+        bib_file = self._generate_bib_file(ir_data.get('references', []), output_path)
         references_block = self._generate_thebibliography(ir_data.get('references', []), doc_class)
         
         # Override author_block with format-appropriate version
         metadata = dict(ir_data.get('metadata', {}))
         authors = metadata.get('authors', [])
-        if authors:
-            metadata['author_block'] = self._generate_author_block(authors, doc_class)
+        metadata['author_block'] = self._generate_author_block(authors, doc_class)
         
         tex_content = template.render(
             metadata=metadata,
@@ -180,30 +231,180 @@ class JinjaLaTeXRenderer:
             references_block=references_block,
         )
 
-        # Thêm magic comment để trình biên dịch trên Overleaf/TeXworks ưu tiên dùng XeLaTeX
-        magic_comment = "% !TeX program = xelatex\n"
+        # Prefer pdfLaTeX by default, but switch to XeLaTeX when the rendered
+        # content includes packages that require a Unicode engine.
+        magic_comment = f"% !TeX program = {self._choose_magic_engine(tex_content)}\n"
 
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(magic_comment + tex_content)
 
-        # Tạo latexmkrc để ÉP Overleaf dùng XeLaTeX (Overleaf bỏ qua magic comment)
-        # $pdf_mode = 5 yêu cầu latexmk >= 4.51 (TeX Live 2019+, Overleaf đều có)
-        # $pdflatex override: fallback cho latexmk cũ hơn
+        # Remove stale latexmkrc that may force XeLaTeX from older output runs.
         latexmkrc_path = os.path.join(os.path.dirname(output_path), 'latexmkrc')
-        if not os.path.exists(latexmkrc_path):
-            with open(latexmkrc_path, 'w', encoding='utf-8') as f:
-                f.write(
-                    "# Force XeLaTeX for full Unicode support (Vietnamese, CJK, etc.)\n"
-                    "# Required for Overleaf: default compiler is pdfLaTeX which cannot handle Unicode\n"
-                    "$pdf_mode = 5;\n"
-                    "# Fallback for older latexmk versions\n"
-                    "$pdflatex = 'xelatex -interaction=nonstopmode -halt-on-error -synctex=1 %O %S';\n"
-                )
+        if os.path.exists(latexmkrc_path):
+            try:
+                os.remove(latexmkrc_path)
+            except OSError:
+                pass
+
+    def _normalize_ieee_figure_placement(self, body_tex: str) -> str:
+        """Normalize IEEE figure hints with a context-aware rule near section breaks.
+
+        Default figure floats stay flexible as ``[htbp]``. For figures that are very
+        close to the next section heading, convert them into inline non-float blocks
+        so they remain anchored to the local narrative flow.
+        """
+        body_tex = re.sub(r"\\begin\{figure\}\[[^\]]*\]", r"\\begin{figure}[htbp]", body_tex)
+        figure_pattern = re.compile(r"\\begin\{figure\}\[htbp\].*?\\end\{figure\}", re.DOTALL)
+        section_pattern = re.compile(r"\\section\{")
+
+        chunks = []
+        cursor = 0
+        for match in figure_pattern.finditer(body_tex):
+            start, end = match.span()
+            fig_block = match.group(0)
+
+            # Captionless figure blocks are usually formula snapshots or decorative
+            # blocks from Word. Keep them inline to avoid float drift.
+            if self._has_empty_caption(fig_block):
+                fig_block = self._convert_figure_float_to_inline(fig_block, with_counter=False)
+                chunks.append(body_tex[cursor:start])
+                chunks.append(fig_block)
+                cursor = end
+                continue
+
+            next_section = section_pattern.search(body_tex, end)
+            if next_section is not None:
+                tail_text = body_tex[end:next_section.start()]
+                if len(tail_text.strip()) <= 420:
+                    fig_block = self._convert_figure_float_to_inline(fig_block, with_counter=True)
+
+            chunks.append(body_tex[cursor:start])
+            chunks.append(fig_block)
+            cursor = end
+
+        chunks.append(body_tex[cursor:])
+        return "".join(chunks)
+
+    def _has_empty_caption(self, fig_block: str) -> bool:
+        cap_match = re.search(r"\\caption\{(.*?)\}", fig_block, re.DOTALL)
+        if cap_match is None:
+            return True
+        return not cap_match.group(1).strip()
+
+    def _convert_figure_float_to_inline(self, fig_block: str, with_counter: bool = True) -> str:
+        """Convert a figure float block into an inline figure-like block.
+
+        This avoids LaTeX float queue behavior in tight IEEE two-column layouts.
+        """
+        # Some DOCX conversions carry a literal "\\n" token before \label.
+        # Normalize it first so regex extraction stays stable.
+        fig_block = fig_block.replace("\\n\\label", "\n\\label")
+
+        include_match = re.search(r"\\includegraphics(?:\[[^\]]*\])?\{[^}]+\}", fig_block, re.DOTALL)
+        if include_match is None:
+            return fig_block
+
+        include_cmd = include_match.group(0)
+        include_cmd = include_cmd.replace("\\n\\label", " \\label")
+        cap_match = re.search(r"\\caption\{(.*?)\}", fig_block, re.DOTALL)
+        label_match = re.search(r"\\label\{([^}]+)\}", fig_block)
+
+        caption_text = (cap_match.group(1).strip() if cap_match else "")
+        label_name = (label_match.group(1).strip() if label_match else "")
+        label_cmd = f"\\label{{{label_name}}}" if label_name else ""
+
+        if caption_text and with_counter:
+            return (
+                "\\begingroup\n"
+                "\\centering\n"
+                "\\refstepcounter{figure}\n"
+                f"{include_cmd}\n"
+                f"\\small Fig. \\thefigure. {caption_text}"
+                + (f" {label_cmd}" if label_cmd else "")
+                + "\n\\par\n"
+                "\\endgroup\n"
+            )
+
+        if caption_text and not with_counter:
+            return (
+                "\\begingroup\n"
+                "\\centering\n"
+                f"{include_cmd}\n"
+                f"\\small {caption_text}"
+                + (f" {label_cmd}" if label_cmd else "")
+                + "\n\\par\n"
+                "\\endgroup\n"
+            )
+
+        return (
+            "\\begingroup\n"
+            "\\centering\n"
+            f"{include_cmd}"
+            + (f"\\n{label_cmd}" if label_cmd else "")
+            + "\n\\par\n"
+            "\\endgroup\n"
+        )
+
+    def _normalize_springer_float_placement(self, body_tex: str) -> str:
+        """Normalize Springer float hints and add local barriers near headings.
+
+        Use ``[!ht]`` to avoid float-only pages caused by the ``p`` placement mode,
+        then add ``\\FloatBarrier`` only when a section starts shortly after a float.
+        """
+        body_tex = re.sub(r"\\begin\{figure\}\[[^\]]*\]", r"\\begin{figure}[!ht]", body_tex)
+        # Tables are anchored for Springer to preserve document flow from Word source.
+        body_tex = re.sub(r"\\begin\{table\}\[[^\]]*\]", r"\\begin{table}[H]", body_tex)
+
+        float_end_pattern = re.compile(r"\\end\{(?:figure|table)\}")
+        section_pattern = re.compile(r"\\(?:section|subsection)\{")
+
+        float_ends = [m.end() for m in float_end_pattern.finditer(body_tex)]
+        if not float_ends:
+            return body_tex
+
+        chunks = []
+        cursor = 0
+        for sec in section_pattern.finditer(body_tex):
+            sec_start = sec.start()
+            should_insert = False
+
+            nearest_float_idx = bisect_right(float_ends, sec_start) - 1
+            if nearest_float_idx >= 0:
+                nearest_float_end = float_ends[nearest_float_idx]
+                between = body_tex[nearest_float_end:sec_start]
+                if len(between.strip()) <= 420 and "\\FloatBarrier" not in between:
+                    should_insert = True
+
+            chunks.append(body_tex[cursor:sec_start])
+            if should_insert:
+                chunks.append("\n\\FloatBarrier\n")
+            chunks.append(sec.group(0))
+            cursor = sec.end()
+
+        chunks.append(body_tex[cursor:])
+        return "".join(chunks)
+
+    def _remove_float_barriers(self, body_tex: str) -> str:
+        """Remove legacy FloatBarrier markers that can force awkward page breaks."""
+        return re.sub(r"^[ \t]*\\FloatBarrier[ \t]*\n?", "", body_tex, flags=re.MULTILINE)
+
+    def _choose_magic_engine(self, tex_content: str) -> str:
+        """Choose a safe TeX engine hint for editors/Overleaf based on content."""
+        if re.search(r"\\usepackage\{fontspec\}", tex_content):
+            return "xelatex"
+        if re.search(r"\\usepackage\{unicode-math\}", tex_content):
+            return "xelatex"
+        if re.search(r"\\usepackage\{polyglossia\}", tex_content):
+            return "xelatex"
+        return "pdflatex"
 
 
     def _generate_author_block(self, authors: list, doc_class: str) -> str:
         """Generate author block LaTeX code appropriate for the detected document class."""
         if not authors:
+            if doc_class == "springer":
+                # Prevent LLNCS class defaults: "No Author Given" / "No Institute Given".
+                return "\\author{}\n\\institute{}"
             return ""
             
         strategies = {

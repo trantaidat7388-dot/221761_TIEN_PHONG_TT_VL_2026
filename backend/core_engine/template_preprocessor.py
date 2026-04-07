@@ -21,6 +21,7 @@ class TemplatePreprocessor:
     @classmethod
     def auto_tag(cls, tex_content: str, config: dict = None) -> str:
         # 1. Detect publisher logic
+        tex_content = cls._trim_after_first_end_document(tex_content)
         doc_class = phat_hien_loai_tai_lieu(tex_content)
         pub_config = PUBLISHERS_MANIFEST.get(doc_class, {})
         
@@ -28,9 +29,11 @@ class TemplatePreprocessor:
         config = {**pub_config, **(config or {})}
         
         tex = cls._ensure_essential_packages(tex_content)
+        tex = cls._normalize_paragraph_spacing(tex, doc_class)
+        tex = cls._normalize_float_numbering(tex, doc_class)
         
         # ── Hỗ trợ Tiếng Việt (fontspec cho XeLaTeX - chỉ fallback nếu chưa có font) ──
-        if r'\setmainfont' not in tex and r'\usepackage{fontspec}' not in tex:
+        if doc_class != 'ieee' and r'\setmainfont' not in tex and r'\usepackage{fontspec}' not in tex:
             # Strict regex: skip commented-out \documentclass lines (starting with %)
             # Inject \usepackage{fontspec} ONCE, after the first active \documentclass
             active_dc_pattern = re.compile(r'^(?!\s*%).*?\\documentclass(\[.*?\])?\{.*?\}', re.MULTILINE)
@@ -244,9 +247,9 @@ class TemplatePreprocessor:
             if '<< metadata.keywords_str >>' not in tex:
                 tex = cls._process_keywords(tex, config)
 
-            print("[*] pylatexenc tagging hoàn tất cho metadata.")
+            print("[*] pylatexenc tagging done for metadata.")
         except Exception as e:
-            print(f"[WARN] pylatexenc thất bại ({e}), đang dùng Regex fallback an toàn...")
+            print(f"[WARN] pylatexenc failed ({e}), using safe regex fallback...")
             # Note: _cleanup_publisher_metadata already ran before the try block.
             tex = cls._process_title(tex, config)
             tex = cls._process_authors(tex, config)
@@ -267,6 +270,53 @@ class TemplatePreprocessor:
         tex = re.sub(r'\\documentclass\s*\[([^\]]*)\]', remove_pdftex_option, tex)
 
         return tex
+
+    @classmethod
+    def _trim_after_first_end_document(cls, tex: str) -> str:
+        """Keep a single LaTeX document by dropping accidental trailing content.
+
+        Some uploaded templates are malformed and contain a second full document
+        appended after the first ``\\end{document}``. We keep everything through the
+        first active ``\\end{document}`` and discard anything that follows.
+        """
+        end_match = re.search(r'^[ \t]*\\end\{document\}', tex, re.MULTILINE)
+        if not end_match:
+            return tex
+        return tex[:end_match.end()] + "\n"
+
+    @classmethod
+    def _normalize_paragraph_spacing(cls, tex: str, doc_class: str) -> str:
+        """Keep paragraph spacing compact and line breaks smoother for Springer-like templates."""
+        if doc_class != 'springer':
+            return tex
+
+        if '\\setlength{\\parskip}' in tex and '\\hyphenpenalty=' in tex:
+            return tex
+
+        doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
+        if not doc_match:
+            return tex
+
+        lines = []
+        if '\\setlength{\\parskip}' not in tex:
+            lines.extend([
+                "\\setlength{\\parskip}{0pt}",
+                "\\setlength{\\parsep}{0pt}",
+            ])
+        if '\\hyphenpenalty=' not in tex:
+            lines.extend([
+                "\\hyphenpenalty=1500",
+                "\\exhyphenpenalty=1500",
+                "\\tolerance=1800",
+                "\\emergencystretch=1.0em",
+            ])
+
+        if not lines:
+            return tex
+
+        block = "\n".join(lines) + "\n"
+        pos = doc_match.start()
+        return tex[:pos] + block + tex[pos:]
 
     # ── Utilities ──────────────────────────────────────────────────
 
@@ -329,6 +379,36 @@ class TemplatePreprocessor:
             tex = tex[:start] + tex[remove_end:]
         return tex
 
+    @classmethod
+    def _normalize_float_numbering(cls, tex: str, doc_class: str) -> str:
+        """For generic templates, number figures/tables by section (e.g., 3.1)."""
+        if doc_class not in ('generic', 'springer'):
+            return tex
+
+        already_configured = (
+            re.search(r'\\(counterwithin|numberwithin)\s*\{figure\}\s*\{section\}', tex) is not None
+            or re.search(r'\\renewcommand\s*\{\\thefigure\}', tex) is not None
+            or re.search(r'@addtoreset\s*\{figure\}\s*\{section\}', tex) is not None
+        )
+        if already_configured:
+            return tex
+
+        block = (
+            "\\makeatletter\n"
+            "\\@addtoreset{figure}{section}\n"
+            "\\renewcommand{\\thefigure}{\\thesection.\\arabic{figure}}\n"
+            "\\@addtoreset{table}{section}\n"
+            "\\renewcommand{\\thetable}{\\thesection.\\arabic{table}}\n"
+            "\\makeatother\n"
+        )
+
+        doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
+        if not doc_match:
+            return tex
+
+        pos = doc_match.start()
+        return tex[:pos] + block + tex[pos:]
+
     @staticmethod
     def _is_commented(tex: str, pos: int) -> bool:
         """Return True if *pos* falls on a line whose first non-space character is %."""
@@ -357,6 +437,14 @@ class TemplatePreprocessor:
         # Detect tikz/pgf in template body or cls path (MDPI etc.)
         has_pgf = bool(re.search(r'tikz|pgf|mdpi', tex[:3000], re.IGNORECASE))
         use_pdflatex = has_pdftex and has_pgf
+
+        if use_pdflatex:
+            # Keep pdfLaTeX but avoid OT1 encoding because characters like
+            # \DJ/\dj are unavailable there.
+            tex = tex.replace(
+                '\\usepackage[OT1]{fontenc}',
+                '\\usepackage[T1]{fontenc}',
+            )
 
         # ── Before \documentclass ──
         PASS_XCOLOR = "\\PassOptionsToPackage{table,xcdraw}{xcolor}\n"
@@ -409,31 +497,46 @@ class TemplatePreprocessor:
         # (above) already handles templates that explicitly load fontenc in their body.
         INJECT_BLOCK = (
             "\\makeatletter\n"
+            "\\@ifpackageloaded{iftex}{}{\\usepackage{iftex}}\n"
+            "\\ifPDFTeX\\@ifpackageloaded{fontenc}{}{\\usepackage[T1]{fontenc}}\\fi\n"
             "\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n"
             "\\@ifundefined{Bbbk}{}{\\let\\Bbbk\\relax}\n"
             "\\@ifpackageloaded{amssymb}{}{\\usepackage{amssymb}}\n"
             "\\@ifpackageloaded{xurl}{}{\\usepackage{xurl}}\n"
             "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
             "\\@ifpackageloaded{graphicx}{}{\\usepackage{graphicx}}\n"
+            "\\@ifpackageloaded{float}{}{\\usepackage{float}}\n"
+            "\\@ifpackageloaded{placeins}{}{\\usepackage{placeins}}\n"
             "\\makeatother\n"
         )
 
         if '@ifpackageloaded{amsmath}' in tex:
-            # Preamble was already processed before; still guarantee xcolor is ensured.
+            # Preamble was already processed before; still guarantee required guards.
             has_xcolor_guard = '@ifpackageloaded{xcolor}' in tex
             has_xcolor_pkg = re.search(r'\\usepackage(?:\[[^\]]*\])?\{xcolor\}', tex) is not None
-            if has_xcolor_guard or has_xcolor_pkg:
+            has_fontenc_t1 = re.search(r'\\usepackage\[T1\]\{fontenc\}', tex) is not None
+            has_fontenc_guard = '\\ifPDFTeX\\@ifpackageloaded{fontenc}{}{\\usepackage[T1]{fontenc}}\\fi' in tex
+            has_iftex_pkg = re.search(r'\\usepackage(?:\[[^\]]*\])?\{iftex\}', tex) is not None
+
+            if (has_xcolor_guard or has_xcolor_pkg) and (has_fontenc_t1 or has_fontenc_guard):
                 return tex
             doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
             if not doc_match:
                 return tex
-            xcolor_block = (
-                "\\makeatletter\n"
-                "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
-                "\\makeatother\n"
-            )
+            repair_lines = ["\\makeatletter"]
+            if not has_iftex_pkg:
+                repair_lines.append("\\@ifpackageloaded{iftex}{}{\\usepackage{iftex}}")
+            if not (has_fontenc_t1 or has_fontenc_guard):
+                repair_lines.append("\\ifPDFTeX\\@ifpackageloaded{fontenc}{}{\\usepackage[T1]{fontenc}}\\fi")
+            if not (has_xcolor_guard or has_xcolor_pkg):
+                repair_lines.append("\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}")
+            repair_lines.append("\\makeatother")
+            repair_block = "\n".join(repair_lines) + "\n"
+
             pos = doc_match.start()
-            return tex[:pos] + xcolor_block + tex[pos:]
+            if repair_block == "\\makeatletter\n\\makeatother\n":
+                return tex
+            return tex[:pos] + repair_block + tex[pos:]
 
         # Match only non-commented \begin{document} (avoid % comment matches)
         doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
@@ -524,13 +627,59 @@ class TemplatePreprocessor:
         ``<< metadata.author_block >>`` placeholder. Any additional author macros
         are removed entirely to avoid duplicate definitions.
         """
-        # Find all matches of \author (optional star) with optional [] args
-        pattern = r'(?i)\\author\*?\s*(?:\[[^\]]*\])?\s*\{(?:[^{}]*|\{[^{}]*\})*\}'
-        # Find first non‑commented occurrence
-        match = re.search(pattern, tex)
-        if match and not cls._is_commented(tex, match.start()):
-            # Replace the whole match with placeholder
-            tex = tex[:match.start()] + "<< metadata.author_block >>" + tex[match.end():]
+        # Use brace matching to support deeply nested author bodies, e.g.:
+        # \author{A\inst{1} \and B\inst{2,3}\orcidID{...}}
+        pattern = r'(?i)\\author(?!running|note|notemark|names|contributions)\*?\s*(?:\[[^\]]*\])?\s*\{'
+        spans = []
+        search_start = 0
+        while True:
+            m = re.search(pattern, tex[search_start:])
+            if not m:
+                break
+
+            abs_start = search_start + m.start()
+            if cls._is_commented(tex, abs_start):
+                search_start = search_start + m.end()
+                continue
+
+            open_brace = search_start + m.end() - 1
+            close_brace = cls._find_matching_brace(tex, open_brace)
+            if close_brace == -1:
+                search_start = search_start + m.end()
+                continue
+
+            spans.append((abs_start, close_brace + 1))
+            search_start = close_brace + 1
+
+        if not spans:
+            return tex
+
+        first_start, first_end = spans[0]
+        tex = tex[:first_start] + "<< metadata.author_block >>" + tex[first_end:]
+
+        # Remove additional author macros from right to left on the updated text.
+        # Re-scan to get current offsets after the first replacement.
+        extra_spans = []
+        search_start = 0
+        while True:
+            m = re.search(pattern, tex[search_start:])
+            if not m:
+                break
+            abs_start = search_start + m.start()
+            if cls._is_commented(tex, abs_start):
+                search_start = search_start + m.end()
+                continue
+            open_brace = search_start + m.end() - 1
+            close_brace = cls._find_matching_brace(tex, open_brace)
+            if close_brace == -1:
+                search_start = search_start + m.end()
+                continue
+            extra_spans.append((abs_start, close_brace + 1))
+            search_start = close_brace + 1
+
+        for s, e in reversed(extra_spans):
+            tex = tex[:s] + tex[e:]
+
         return tex
     def _process_authors(cls, tex: str, config: dict = None) -> str:
         config = config or {}

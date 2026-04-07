@@ -6,9 +6,10 @@ import { ThanhDieuHuong } from './components'
 import { TrangDangNhap } from './features/xac_thuc'
 import { TrangChuyenDoi } from './features/chuyen_doi'
 import { TrangLichSu } from './features/lich_su'
-import { TrangAdmin } from './features/admin'
+import { TrangAdmin, TrangAdminDangNhap } from './features/admin'
 import { TrangTaiKhoan } from './features/tai_khoan'
-import { TrangPremium } from './features/premium'
+import { TrangPremium, TrangThanhToanPremium } from './features/premium'
+import { TrangLanding } from './features/landing'
 
 // Layout chung cho các trang có thanh điều hướng
 const BoCucChung = () => {
@@ -28,9 +29,14 @@ const CacTuyenUngDung = () => {
   return (
     <Routes>
       {/* Route công khai */}
+      <Route path="/" element={nguoiDung ? <Navigate to="/chuyen-doi" replace /> : <TrangLanding />} />
       <Route
         path="/dang-nhap"
         element={nguoiDung ? <Navigate to="/chuyen-doi" replace /> : <TrangDangNhap />}
+      />
+      <Route
+        path="/quan-tri/dang-nhap"
+        element={nguoiDung?.role === 'admin' ? <Navigate to="/quan-tri" replace /> : <TrangAdminDangNhap />}
       />
 
       {/* Routes yêu cầu đăng nhập */}
@@ -52,15 +58,21 @@ const CacTuyenUngDung = () => {
           element={nguoiDung ? <TrangPremium /> : <Navigate to="/dang-nhap" replace />}
         />
         <Route
-          path="/admin"
-          element={nguoiDung?.role === 'admin' ? <TrangAdmin /> : <Navigate to="/chuyen-doi" replace />}
+          path="/thanh-toan"
+          element={nguoiDung ? <TrangThanhToanPremium /> : <Navigate to="/dang-nhap" replace />}
         />
       </Route>
+
+      {/* Admin GUI tách riêng */}
+      <Route
+        path="/quan-tri"
+        element={nguoiDung?.role === 'admin' ? <TrangAdmin /> : <Navigate to={nguoiDung ? '/chuyen-doi' : '/quan-tri/dang-nhap'} replace />}
+      />
 
       {/* Redirect mặc định */}
       <Route
         path="*"
-        element={<Navigate to={nguoiDung ? '/chuyen-doi' : '/dang-nhap'} replace />}
+        element={<Navigate to={nguoiDung ? '/chuyen-doi' : '/'} replace />}
       />
     </Routes>
   )

@@ -1,5 +1,33 @@
 import re
 
+
+def _split_affiliation_line(line: str) -> list:
+    """Split long comma-separated affiliation into shorter chunks for IEEE blocks.
+
+    This helps reduce block width so multi-author rows are less likely to wrap.
+    """
+    clean = line.strip()
+    if not clean:
+        return []
+
+    if ',' not in clean:
+        return [clean]
+
+    parts = [p.strip() for p in clean.split(',') if p.strip()]
+    if len(parts) <= 1:
+        return [clean]
+
+    chunks = []
+    i = 0
+    while i < len(parts):
+        if i + 1 < len(parts):
+            chunks.append(f"{parts[i]}, {parts[i+1]}")
+            i += 2
+        else:
+            chunks.append(parts[i])
+            i += 1
+    return chunks
+
 class AuthorBlockStrategy:
     """Base strategy for generating author block in various LaTeX templates."""
     def generate(self, authors: list) -> str:
@@ -8,19 +36,48 @@ class AuthorBlockStrategy:
 class IEEEAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
         """Generate author block in IEEEtran format."""
+        symbol_only_re = re.compile(r'^[*†‡]+$')
+        email_re = re.compile(r'[\w\.\-\+]+@[\w\.\-]+')
+
         block = "\\author{\n"
         parts = []
         for author in authors:
-            auth_str = f"\\IEEEauthorblockN{{{author['name']}}}"
+            name = author['name']
+            has_corresponding_marker = False
+            emails = []
+
+            for aff in author.get('affiliations', []):
+                clean = aff.strip()
+                if not clean:
+                    continue
+                if symbol_only_re.match(clean):
+                    has_corresponding_marker = True
+                    continue
+                for em in email_re.findall(clean):
+                    if em not in emails:
+                        emails.append(em)
+
+            if has_corresponding_marker:
+                name += "\\textsuperscript{*}"
+
+            auth_str = f"\\IEEEauthorblockN{{{name}}}"
             if author.get('affiliations'):
                 affil_lines = []
                 for aff in author['affiliations']:
                     sub_lines = [s.strip() for s in aff.split('\n') if s.strip()]
                     for sl in sub_lines:
+                        if symbol_only_re.match(sl):
+                            continue
                         if '@' in sl:
-                            affil_lines.append(sl)
-                        else:
-                            affil_lines.append(f"\\textit{{{sl}}}")
+                            for em in email_re.findall(sl):
+                                if em not in emails:
+                                    emails.append(em)
+                            continue
+                        compact = re.sub(r'\s{2,}', ' ', sl).strip()
+                        if compact:
+                            affil_lines.append(f"\\textit{{{compact}}}")
+                for em in emails:
+                    affil_lines.append(f"\\texttt{{{em}}}")
                 affil_text = " \\\\ ".join(affil_lines)
                 auth_str += f"\n\\IEEEauthorblockA{{{affil_text}}}"
             parts.append(auth_str)
@@ -31,12 +88,25 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
 class SpringerAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
         """Generate author block in Springer LNCS format (\\author + \\institute)."""
-        # Collect unique affiliations across all authors
+        email_re = re.compile(r'[\w\.\-\+]+@[\w\.\-]+')
+        symbol_only_re = re.compile(r'^[*†‡]+$')
+
+        # Collect unique non-email, non-marker affiliations across all authors
         affil_map = {}  # affiliation text -> institute number
+        all_emails = []
         for author in authors:
             for aff in author.get('affiliations', []):
                 clean = aff.strip()
-                if clean and clean not in affil_map:
+                if not clean:
+                    continue
+                if symbol_only_re.match(clean):
+                    continue
+                if email_re.search(clean):
+                    for em in email_re.findall(clean):
+                        if em not in all_emails:
+                            all_emails.append(em)
+                    continue
+                if clean not in affil_map:
                     affil_map[clean] = len(affil_map) + 1
 
         # Build \author{...} block
@@ -44,12 +114,22 @@ class SpringerAuthorStrategy(AuthorBlockStrategy):
         for author in authors:
             name = author['name']
             insts = []
+            corr_marker = ''
             for aff in author.get('affiliations', []):
                 clean = aff.strip()
+                if not clean:
+                    continue
+                if symbol_only_re.match(clean):
+                    corr_marker = clean[0]
+                    continue
+                if email_re.search(clean):
+                    continue
                 if clean in affil_map:
                     insts.append(str(affil_map[clean]))
             if insts:
                 name += f"\\inst{{{','.join(insts)}}}"
+            if corr_marker:
+                name += corr_marker
             author_parts.append(name)
 
         author_block = "\\author{" + " \\and ".join(author_parts) + "}"
@@ -58,22 +138,17 @@ class SpringerAuthorStrategy(AuthorBlockStrategy):
         if affil_map:
             inst_parts = []
             for aff_text in affil_map:
-                # Separate email from affiliation text
-                lines = [s.strip() for s in aff_text.split('\n') if s.strip()]
-                main_parts = []
-                email_parts = []
-                for line in lines:
-                    if '@' in line:
-                        email_parts.append(line)
-                    else:
-                        main_parts.append(line)
-                entry = ", ".join(main_parts) if main_parts else aff_text
-                if email_parts:
-                    entry += f"\\\\\n\\email{{{', '.join(email_parts)}}}"
+                entry = ", ".join([s.strip() for s in aff_text.split('\n') if s.strip()])
                 inst_parts.append(entry)
-            author_block += "\n\\institute{" + " \\and ".join(inst_parts) + "}"
+            institute_text = " \\and ".join(inst_parts)
+            if all_emails:
+                institute_text += f"\\\\\n\\email{{{', '.join(all_emails)}}}"
+            author_block += "\n\\institute{" + institute_text + "}"
         else:
-            author_block += "\n\\institute{Institution not specified}"
+            fallback = "Institution not specified"
+            if all_emails:
+                fallback += f"\\\\\n\\email{{{', '.join(all_emails)}}}"
+            author_block += "\n\\institute{" + fallback + "}"
 
         return author_block
 

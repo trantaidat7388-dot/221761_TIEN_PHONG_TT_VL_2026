@@ -13,7 +13,7 @@ def doc_api() -> dict:
     return {
         "message": "Word2LaTeX API đang hoạt động",
         "endpoints": {
-            "/api/chuyen-doi": "POST - Upload file .docx/.docm và chuyển đổi",
+            "/api/chuyen-doi": "POST - Upload file .doc/.docx/.docm va chuyen doi",
             "/docs": "Xem Swagger documentation",
         },
     }
