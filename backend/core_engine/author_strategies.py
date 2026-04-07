@@ -1,9 +1,32 @@
 import re
 
 
-def _escape_author_text(text: str) -> str:
-    """Escape author text fragments that can break LaTeX author blocks."""
-    return re.sub(r'(?<!\\)#', r'\\#', (text or ''))
+def _split_affiliation_line(line: str) -> list:
+    """Split long comma-separated affiliation into shorter chunks for IEEE blocks.
+
+    This helps reduce block width so multi-author rows are less likely to wrap.
+    """
+    clean = line.strip()
+    if not clean:
+        return []
+
+    if ',' not in clean:
+        return [clean]
+
+    parts = [p.strip() for p in clean.split(',') if p.strip()]
+    if len(parts) <= 1:
+        return [clean]
+
+    chunks = []
+    i = 0
+    while i < len(parts):
+        if i + 1 < len(parts):
+            chunks.append(f"{parts[i]}, {parts[i+1]}")
+            i += 2
+        else:
+            chunks.append(parts[i])
+            i += 1
+    return chunks
 
 class AuthorBlockStrategy:
     """Base strategy for generating author block in various LaTeX templates."""
@@ -15,20 +38,23 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
         """Generate author block in IEEEtran format."""
         symbol_only_re = re.compile(r'^[*†‡]+$')
         email_re = re.compile(r'[\w\.\-\+]+@[\w\.\-]+')
+
         block = "\\author{\n"
         parts = []
         corresponding_notes = []
         for author in authors:
-            name = _escape_author_text(author['name'])
+            name = author['name']
             has_corresponding_marker = False
             emails = []
 
             for aff in author.get('affiliations', []):
-                clean_aff = _escape_author_text(aff).strip()
-                if symbol_only_re.match(clean_aff):
+                clean = aff.strip()
+                if not clean:
+                    continue
+                if symbol_only_re.match(clean):
                     has_corresponding_marker = True
                     continue
-                for em in email_re.findall(clean_aff):
+                for em in email_re.findall(clean):
                     if em not in emails:
                         emails.append(em)
 
@@ -44,14 +70,16 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
             if author.get('affiliations'):
                 affil_lines = []
                 for aff in author['affiliations']:
-                    sub_lines = [s.strip() for s in _escape_author_text(aff).split('\n') if s.strip()]
+                    sub_lines = [s.strip() for s in aff.split('\n') if s.strip()]
                     for sl in sub_lines:
                         if symbol_only_re.match(sl):
                             continue
                         if '@' in sl:
-                            affil_lines.append(sl)
-                        else:
-                            affil_lines.append(f"\\textit{{{sl}}}")
+                            # Keep emails out of author blocks to reduce width.
+                            continue
+                        compact = re.sub(r'\s{2,}', ' ', sl).strip()
+                        if compact:
+                            affil_lines.append(f"\\textit{{{compact}}}")
                 affil_text = " \\\\ ".join(affil_lines)
                 auth_str += f"\n\\IEEEauthorblockA{{{affil_text}}}"
             parts.append(auth_str)
@@ -72,7 +100,7 @@ class SpringerAuthorStrategy(AuthorBlockStrategy):
         all_emails = []
         for author in authors:
             for aff in author.get('affiliations', []):
-                clean = _escape_author_text(aff).strip()
+                clean = aff.strip()
                 if not clean:
                     continue
                 if symbol_only_re.match(clean):
@@ -88,11 +116,13 @@ class SpringerAuthorStrategy(AuthorBlockStrategy):
         # Build \author{...} block
         author_parts = []
         for author in authors:
-            name = _escape_author_text(author['name'])
+            name = author['name']
             insts = []
             corr_marker = ''
             for aff in author.get('affiliations', []):
-                clean = _escape_author_text(aff).strip()
+                clean = aff.strip()
+                if not clean:
+                    continue
                 if symbol_only_re.match(clean):
                     corr_marker = clean[0]
                     continue
@@ -131,9 +161,9 @@ class ElsevierAuthorStrategy(AuthorBlockStrategy):
         """Generate author block in Elsevier format (\\author + \\affiliation)."""
         parts = []
         for author in authors:
-            parts.append(f"\\author{{{_escape_author_text(author['name'])}}}")
+            parts.append(f"\\author{{{author['name']}}}")
             for aff in author.get('affiliations', []):
-                aff_clean = _escape_author_text(aff).strip()
+                aff_clean = aff.strip()
                 lines = [s.strip() for s in aff_clean.split('\n') if s.strip()]
                 email_line = None
                 plain_lines = []
@@ -160,11 +190,11 @@ class ACMAuthorStrategy(AuthorBlockStrategy):
         """Generate author block in ACM format."""
         parts = []
         for author in authors:
-            parts.append(f"\\author{{{_escape_author_text(author['name'])}}}")
+            parts.append(f"\\author{{{author['name']}}}")
             affs = author.get('affiliations', [])
             if affs:
                 for aff in affs:
-                    aff_clean = _escape_author_text(aff).strip()
+                    aff_clean = aff.strip()
                     lines = [s.strip() for s in aff_clean.split('\n') if s.strip()]
                     email_line = None
                     plain_lines = []
@@ -222,7 +252,7 @@ class MDPIAuthorStrategy(AuthorBlockStrategy):
         affil_emails = {}
         for author in authors:
             for aff in author.get('affiliations', []):
-                lines = [s.strip() for s in _escape_author_text(aff).strip().split('\n') if s.strip()]
+                lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
                 email_parts = []
                 inst_parts = []
                 for line in lines:
@@ -230,7 +260,7 @@ class MDPIAuthorStrategy(AuthorBlockStrategy):
                         email_parts.append(line)
                     else:
                         inst_parts.append(line)
-                key = ', '.join(inst_parts) if inst_parts else _escape_author_text(aff).strip()
+                key = ', '.join(inst_parts) if inst_parts else aff.strip()
                 if key and key not in affil_map:
                     affil_map[key] = len(affil_map) + 1
                     if email_parts:
@@ -238,12 +268,12 @@ class MDPIAuthorStrategy(AuthorBlockStrategy):
 
         author_parts = []
         for author in authors:
-            name = _escape_author_text(author['name'])
+            name = author['name']
             insts = []
             for aff in author.get('affiliations', []):
-                lines = [s.strip() for s in _escape_author_text(aff).strip().split('\n') if s.strip()]
+                lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
                 inst_parts = [l for l in lines if '@' not in l]
-                key = ', '.join(inst_parts) if inst_parts else _escape_author_text(aff).strip()
+                key = ', '.join(inst_parts) if inst_parts else aff.strip()
                 if key in affil_map:
                     insts.append(str(affil_map[key]))
             if insts:
@@ -251,7 +281,7 @@ class MDPIAuthorStrategy(AuthorBlockStrategy):
             author_parts.append(name)
         block = "\\Author{" + ", ".join(author_parts) + "}"
 
-        plain_names = [_escape_author_text(a['name']) for a in authors]
+        plain_names = [a['name'] for a in authors]
         block += "\n\\AuthorNames{" + ", ".join(plain_names) + "}"
 
         if affil_map:
@@ -276,12 +306,12 @@ class OSCMAuthorStrategy(AuthorBlockStrategy):
         """
         parts = []
         for i, author in enumerate(authors):
-            name = _escape_author_text(author['name'])
+            name = author['name']
             # Extract affiliation and email from the author's affiliations
             affil_text = ''
             email_text = ''
             for aff in author.get('affiliations', []):
-                lines = [s.strip() for s in _escape_author_text(aff).strip().split('\n') if s.strip()]
+                lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
                 for line in lines:
                     if '@' in line:
                         if email_text:
@@ -312,10 +342,9 @@ class JOVAuthorStrategy(AuthorBlockStrategy):
         """
         parts = []
         for author in authors:
-            safe_name = _escape_author_text(author['name'])
-            name_parts = safe_name.split(' ', 1)
+            name_parts = author['name'].split(' ', 1)
             first_name = name_parts[0] if len(name_parts) > 1 else ''
-            family_name = name_parts[1] if len(name_parts) > 1 else safe_name
+            family_name = name_parts[1] if len(name_parts) > 1 else author['name']
             
             affil_text = 'Institution'
             address_text = 'Address'
@@ -323,7 +352,7 @@ class JOVAuthorStrategy(AuthorBlockStrategy):
             
             affil_lines = []
             for aff in author.get('affiliations', []):
-                lines = [s.strip() for s in _escape_author_text(aff).strip().split('\n') if s.strip()]
+                lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
                 for line in lines:
                     if '@' in line:
                         email_text = line
@@ -351,13 +380,12 @@ class GenericAuthorStrategy(AuthorBlockStrategy):
         affils = []
         for a in authors:
             for aff in a.get('affiliations', []):
-                clean = _escape_author_text(aff).strip()
-                if clean and clean not in affils:
-                    affils.append(clean)
+                if aff.strip() and aff.strip() not in affils:
+                    affils.append(aff.strip())
         affil_note = ""
         if affils:
             affil_note = "\\thanks{" + "; ".join(affils) + "}"
-        names = [_escape_author_text(a['name']) for a in authors]
+        names = [a['name'] for a in authors]
         block = "\\author{" + ", ".join(names)
         if affil_note:
             block += " " + affil_note
