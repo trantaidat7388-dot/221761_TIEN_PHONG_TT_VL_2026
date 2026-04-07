@@ -262,14 +262,12 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
     source_tex_path = os.path.join(runtime_cwd, ten_file)
     compile_file = ten_file
     compile_file_path = os.path.join(runtime_cwd, compile_file)
-    used_temp_compile_file = False
 
     # Windows/XeLaTeX can fail with very long .tex filenames; compile via a short alias.
     if len(ten_file) > 120:
         compile_file = "__compile_main__.tex"
         compile_file_path = os.path.join(runtime_cwd, compile_file)
         shutil.copyfile(source_tex_path, compile_file_path)
-        used_temp_compile_file = True
 
     print(f"\n--- [LATEX] START: {engine} (file={compile_file}, cwd={runtime_cwd}) ---")
     cmd = [engine, '-interaction=nonstopmode', '-halt-on-error', compile_file]

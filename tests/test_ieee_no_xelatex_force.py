@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from backend.core_engine.jinja_renderer import JinjaLaTeXRenderer
 
 
