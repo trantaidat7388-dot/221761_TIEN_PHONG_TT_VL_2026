@@ -387,7 +387,9 @@ class WordASTParser:
             
             if etype == "paragraph":
                 text = element.text.strip()
-                if not text and state == "pre_title": continue # Skip empty leading lines
+                has_img_para = bool(element._p.findall(f'.//{{{A_NAMESPACE}}}blip'))
+                if not text and state == "pre_title" and (not has_img_para):
+                    continue # Skip empty leading lines (but keep image-only paragraphs)
                 if text == "Short Title": continue
                 
                 style_name = element.style.name if element.style else ""
@@ -485,7 +487,7 @@ class WordASTParser:
                     clean_text = re.sub(r"^(Additional Keywords and Phrases:|Keywords?\s*[:\-–]|Index Terms:|Từ khóa:)\s*", "", text, flags=re.IGNORECASE).strip()
                     if clean_text:
                         keywords_buf.append(loc_ky_tu(clean_text))
-                elif state == "body":
+                elif state == "body" or (has_img_para and state != "references"):
                     node = self._parse_paragraph(element)
                     node_text = node.get('text', '')
                     # Post-process: nếu paragraph chứa standalone figure, tìm caption phía dưới
@@ -902,6 +904,7 @@ class WordASTParser:
         ns_o = "urn:schemas-microsoft-com:office:office"
         ns_r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
         ns_v = "urn:schemas-microsoft-com:vml"
+        ns_a = "http://schemas.openxmlformats.org/drawingml/2006/main"
 
         def _ty_le_rong_hinh_tu_drawing(drawing_node):
             """Estimate image width ratio from Word drawing extent (EMU)."""
@@ -1008,7 +1011,6 @@ class WordASTParser:
                             pass
                 return
             elif node.tag == f"{{{ns_w}}}drawing":
-                ns_a = "http://schemas.openxmlformats.org/drawingml/2006/main"
                 blip = node.find(f".//{{{ns_a}}}blip")
                 if blip is not None:
                     r_id = blip.get(f"{{{ns_r}}}embed")
@@ -1049,6 +1051,43 @@ class WordASTParser:
                             text += latex_img
                         except Exception:
                             pass
+                return
+            elif node.tag == f"{{{ns_a}}}blip":
+                r_id = node.get(f"{{{ns_r}}}embed")
+                if r_id:
+                    try:
+                        rel = p.part.rels[r_id]
+                        img_blob = rel.target_part.blob
+                        img_ext = rel.target_part.content_type.split('/')[-1]
+
+                        if img_ext == 'jpeg':
+                            img_ext = 'jpg'
+                        elif img_ext == 'x-emf':
+                            img_ext = 'emf'
+
+                        img_hash = hashlib.md5(img_blob).hexdigest()[:8]
+                        img_name = f"img_{img_hash}.{img_ext}"
+
+                        if self.thu_muc_anh:
+                            os.makedirs(self.thu_muc_anh, exist_ok=True)
+                            img_path = os.path.join(self.thu_muc_anh, img_name)
+                        else:
+                            img_path = img_name
+
+                        if not os.path.exists(img_path):
+                            with open(img_path, "wb") as f:
+                                f.write(img_blob)
+
+                        ten_thu_muc = os.path.basename(self.thu_muc_anh)
+                        latex_path = f"{ten_thu_muc}/{img_name}"
+                        if in_table:
+                            latex_img = f"\n\\begin{{center}}\n\\includegraphics[width=\\linewidth]{{{latex_path}}}\n\\end{{center}}\n"
+                        else:
+                            self.dem_anh += 1
+                            latex_img = f"\n\\begin{{figure}}[H]\n\\centering\n\\includegraphics[width=0.9\\columnwidth]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                        text += latex_img
+                    except Exception:
+                        pass
                 return
                 
             for child in node:
