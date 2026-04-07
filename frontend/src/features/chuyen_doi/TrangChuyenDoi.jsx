@@ -477,7 +477,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
             Chuyển đổi Word sang LaTeX
           </h1>
           <p className="text-white/60 max-w-xl mx-auto text-sm">
-            Upload file .docx / .docm và nhận file LaTeX (.tex) chuẩn học thuật
+            Upload file .doc / .docx / .docm và nhận file LaTeX (.tex) chuẩn học thuật
           </p>
         </motion.div>
 

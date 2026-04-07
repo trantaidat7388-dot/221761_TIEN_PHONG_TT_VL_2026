@@ -609,3 +609,95 @@ def xoa_template_admin(
     db.commit()
 
     return {"thanh_cong": True}
+
+
+# ── ADMIN PAYMENT MANAGEMENT ──────────────────────────────────────────────────
+
+
+@router.get("/payments")
+def lay_danh_sach_payments_admin(
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(lay_db),
+    _: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    """Liệt kê tất cả payments trong hệ thống (admin only)."""
+    records = (
+        db.query(models.Payment)
+        .order_by(models.Payment.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    users = {
+        u.id: u
+        for u in db.query(models.User)
+        .filter(models.User.id.in_([r.user_id for r in records]))
+        .all()
+    }
+
+    return {
+        "danh_sach": [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "username": users.get(r.user_id).username if users.get(r.user_id) else None,
+                "email": users.get(r.user_id).email if users.get(r.user_id) else None,
+                "amount_vnd": r.amount_vnd,
+                "token_amount": r.token_amount,
+                "status": r.status,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in records
+        ]
+    }
+
+
+@router.patch("/payments/{payment_id}/complete")
+def xac_nhan_payment_thu_cong_admin(
+    payment_id: int,
+    request: Request,
+    db: Session = Depends(lay_db),
+    current_admin: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    """Admin xác nhận payment thủ công (khi khách chuyển sai nội dung / SePay không match)."""
+    payment = db.query(models.Payment).filter(models.Payment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hóa đơn")
+
+    if payment.status == "completed":
+        return {"thanh_cong": True, "status": "completed", "thong_bao": "Hóa đơn đã hoàn thành trước đó"}
+
+    # Cập nhật payment → completed
+    payment.status = "completed"
+    payment.updated_at = datetime.utcnow()
+
+    # Cộng token cho user
+    user = db.query(models.User).filter(models.User.id == payment.user_id).first()
+    if user:
+        user.token_balance += payment.token_amount
+        db.add(
+            models.TokenLedger(
+                user_id=user.id,
+                delta_token=payment.token_amount,
+                balance_after=user.token_balance,
+                reason="admin_confirm_payment",
+                meta_json=f"payment_id={payment.id}",
+            )
+        )
+
+    _ghi_audit_admin(
+        db=db,
+        actor_user_id=current_admin.id,
+        action="admin.confirm_payment",
+        request=request,
+        target_user_id=payment.user_id,
+        target_record_id=str(payment.id),
+        detail=f"amount_vnd={payment.amount_vnd};token={payment.token_amount}",
+    )
+    db.commit()
+    return {
+        "thanh_cong": True,
+        "status": "completed",
+        "token_nhan": payment.token_amount,
+    }

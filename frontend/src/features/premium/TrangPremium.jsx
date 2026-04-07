@@ -69,7 +69,7 @@ const TrangPremium = () => {
       return
     }
     const plan = danhSachGoi?.[key] || null
-    const soTienCanNap = Math.max(10000, tokenCost - tokenHienTai)
+    const soTienCanNap = tokenCost
     navigate('/thanh-toan', {
       state: {
         amountVnd: soTienCanNap,
@@ -118,7 +118,6 @@ const TrangPremium = () => {
             {Object.entries(danhSachGoi).map(([key, plan]) => {
               const isPopular = key === 'premium_30d'
               const isAffordable = tokenHienTai >= plan.token_cost
-              const thieu = plan.token_cost - tokenHienTai
 
               return (
                 <div 
@@ -176,7 +175,7 @@ const TrangPremium = () => {
                           disabled={dangDangKy !== '' && dangDangKy !== key}
                           className={`w-full !py-3.5 !rounded-xl !font-bold !text-base ${isPopular ? '!bg-primary-600 hover:!bg-primary-500' : '!bg-white/10 hover:!bg-white/20'}`}
                         >
-                          Mua gói này
+                          {premiumDangHieuLuc ? 'Gia hạn gói này' : 'Mua gói này'}
                         </NutBam>
                       ) : (
                         <button 
@@ -187,7 +186,7 @@ const TrangPremium = () => {
                               : 'bg-white/5 border border-dashed border-white/20 text-white/50 hover:text-white hover:border-white/40'}`}
                         >
                           <CreditCard className="w-4 h-4" />
-                          Thanh toán {dinhDangVND(thieu)}
+                          {premiumDangHieuLuc ? 'Nạp & Gia hạn' : 'Thanh toán'} {dinhDangVND(plan.token_cost)}
                         </button>
                       )}
                     </div>

@@ -768,6 +768,50 @@ export const xoaTemplateAdmin = async (templateId) => {
   }
 }
 
+// ── ADMIN PAYMENT APIs ────────────────────────────────────────────────────────
+
+export const layDanhSachPaymentsAdmin = async (limit = 200) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/payments?limit=${limit}`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return {
+      thanhCong: true,
+      danhSach: (data.danh_sach || []).map(item => ({
+        ...item,
+        createdAt: chuanHoaNgayGioApi(item.created_at),
+        updatedAt: chuanHoaNgayGioApi(item.updated_at),
+      })),
+    }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message, danhSach: [] }
+  }
+}
+
+export const xacNhanPaymentThuCongAdmin = async (paymentId) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/payments/${paymentId}/complete`, {
+      method: 'PATCH',
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
 // ── AUTH (JWT - no Firebase) ──────────────────────────────────────────────────
 // Auth functions are now managed by AuthContext.jsx
 // These are kept for backward-compat imports in components
@@ -848,6 +892,8 @@ export default {
   layDanhSachTemplateAdmin,
   layAuditLogsAdmin,
   xoaTemplateAdmin,
+  layDanhSachPaymentsAdmin,
+  xacNhanPaymentThuCongAdmin,
   dangNhapVoiEmail,
   dangKyVoiEmail,
   dangXuat,

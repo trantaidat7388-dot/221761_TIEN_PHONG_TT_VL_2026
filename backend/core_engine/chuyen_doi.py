@@ -24,7 +24,7 @@ from .config import (
 from .xu_ly_anh import BoLocAnh
 from .xu_ly_bang import BoXuLyBang
 from .xu_ly_toan import BoXuLyToan
-from .utils import loc_ky_tu, giai_nen_mau_zip, tim_file_tex_chinh, phat_hien_loai_tai_lieu
+from .utils import loc_ky_tu, giai_nen_mau_zip, tim_file_tex_chinh
 from .ast_parser import WordASTParser
 from .jinja_renderer import JinjaLaTeXRenderer
 from .template_preprocessor import TemplatePreprocessor
@@ -40,15 +40,13 @@ class ChuyenDoiWordSangLatex:
 
     def __init__(self, duong_dan_word: str, duong_dan_template: str,
                  duong_dan_dau_ra: str, thu_muc_anh: str = 'images',
-                 mode: str = 'demo', duong_dan_xslt_omml: str = None,
-                 expected_doc_class: str = None):
+                 mode: str = 'demo', duong_dan_xslt_omml: str = None):
         # Khởi tạo các đường dẫn và trạng thái ban đầu
         self.duong_dan_word = duong_dan_word
         self.duong_dan_template = duong_dan_template
         self.duong_dan_dau_ra = duong_dan_dau_ra
         self.thu_muc_anh = thu_muc_anh
         self.mode = mode
-        self.expected_doc_class = expected_doc_class
         self.tai_lieu = None
         self._temp_word_files = []
 
@@ -1962,8 +1960,6 @@ class ChuyenDoiWordSangLatex:
         with open(duong_dan_tex_chinh, 'r', encoding='utf-8', errors='ignore') as f:
             raw_template = f.read()
 
-        self._validate_expected_template_class(raw_template)
-
         template_dir = os.path.dirname(duong_dan_tex_chinh)
         template_name = os.path.basename(duong_dan_tex_chinh)
 
@@ -1997,15 +1993,3 @@ class ChuyenDoiWordSangLatex:
 
         print(f"[*] Hoàn tất chuyển đổi: {self.duong_dan_dau_ra}")
         return self.duong_dan_dau_ra
-
-    def _validate_expected_template_class(self, template_src: str) -> None:
-        """Reject incompatible template classes when a strict document class is required."""
-        if not self.expected_doc_class:
-            return
-
-        detected_class = phat_hien_loai_tai_lieu(template_src or "")
-        if self.expected_doc_class == 'ieee' and detected_class != 'ieee':
-            raise ValueError(
-                "Tài liệu IEEE bắt buộc dùng IEEEtran; đã phát hiện template không phù hợp "
-                f"({detected_class})."
-            )

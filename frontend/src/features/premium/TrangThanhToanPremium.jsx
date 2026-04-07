@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { CheckCircle2, Copy, CreditCard, ShieldCheck, ArrowLeft, Loader2, QrCode } from 'lucide-react'
+import { CheckCircle2, Copy, ShieldCheck, ArrowLeft, Loader2, QrCode } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { taoHoaDonNapTien, kiemTraTrangThaiHoaDon, xacNhanHoaDonThuCongDev } from '../../services/api'
 import { dungXacThuc } from '../../context/AuthContext'
@@ -16,10 +16,7 @@ const TrangThanhToanPremium = () => {
   const [dangXacNhanThuCong, setDangXacNhanThuCong] = useState(false)
   const [hoaDon, setHoaDon] = useState(null)
   const [demGiay, setDemGiay] = useState(0)
-  const [soThe, setSoThe] = useState('')
-  const [ngayHetHan, setNgayHetHan] = useState('')
-  const [cvc, setCvc] = useState('')
-  const [quocGia, setQuocGia] = useState('Việt Nam')
+  const [thanhToanThanhCong, setThanhToanThanhCong] = useState(false)
 
   const planName = location.state?.planName || 'Premium Package'
   const planDays = Number(location.state?.planDays || 30)
@@ -39,20 +36,6 @@ const TrangThanhToanPremium = () => {
   }, [planDays, planCost])
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('w2l_checkout_card_draft')
-      if (!raw) return
-      const draft = JSON.parse(raw)
-      setSoThe(String(draft.soThe || ''))
-      setNgayHetHan(String(draft.ngayHetHan || ''))
-      setCvc(String(draft.cvc || ''))
-      setQuocGia(String(draft.quocGia || 'Việt Nam'))
-    } catch {
-      // ignore invalid local draft
-    }
-  }, [])
-
-  useEffect(() => {
     if (!hoaDon?.payment_id) return
     let tickId = null
     let pollId = null
@@ -68,7 +51,7 @@ const TrangThanhToanPremium = () => {
         clearInterval(pollId)
         toast.success('Thanh toán thành công')
         await lamMoiThongTinNguoiDung({ imLang: true })
-        navigate('/premium', { replace: true })
+        setThanhToanThanhCong(true)
       }
     }, 5000)
 
@@ -78,8 +61,8 @@ const TrangThanhToanPremium = () => {
     }
   }, [hoaDon?.payment_id, lamMoiThongTinNguoiDung, navigate])
 
-  const xuLyTaoHoaDon = async () => {
-    const amount = Number(soTien)
+  const xuLyTaoHoaDon = async (overrideAmount) => {
+    const amount = Number(overrideAmount || soTien)
     if (!Number.isFinite(amount) || amount < 10000) {
       toast.error('Số tiền tối thiểu là 10.000 ₫')
       return
@@ -98,6 +81,14 @@ const TrangThanhToanPremium = () => {
     }
   }
 
+  const triggerAutoCreate = useRef(false)
+  useEffect(() => {
+    if (initAmount >= 10000 && !triggerAutoCreate.current) {
+      triggerAutoCreate.current = true
+      xuLyTaoHoaDon(initAmount)
+    }
+  }, [initAmount])
+
   const xuLyXacNhanThuCongDev = async () => {
     if (!hoaDon?.payment_id) return
     setDangXacNhanThuCong(true)
@@ -106,37 +97,12 @@ const TrangThanhToanPremium = () => {
       if (!kq.thanhCong) throw new Error(kq.loiMessage || 'Không xác nhận được')
       await lamMoiThongTinNguoiDung({ imLang: true })
       toast.success('Đã xác nhận nạp tiền (dev)')
-      navigate('/premium', { replace: true })
+      setThanhToanThanhCong(true)
     } catch (e) {
       toast.error(e.message || 'Xác nhận thủ công thất bại')
     } finally {
       setDangXacNhanThuCong(false)
     }
-  }
-
-  const xuLyLuuThongTinThe = () => {
-    const payload = { soThe, ngayHetHan, cvc, quocGia }
-    localStorage.setItem('w2l_checkout_card_draft', JSON.stringify(payload))
-    toast.success('Đã lưu thông tin thẻ (local)')
-  }
-
-  const xuLyNhapSoThe = (value) => {
-    const onlyDigits = value.replace(/\D/g, '').slice(0, 19)
-    const grouped = onlyDigits.replace(/(.{4})/g, '$1 ').trim()
-    setSoThe(grouped)
-  }
-
-  const xuLyNhapNgayHetHan = (value) => {
-    const onlyDigits = value.replace(/\D/g, '').slice(0, 4)
-    if (onlyDigits.length <= 2) {
-      setNgayHetHan(onlyDigits)
-      return
-    }
-    setNgayHetHan(`${onlyDigits.slice(0, 2)}/${onlyDigits.slice(2)}`)
-  }
-
-  const xuLyNhapCvc = (value) => {
-    setCvc(value.replace(/\D/g, '').slice(0, 4))
   }
 
   const dieuChinhSoTien = (delta) => {
@@ -152,11 +118,40 @@ const TrangThanhToanPremium = () => {
     }
   }
 
+  if (thanhToanThanhCong) {
+    return (
+      <div className="min-h-screen bg-gradient-animated pt-20 pb-12 px-4 flex items-center justify-center">
+        <div className="max-w-lg w-full bg-white/5 border border-emerald-500/30 rounded-3xl p-8 text-center glass-card shadow-2xl shadow-emerald-500/20 backdrop-blur-2xl">
+          <div className="w-24 h-24 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 relative">
+            <div className="absolute inset-0 bg-emerald-500 animate-ping rounded-full opacity-20"></div>
+            <CheckCircle2 className="w-12 h-12 text-emerald-400" />
+          </div>
+          <h2 className="text-3xl font-extrabold text-white mb-2">Thanh toán Thành Công!</h2>
+          <p className="text-emerald-200 mb-8 max-w-sm mx-auto leading-relaxed">
+            Hệ thống đã xác nhận giao dịch. {planName !== 'Premium Package' ? 'Gói cước Premium của bạn đã được kích hoạt!' : 'Bạn đã nạp token thành công để sử dụng mọi chức năng!'}
+          </p>
+          <button
+            onClick={() => navigate('/chuyen-doi')}
+            className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 p-4 font-bold text-white shadow-lg hover:from-emerald-400 hover:to-green-500 transition-all active:scale-95"
+          >
+            Quay Về Workspace Chuyển Đổi
+          </button>
+          <button
+            onClick={() => navigate('/premium')}
+            className="mt-4 w-full rounded-xl border border-white/20 bg-white/5 p-4 font-semibold text-white/80 hover:bg-white/10 hover:text-white transition-all"
+          >
+            Về trang thông tin gói
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-animated pt-20 pb-12 px-4">
       <div className="max-w-6xl mx-auto">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-white">Thanh toán Premium</h1>
+          <h1 className="text-3xl font-bold text-white">Thanh toán Premium bằng QR Code</h1>
           <button
             type="button"
             onClick={() => navigate('/premium')}
@@ -168,139 +163,104 @@ const TrangThanhToanPremium = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <h2 className="text-2xl font-bold text-white mb-5">Chọn phương thức thanh toán</h2>
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-6 flex flex-col">
+            <h2 className="text-2xl font-bold text-white mb-5 flex items-center gap-2">
+               <QrCode className="w-6 h-6 text-primary-400" />
+               Quét mã để thanh toán tự động
+            </h2>
 
-            <div className="rounded-xl border border-white/10 bg-slate-900/45 p-4">
-              <div className="mb-4 inline-flex items-center gap-2 text-primary-300 font-semibold">
-                <CreditCard className="w-4 h-4" />
-                Thẻ
-              </div>
-              <div className="space-y-3">
-                <input
-                  value={soThe}
-                  onChange={(e) => xuLyNhapSoThe(e.target.value)}
-                  placeholder="1234 1234 1234 1234"
-                  className="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-white"
-                />
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    value={ngayHetHan}
-                    onChange={(e) => xuLyNhapNgayHetHan(e.target.value)}
-                    placeholder="MM / YY"
-                    className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-white"
-                  />
-                  <input
-                    value={cvc}
-                    onChange={(e) => xuLyNhapCvc(e.target.value)}
-                    placeholder="CVC"
-                    className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-white"
-                  />
-                </div>
-                <input
-                  value={quocGia}
-                  onChange={(e) => setQuocGia(e.target.value)}
-                  className="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-white"
-                />
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={xuLyLuuThongTinThe}
-                    className="rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/90 hover:bg-white/10"
-                  >
-                    Lưu thông tin thẻ
-                  </button>
-                  <span className="text-[11px] text-white/50">Lưu trên trình duyệt này</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4">
-              <label className="text-white/70 text-sm">Số tiền nạp để thanh toán</label>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {[10000, 25000, 50000, 100000].map((moc) => (
-                  <button
-                    key={moc}
-                    type="button"
-                    onClick={() => setSoTien(moc)}
-                    className="rounded-lg border border-white/15 bg-slate-900/50 px-3 py-1.5 text-xs text-white/80 hover:bg-slate-900/80"
-                  >
-                    {new Intl.NumberFormat('vi-VN').format(moc)}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => dieuChinhSoTien(-10000)}
-                  className="h-10 w-10 rounded-lg border border-white/15 bg-slate-900/60 text-white/80 hover:bg-slate-900"
-                >
-                  -
-                </button>
-                <input
-                  type="number"
-                  min={10000}
-                  step={10000}
-                  value={soTien}
-                  onChange={(e) => setSoTien(Number(e.target.value || 0))}
-                  className="w-full rounded-lg border border-white/15 bg-slate-900/70 px-3 py-2 text-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => dieuChinhSoTien(10000)}
-                  className="h-10 w-10 rounded-lg border border-white/15 bg-slate-900/60 text-white/80 hover:bg-slate-900"
-                >
-                  +
-                </button>
-                <span className="text-white/60 text-sm">VND</span>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between text-white font-semibold">
-                <span>Tổng phải thanh toán:</span>
-                <span>{dinhDangVND(soTien)}</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={xuLyTaoHoaDon}
-                disabled={dangTaoHoaDon || Number(soTien) < 10000}
-                className="mt-4 w-full rounded-xl bg-primary-600 px-4 py-3 text-base font-bold text-white hover:bg-primary-500 disabled:opacity-60 inline-flex items-center justify-center gap-2"
-              >
-                {dangTaoHoaDon ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-                Thanh toán ngay
-              </button>
-            </div>
-
-            {hoaDon && (
-              <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-white font-semibold mb-3">Quét QR để chuyển khoản</p>
-                <div className="bg-white p-3 rounded-xl inline-flex">
+            {hoaDon ? (
+              <div className="flex-1 flex flex-col items-center justify-center bg-black/20 rounded-2xl p-6 border border-white/5 text-center">
+                <p className="text-white/80 font-medium mb-5">Hệ thống sẽ tự động đối soát và cộng Token sau khi quét mã này</p>
+                
+                <div className="bg-white p-4 rounded-[2rem] shadow-2xl shadow-primary-500/20 inline-flex flex-col items-center relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-primary-500/10 to-transparent pointer-events-none" />
                   <img
-                    src={`https://api.vietqr.io/image/${bankBin}-${bankAccount}-yXwL0O?accountName=${encodeURIComponent(bankName)}&amount=${hoaDon.amount_vnd}&addInfo=${encodeURIComponent(hoaDon.noidung_ck)}`}
+                    src={`https://img.vietqr.io/image/${bankBin}-${bankAccount}-compact2.png?amount=${hoaDon.amount_vnd}&addInfo=${encodeURIComponent(hoaDon.noidung_ck)}&accountName=${encodeURIComponent(bankName)}`}
                     alt="QR thanh toán"
-                    className="w-48 h-48 rounded-lg object-cover"
+                    className="w-72 h-72 sm:w-80 sm:h-80 rounded-2xl object-contain drop-shadow-sm transition-transform duration-500 group-hover:scale-[1.02]"
                   />
                 </div>
 
-                <div className="mt-3 text-sm text-white/80 space-y-1">
-                  <p>Nội dung CK: <span className="font-mono text-cyan-300">{hoaDon.noidung_ck}</span></p>
-                  <button type="button" onClick={() => saoChep(hoaDon.noidung_ck)} className="text-cyan-300 hover:text-cyan-200 inline-flex items-center gap-1">
-                    <Copy className="w-4 h-4" /> Sao chép nội dung
+                <div className="mt-8 bg-white/5 border border-white/10 rounded-xl p-4 w-full max-w-sm flex flex-col items-center">
+                  <p className="text-white/50 text-sm mb-1 uppercase tracking-wider font-semibold">Nội dung chuyển khoản bắt buộc</p>
+                  <p className="font-mono text-cyan-300 text-2xl font-bold mb-3">{hoaDon.noidung_ck}</p>
+                  <button 
+                    type="button" 
+                    onClick={() => saoChep(hoaDon.noidung_ck)} 
+                    className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-500/30 py-2 px-4 rounded-lg inline-flex items-center gap-2 font-medium transition"
+                  >
+                    <Copy className="w-4 h-4" /> Sao chép mã này
                   </button>
                 </div>
 
-                <p className="mt-3 text-xs text-amber-200/90">Đang chờ xác nhận tự động: {demGiay}s</p>
+                <div className="mt-6 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
+                  <p className="text-sm text-amber-200/90 font-medium">Đang chờ tiền về tài khoản... ({demGiay}s)</p>
+                </div>
 
                 {chuaCauHinhNganHang && (
                   <button
                     type="button"
                     onClick={xuLyXacNhanThuCongDev}
                     disabled={dangXacNhanThuCong}
-                    className="mt-3 w-full rounded-lg border border-amber-400/40 bg-amber-500/20 px-3 py-2 text-sm font-medium text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
+                    className="mt-6 w-full max-w-sm rounded-xl border border-amber-400/40 bg-amber-500/20 px-4 py-3 font-bold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
                   >
-                    {dangXacNhanThuCong ? 'Đang xác nhận...' : 'Xác nhận nạp thủ công (Dev)'}
+                    {dangXacNhanThuCong ? 'Đang xác nhận...' : 'Xác nhận nạp thủ công (Developer Mode)'}
                   </button>
                 )}
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col justify-center">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+                  <label className="text-white/70 text-base font-semibold">Bạn muốn nạp bao nhiêu?</label>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[10000, 25000, 50000, 100000].map((moc) => (
+                      <button
+                        key={moc}
+                        type="button"
+                        onClick={() => setSoTien(moc)}
+                        className="rounded-lg border border-white/15 bg-slate-900/50 px-4 py-2 font-semibold text-white hover:bg-primary-500/30"
+                      >
+                        {new Intl.NumberFormat('vi-VN').format(moc)} ₫
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => dieuChinhSoTien(-10000)}
+                      className="h-12 w-12 rounded-xl border border-white/15 bg-slate-900/60 text-white/80 hover:bg-slate-900 flex items-center justify-center text-xl font-bold"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min={10000}
+                      step={10000}
+                      value={soTien}
+                      onChange={(e) => setSoTien(Number(e.target.value || 0))}
+                      className="w-full text-center rounded-xl border border-white/15 bg-slate-900/70 p-3 text-xl font-bold text-white focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => dieuChinhSoTien(10000)}
+                      className="h-12 w-12 rounded-xl border border-white/15 bg-slate-900/60 text-white/80 hover:bg-slate-900 flex items-center justify-center text-xl font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => xuLyTaoHoaDon()}
+                    disabled={dangTaoHoaDon || Number(soTien) < 10000}
+                    className="mt-6 w-full rounded-xl bg-primary-600 p-4 text-lg font-extrabold text-white hover:bg-primary-500 disabled:opacity-60 inline-flex items-center justify-center gap-2 shadow-xl shadow-primary-500/20"
+                  >
+                    {dangTaoHoaDon ? <Loader2 className="w-5 h-5 animate-spin" /> : <QrCode className="w-5 h-5" />}
+                    Tạo mã thanh toán QR
+                  </button>
+                </div>
               </div>
             )}
           </section>
@@ -313,39 +273,39 @@ const TrangThanhToanPremium = () => {
                   <div>
                     <p className="text-white/60 text-sm">Package</p>
                     <p className="text-xl font-bold text-white">{planName}</p>
-                    <p className="text-white/60">Thanh toán {planDays >= 300 ? 'Yearly' : `${planDays} ngày`}</p>
+                    <p className="text-white/60">Sử dụng trong {planDays >= 300 ? '1 năm' : `${planDays} ngày`}</p>
                   </div>
-                  <div className="rounded-lg bg-amber-500/20 px-3 py-2 text-amber-200 font-semibold">
-                    {new Intl.NumberFormat('vi-VN').format(planCost || soTien)} credit
+                  <div className="rounded-lg bg-amber-500/20 px-3 py-2 text-amber-200 font-bold text-lg">
+                    {new Intl.NumberFormat('vi-VN').format(planCost || soTien)} ₫
                   </div>
                 </div>
 
                 <div className="mt-4 space-y-2 text-white/80">
-                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hủy bất cứ lúc nào</div>
-                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hoàn tiền đầy đủ</div>
+                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hệ thống tự động kích hoạt Premium sau 5-10s</div>
+                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hỗ trợ nạp 24/7 không cần chờ</div>
                 </div>
               </div>
             </div>
 
             <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-6">
-              <h3 className="text-3xl font-bold text-white mb-3">Tiết kiệm ngay tới 20%</h3>
+              <h3 className="text-3xl font-bold text-white mb-3">Thông minh & Mượt mà</h3>
               <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 p-4 text-white">
-                <div className="inline-flex items-center gap-2 font-semibold">
-                  <ShieldCheck className="w-4 h-4 text-emerald-300" />
-                  Trả theo năm để tiết kiệm
+                <div className="inline-flex items-center gap-2 font-bold mb-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-300" />
+                  Được bảo vệ bởi Word2LaTeX
                 </div>
-                <p className="mt-2 text-white/80">Chọn thanh toán hằng năm để tiết kiệm nhiều hơn và trả ít hơn tổng thể.</p>
-                {mucTietKiemUocTinh > 0 && (
-                  <span className="mt-3 inline-flex rounded-lg border border-emerald-400/60 bg-emerald-500/20 px-3 py-1 text-emerald-100 font-semibold">
-                    Tiết kiệm {dinhDangVND(mucTietKiemUocTinh)}
-                  </span>
-                )}
+                <p className="text-white/80 text-sm leading-relaxed text-justify">
+                  Giao dịch an toàn tuyệt đối qua tính năng SePay Polling cục bộ. Code hoá hóa đơn bằng phương pháp XOR. Việc của bạn chỉ là bật app ngân hàng và quét mã bên cạnh, mọi thứ còn lại chạy tự động.
+                </p>
               </div>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-white/70">
-              <p className="inline-flex items-center gap-2 text-white/90 font-semibold mb-2"><QrCode className="w-4 h-4" /> Lưu ý SePay</p>
-              <p>Nếu bạn chưa có tài khoản ngân hàng để kết nối SePay, có thể dùng nút xác nhận thủ công trong môi trường development để test end-to-end.</p>
+              <p className="inline-flex items-center gap-2 text-white/90 font-bold mb-2 uppercase tracking-winder"><CheckCircle2 className="w-4 h-4 text-primary-400" /> Lưu ý quan trọng</p>
+              <ul className="list-disc pl-5 space-y-2">
+                <li>Vui lòng giữ nguyên cửa sổ này cho đến khi nhận được thông báo nạp thành công (thường mất 5-10 giây).</li>
+                <li>Hệ thống phân biệt bằng mã <strong className="text-cyan-300">Nội dung CK</strong> chứ không dùng số tài khoản hay tên! Hãy chắc chắn mã CK không bị xóa.</li>
+              </ul>
             </div>
           </section>
         </div>

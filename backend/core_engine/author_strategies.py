@@ -41,7 +41,6 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
 
         block = "\\author{\n"
         parts = []
-        corresponding_notes = []
         for author in authors:
             name = author['name']
             has_corresponding_marker = False
@@ -60,11 +59,6 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
 
             if has_corresponding_marker:
                 name += "\\textsuperscript{*}"
-                note = "* Corresponding author"
-                if emails:
-                    note += f": {', '.join(emails)}"
-                if note not in corresponding_notes:
-                    corresponding_notes.append(note)
 
             auth_str = f"\\IEEEauthorblockN{{{name}}}"
             if author.get('affiliations'):
@@ -75,17 +69,19 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
                         if symbol_only_re.match(sl):
                             continue
                         if '@' in sl:
-                            # Keep emails out of author blocks to reduce width.
+                            for em in email_re.findall(sl):
+                                if em not in emails:
+                                    emails.append(em)
                             continue
                         compact = re.sub(r'\s{2,}', ' ', sl).strip()
                         if compact:
                             affil_lines.append(f"\\textit{{{compact}}}")
+                for em in emails:
+                    affil_lines.append(f"\\texttt{{{em}}}")
                 affil_text = " \\\\ ".join(affil_lines)
                 auth_str += f"\n\\IEEEauthorblockA{{{affil_text}}}"
             parts.append(auth_str)
         block += " \\and\n".join(parts)
-        if corresponding_notes:
-            block += "\n\\thanks{" + " ; ".join(corresponding_notes) + "}"
         block += "\n}"
         return block
 

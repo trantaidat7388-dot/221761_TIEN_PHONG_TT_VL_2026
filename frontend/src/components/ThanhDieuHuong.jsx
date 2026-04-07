@@ -34,9 +34,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
     { duongDan: '/premium', nhan: 'Premium', icon: Crown },
     { duongDan: '/tai-khoan', nhan: 'Tài khoản', icon: Settings },
   ]
-  const danhSachMenu = nguoiDung?.role === 'admin'
-    ? [...danhSachMenuCoBan, { duongDan: '/admin', nhan: 'Quản trị', icon: Shield }]
-    : danhSachMenuCoBan
+  const danhSachMenu = danhSachMenuCoBan
 
   const xuLyDangXuat = () => {
     // Đăng xuất bằng JWT
@@ -161,6 +159,16 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                           {nguoiDung?.email}
                         </p>
                       </div>
+                      {nguoiDung?.role === 'admin' && (
+                        <Link
+                          to="/quan-tri"
+                          onClick={() => setDropdownMo(false)}
+                          className="w-full flex items-center gap-2 px-4 py-2 text-sm text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                        >
+                          <Shield className="w-4 h-4" />
+                          Cổng quản trị
+                        </Link>
+                      )}
                       <button
                         onClick={xuLyDangXuat}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
@@ -222,6 +230,16 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                 })}
 
                 <div className="border-t border-white/10 pt-2 mt-2">
+                  {nguoiDung?.role === 'admin' && (
+                    <Link
+                      to="/quan-tri"
+                      onClick={() => setMenuMo(false)}
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                    >
+                      <Shield className="w-5 h-5" />
+                      Cổng quản trị
+                    </Link>
+                  )}
                   <div className="flex items-center gap-3 px-4 py-2">
                     <div className="w-10 h-10 rounded-full bg-primary-500/30 flex items-center justify-center overflow-hidden">
                       {coTheHienAnh ? (

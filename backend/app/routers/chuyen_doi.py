@@ -221,8 +221,7 @@ async def chuyen_doi_file(
             duong_dan_template=str(template_path),
             duong_dan_dau_ra=str(output_path),
             thu_muc_anh=str(images_folder),
-            mode='demo',
-            expected_doc_class='ieee' if template_type in {'ieee_conference', 'twocolumn'} else None,
+            mode='demo'
         )
         await run_in_threadpool(bo_chuyen_doi.chuyen_doi)
 
@@ -516,8 +515,7 @@ async def chuyen_doi_file_stream(
                 duong_dan_template=str(template_path),
                 duong_dan_dau_ra=str(output_path),
                 thu_muc_anh=str(images_folder),
-                mode='demo',
-                expected_doc_class='ieee' if template_type in {'ieee_conference', 'twocolumn'} else None,
+                mode='demo'
             )
 
             yield sse_event(3, "Đang nạp dữ liệu vào template Jinja2...")

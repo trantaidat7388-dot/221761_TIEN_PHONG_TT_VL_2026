@@ -72,6 +72,19 @@ class WordASTParser:
             tag = node.tag.split("}")[-1]
             if tag == "p":
                 elements.append(("paragraph", Paragraph(node, self.doc)))
+                # Capture nested blocks only from explicit containers where paragraph
+                # text is semantically embedded (e.g., text boxes / content controls),
+                # avoiding broad recursion that can duplicate paragraphs.
+                seen_container_ids = set()
+                for descendant in node.iter():
+                    dtag = descendant.tag.split("}")[-1] if hasattr(descendant, "tag") and isinstance(descendant.tag, str) else ""
+                    if dtag in ("txbxContent", "sdtContent"):
+                        did = id(descendant)
+                        if did in seen_container_ids:
+                            continue
+                        seen_container_ids.add(did)
+                        for nested in descendant:
+                            traverse(nested)
             elif tag == "tbl":
                 elements.append(("table", Table(node, self.doc)))
             else:
@@ -113,9 +126,47 @@ class WordASTParser:
 
     def _is_references_label(self, text: str) -> bool:
         norm = re.sub(r"^[\d\.]+\s*", "", text.strip().upper())
-        for kw in ["REFERENCES", "TÀI LIỆU THAM KHẢO", "TAI LIEU THAM KHAO", "BIBLIOGRAPHY"]:
-            if norm.startswith(kw):
-                return True
+        # Avoid false positives like "References and Footnotes" in publisher templates.
+        if re.match(r"^REFERENCES\s*[:\.]?$", norm):
+            return True
+        if re.match(r"^BIBLIOGRAPHY\s*[:\.]?$", norm):
+            return True
+        if norm.startswith("TÀI LIỆU THAM KHẢO") or norm.startswith("TAI LIEU THAM KHAO"):
+            return True
+        return False
+
+    def _looks_like_reference_entry(self, text: str) -> bool:
+        t = (text or '').strip()
+        if not t or len(t) < 12:
+            return False
+        tl = t.lower()
+
+        # Skip common guide/template lines.
+        if re.match(r'^(examples?:|footnotes?|references?\s+and\s+footnotes|books?|periodicals?|reports?|patents?|electronic\s+sources|standards?)\b', tl):
+            return False
+        if tl.startswith("reference numbers are set"):
+            return False
+        if tl.startswith("other than books"):
+            return False
+        if tl.startswith("for papers published"):
+            return False
+        if "first check if you have an existing account" in tl:
+            return False
+        if "ieee.org/publications_standards/publications/" in tl:
+            return False
+
+        # Typical bibliography signals.
+        if re.search(r'\b(19|20)\d{2}\b', t):
+            return True
+        if re.search(r'\b(doi|arxiv|vol\.|pp\.|patent|thesis|dissertation|tech\.\s*rep\.|[Oo]nline\.|available:)\b', t):
+            return True
+        if re.search(r'https?://|www\.', t):
+            return True
+
+        # Author-like leading pattern: initials/names followed by comma.
+        if re.match(r'^([A-Z]\.\s*){1,4}[A-Za-z\-\']+\s*,', t):
+            return True
+
         return False
 
     # ====== HEURISTIC: Table/Image detection (ported from legacy xu_ly_bang.py) ======
@@ -253,6 +304,65 @@ class WordASTParser:
             print(f"[Cảnh báo] _bat_caption_bang: {e}")
         return None
 
+    def _bat_caption_hinh_theo_style(self, elements: List[tuple], idx: int, used_nodes: set) -> str:
+        """Fallback caption extraction for templates using dedicated caption styles.
+
+        Supports patterns like "Example of a figure caption. (figure caption)"
+        even when they do not start with "Figure/Fig".
+        """
+        def _extract_text(raw: str) -> str:
+            txt = loc_ky_tu((raw or '').strip())
+            if not txt:
+                return ""
+            txt = re.sub(r'\(\s*figure\s+caption\s*\)', '', txt, flags=re.IGNORECASE).strip()
+            txt = re.sub(r'^(example\s+of\s+a\s+)?figure\s+caption\s*[:\-–]\s*', '', txt, flags=re.IGNORECASE).strip()
+            txt = re.sub(r'\s{2,}', ' ', txt)
+            return txt
+
+        # Prefer nearby look-ahead first.
+        for buoc in range(1, 16):
+            j = idx + buoc
+            if j >= len(elements):
+                break
+            loai, phan_tu = elements[j]
+            if loai != 'paragraph':
+                continue
+            text = (phan_tu.text or '').strip()
+            if not text:
+                continue
+            style_name = (phan_tu.style.name if phan_tu.style else '').lower()
+            if 'heading 1' in style_name:
+                break
+            is_caption_style = ('figure caption' in style_name) or ('caption' == style_name)
+            is_caption_marker = 'figure caption' in text.lower()
+            if is_caption_style or is_caption_marker:
+                used_nodes.add(j)
+                cleaned = _extract_text(text)
+                if cleaned:
+                    return cleaned
+
+        # Then short look-behind.
+        for buoc in range(1, 8):
+            j = idx - buoc
+            if j < 0:
+                break
+            loai, phan_tu = elements[j]
+            if loai != 'paragraph':
+                continue
+            text = (phan_tu.text or '').strip()
+            if not text:
+                continue
+            style_name = (phan_tu.style.name if phan_tu.style else '').lower()
+            is_caption_style = ('figure caption' in style_name) or ('caption' == style_name)
+            is_caption_marker = 'figure caption' in text.lower()
+            if is_caption_style or is_caption_marker:
+                used_nodes.add(j)
+                cleaned = _extract_text(text)
+                if cleaned:
+                    return cleaned
+
+        return None
+
     def _bat_caption_hinh(self, elements: List[tuple], idx: int, used_nodes: set) -> str:
         """Bắt caption thật của hình từ paragraph phía DƯỚI (tìm tối đa 5 đoạn).
         Ported from ChuyenDoiWordSangLatex.bat_caption_hinh()."""
@@ -308,7 +418,8 @@ class WordASTParser:
         if "Short Title" in text or "ACM Reference Format" in text: return False
         
         style_name = p.style.name if p.style else ""
-        if "Title" in style_name or "Header" in style_name:
+        style_lc = style_name.lower()
+        if "title" in style_lc or "header" in style_lc:
             return True
         
         # Heuristics: Center aligned + Bold or Large font + Bold
@@ -336,6 +447,7 @@ class WordASTParser:
         authors_buf = []
         abstract_buf = []
         keywords_buf = []
+        seen_figure_paths = set()
         
         # Set of element indices already used as captions (skip in body)
         used_nodes = set()
@@ -408,7 +520,13 @@ class WordASTParser:
                         state = "title"
                     elif self._is_abstract_label(text) or prediction == "ABSTRACT" or style_name == "Abstract":
                         state = "abstract"
-                    elif self._is_authors_label(text) or style_cmd == r"\author" or prediction == "AUTHOR" or style_name == "Authors":
+                    elif (
+                        self._is_authors_label(text)
+                        or style_cmd == r"\author"
+                        or prediction == "AUTHOR"
+                        or style_name in ("Authors", "Author", "AuthorsBlock")
+                        or style_name.lower() in ("authors", "author", "authorsblock")
+                    ):
                         state = "authors"
                     elif self._is_body_label(text) or prediction == "HEADING" or style_name.startswith("Heading"):
                         state = "body"
@@ -462,7 +580,20 @@ class WordASTParser:
                 elif state == "authors":
                     # Strip boilerplate
                     if not any(x in text for x in ("Submission Template", "Reference Format", "Short Title")):
-                        authors_buf.append(text)
+                        if "\n" in text:
+                            for line in text.splitlines():
+                                line_clean = line.strip()
+                                if not line_clean:
+                                    continue
+                                # IEEE Word template often stores author blocks as:
+                                # "line 1: ...", "line 2: ..."; strip this wrapper.
+                                line_clean = re.sub(r'^line\s*\d+\s*:\s*', '', line_clean, flags=re.IGNORECASE)
+                                if line_clean:
+                                    authors_buf.append(line_clean)
+                        else:
+                            cleaned = re.sub(r'^line\s*\d+\s*:\s*', '', text, flags=re.IGNORECASE).strip()
+                            if cleaned:
+                                authors_buf.append(cleaned)
                 elif state == "abstract":
                     # FIX 3: Smart split — paragraph may contain BOTH "Abstract." and "Keywords:"
                     combined_match = re.search(
@@ -492,13 +623,21 @@ class WordASTParser:
                     node_text = node.get('text', '')
                     # Post-process: nếu paragraph chứa standalone figure, tìm caption phía dưới
                     if '\\includegraphics' in node_text and '\\begin{figure' in node_text:
+                        img_match = re.search(r'\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}', node_text)
+                        img_path = img_match.group(1).strip() if img_match else ""
+                        if img_path and img_path in seen_figure_paths:
+                            continue
                         caption = self._bat_caption_hinh(elements, idx, used_nodes)
+                        if not caption:
+                            caption = self._bat_caption_hinh_theo_style(elements, idx, used_nodes)
                         if caption:
                             node['text'] = node_text.replace('\\caption{}', f'\\caption{{{caption}}}')
+                        if img_path:
+                            seen_figure_paths.add(img_path)
                     self.ir["body"].append(node)
                 elif state == "references":
                     # Skip the header label itself (e.g., "Tài Liệu Tham Khảo", "References")
-                    if not self._is_references_label(text):
+                    if (not self._is_references_label(text)) and self._looks_like_reference_entry(text):
                         self.ir["references"].append(self._parse_paragraph(element))
                 
             elif etype == "table":
@@ -515,12 +654,16 @@ class WordASTParser:
                         ten_thu_muc = os.path.basename(self.thu_muc_anh)
                         for i, ten_anh in enumerate(danh_sach_anh):
                             self.dem_anh += 1
+                            img_path = f"{ten_thu_muc}/{ten_anh}"
+                            if img_path in seen_figure_paths:
+                                continue
                             cap = caption_chinh if i == 0 else ""
-                            fig_tex = "\\begin{figure}[!ht]\n\\centering\n"
-                            fig_tex += f"  \\includegraphics[width=0.9\\columnwidth]{{{ten_thu_muc}/{ten_anh}}}\n"
+                            fig_tex = "\\begin{figure}[htbp]\n\\centering\n"
+                            fig_tex += f"  \\includegraphics[width=0.9\\columnwidth]{{{img_path}}}\n"
                             fig_tex += f"  \\caption{{{cap}}}\n"
                             fig_tex += f"  \\label{{fig:img_{self.dem_anh}}}\n"
                             fig_tex += "\\end{figure}\n\n"
+                            seen_figure_paths.add(img_path)
                             self.ir["body"].append({"type": "paragraph", "text": fig_tex})
                     else:
                         # Regular data table — with caption from look-behind
@@ -530,23 +673,15 @@ class WordASTParser:
                             table_node["caption"] = caption
                         self.ir["body"].append(table_node)
 
-        # Final metadata assignment
-        self.ir["metadata"]["title"] = " ".join(title_buf).strip()
-        self.ir["metadata"]["authors"] = self._parse_authors(authors_buf)
-        self.ir["metadata"]["abstract"] = "\n\n".join(abstract_buf).strip()
-        self.ir["metadata"]["keywords"] = keywords_buf
-        self.ir["metadata"]["keywords_str"] = ", ".join(keywords_buf)
-                
-        # Finalize Metadata
-        self.ir["metadata"]["title"] = " ".join(title_buf).strip()
+        extracted_title = " ".join(title_buf).strip()
         
         # Fallback: Nếu Parser heuristic không tìm thấy Title, bốc ngay Paragraph đầu tiên trong body làm Title
-        if not self.ir["metadata"]["title"] and len(self.ir["body"]) > 0:
+        if not extracted_title and len(self.ir["body"]) > 0:
             for i, p_node in enumerate(self.ir["body"]):
                 p_text = p_node.get("text", "")
                 is_figure_para = "\\begin{figure" in p_text or "\\includegraphics" in p_text
                 if p_node.get("type") == "paragraph" and p_text.strip() and (not is_figure_para):
-                    self.ir["metadata"]["title"] = p_node.get("text").strip()
+                    extracted_title = p_node.get("text").strip()
                     self.ir["body"].pop(i)
                     break
         
@@ -564,7 +699,7 @@ class WordASTParser:
             authors_buf.extend(author_candidates)
                      
         # Final metadata assignment
-        self.ir["metadata"]["title"] = " ".join(title_buf).strip()
+        self.ir["metadata"]["title"] = extracted_title
         parsed_authors = self._parse_authors(authors_raw=authors_buf)
         self.ir["metadata"]["authors"] = parsed_authors
         self.ir["metadata"]["author_block"] = ""  # Will be generated by renderer based on template class
@@ -678,12 +813,25 @@ class WordASTParser:
         Handles superscript number mapping between author names and affiliations.
         """
         def _looks_like_affiliation(text: str) -> bool:
+            t = (text or '').lower()
             affil_keywords = [
-                '@', 'University', 'Institute', 'Dept', 'Faculty', 'Ltd',
-                'Department', 'School', 'Lab', 'Center', 'Vietnam',
-                'Viet Nam', 'Việt Nam'
+                '@', 'university', 'institute', 'dept', 'faculty', 'ltd',
+                'department', 'school', 'lab', 'center', 'organization',
+                'city', 'country', 'affiliation', 'vietnam', 'viet nam', 'việt nam'
             ]
-            return any(kw in text for kw in affil_keywords)
+            return any(kw in t for kw in affil_keywords)
+
+        def _looks_like_ieee_membership_suffix(text: str) -> bool:
+            t = (text or '').lower()
+            membership_keywords = [
+                'member',
+                'senior member',
+                'fellow',
+                'life fellow',
+                'student member',
+                'ieee',
+            ]
+            return any(kw in t for kw in membership_keywords)
 
         authors = []
         current = None
@@ -702,7 +850,10 @@ class WordASTParser:
                 parts = re.split(r'\s+and\s+', clean)
                 all_parts = []
                 for p in parts:
-                    all_parts.extend([x.strip() for x in p.split(',') if x.strip()])
+                    if ',' in p and _looks_like_ieee_membership_suffix(p):
+                        all_parts.append(p.strip())
+                    else:
+                        all_parts.extend([x.strip() for x in p.split(',') if x.strip()])
                 # Nếu tất cả các phần đều ngắn (tên người), tách thành nhiều tác giả
                 if len(all_parts) > 1 and all(len(p) < 60 for p in all_parts):
                     expanded.extend(all_parts)
@@ -849,8 +1000,16 @@ class WordASTParser:
             a['affiliations'] = deduped
 
         # Remove common template placeholders accidentally captured from sample templates
-        placeholder_name = re.compile(r'^(first|second|third|fourth)\s+author$', re.IGNORECASE)
+        placeholder_name = re.compile(
+            r'^(first|second|third|fourth|fifth|sixth)\s+(?:[a-z]\.?\s+)?author(?:,\s*(?:jr\.?|sr\.?))?$',
+            re.IGNORECASE,
+        )
+        membership_only = re.compile(r'^(fellow|member|senior\s+member|student\s+member|life\s+fellow|ieee)$', re.IGNORECASE)
         placeholder_affil = re.compile(r'(springer\s+heidelberg|tiergartenstr|69121\s+heidelberg)', re.IGNORECASE)
+        ieee_template_affil = re.compile(
+            r'(dept\.?\s*name\s*of\s*organization|\(of\s*affiliation\)|city,\s*country|email\s*address\s*or\s*orcid)',
+            re.IGNORECASE,
+        )
         cleaned_authors = []
         for a in authors:
             name = (a.get('name') or '').strip()
@@ -860,9 +1019,11 @@ class WordASTParser:
             if placeholder_name.match(name):
                 # Skip placeholder rows from default publisher templates.
                 continue
+            if membership_only.match(name):
+                continue
 
             # Remove placeholder affiliation lines but keep valid emails/other lines.
-            filtered_affs = [x for x in affs if not placeholder_affil.search(x)]
+            filtered_affs = [x for x in affs if (not placeholder_affil.search(x)) and (not ieee_template_affil.search(x))]
             a['affiliations'] = filtered_affs
             cleaned_authors.append(a)
 
@@ -1005,7 +1166,7 @@ class WordASTParser:
                                 latex_img = f"\n\\begin{{center}}\n\\includegraphics[width=\\linewidth]{{{latex_path}}}\n\\end{{center}}\n"
                             else:
                                 self.dem_anh += 1
-                                latex_img = f"\n\\begin{{figure}}[H]\n\\centering\n\\includegraphics[width=0.9\\columnwidth]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                                latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[width=0.9\\columnwidth]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                             text += latex_img
                         except Exception:
                             pass
@@ -1047,7 +1208,7 @@ class WordASTParser:
                                     width_expr = f"{width_ratio:.3f}\\columnwidth"
                                 else:
                                     width_expr = "0.9\\columnwidth"
-                                latex_img = f"\n\\begin{{figure}}[H]\n\\centering\n\\includegraphics[width={width_expr}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                                latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[width={width_expr}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                             text += latex_img
                         except Exception:
                             pass
@@ -1084,7 +1245,7 @@ class WordASTParser:
                             latex_img = f"\n\\begin{{center}}\n\\includegraphics[width=\\linewidth]{{{latex_path}}}\n\\end{{center}}\n"
                         else:
                             self.dem_anh += 1
-                            latex_img = f"\n\\begin{{figure}}[H]\n\\centering\n\\includegraphics[width=0.9\\columnwidth]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                            latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[width=0.9\\columnwidth]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                         text += latex_img
                     except Exception:
                         pass

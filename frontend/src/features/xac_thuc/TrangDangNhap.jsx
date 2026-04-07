@@ -1,6 +1,6 @@
 // TrangDangNhap.jsx - Trang đăng nhập / đăng ký nâng cấp giao diện
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FileText, Mail, Lock, Eye, EyeOff, ArrowRight, User, Loader2, Info, CheckCircle2, Crown, Zap
@@ -70,14 +70,16 @@ const TrangDangNhap = () => {
 
     setDangXuLy(true)
     try {
+      let user = null
       if (cheDoForm === 'dangNhap') {
-        await dangNhap(formData.email, formData.matKhau)
+        user = await dangNhap(formData.email, formData.matKhau)
         toast.success('Đăng nhập thành công!')
       } else {
-        await dangKy(formData.username, formData.email, formData.matKhau)
+        user = await dangKy(formData.username, formData.email, formData.matKhau)
         toast.success('Đăng ký thành công!')
       }
-      window.location.replace('/chuyen-doi')
+      const duongDanDich = user?.role === 'admin' ? '/quan-tri' : '/chuyen-doi'
+      window.location.replace(duongDanDich)
     } catch (loi) {
       toast.error(loi.message || 'Đã xảy ra lỗi')
     } finally {
@@ -91,7 +93,8 @@ const TrangDangNhap = () => {
   }
 
   useEffect(() => {
-    if (nguoiDung) navigate('/chuyen-doi', { replace: true })
+    if (!nguoiDung) return
+    navigate(nguoiDung.role === 'admin' ? '/quan-tri' : '/chuyen-doi', { replace: true })
   }, [nguoiDung, navigate])
 
   return (

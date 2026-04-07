@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .. import models, auth
 from ..database import lay_db
@@ -9,6 +9,7 @@ from ..config import NAME_WEB, APP_ENV
 from ..services.sepay_sync import encode_payment_id, check_payment_status
 
 router = APIRouter(prefix="/api/payment", tags=["Payment"])
+PAYMENT_EXPIRE_MINUTES = 60
 
 class YeuCauTaoPayment(BaseModel):
     amount_vnd: int
@@ -56,7 +57,17 @@ def kiem_tra_trang_thai_payment(payment_id: int, db: Session = Depends(lay_db), 
     if payment.status == "completed":
         return {"thanh_cong": True, "status": "completed"}
 
-    # Nếu đang pending, gọi SePay để check
+    # Hóa đơn quá hạn sẽ chuyển failed để frontend hiển thị rõ trạng thái.
+    # Dù vậy, hệ thống vẫn tiếp tục đối soát SePay để hỗ trợ "tiền về muộn".
+    if payment.status == "pending":
+        gioi_han = payment.created_at + timedelta(minutes=PAYMENT_EXPIRE_MINUTES)
+        if datetime.utcnow() > gioi_han:
+            payment.status = "failed"
+            payment.updated_at = datetime.utcnow()
+            db.commit()
+            db.refresh(payment)
+
+    # Nếu chưa completed (pending/failed), gọi SePay để check
     is_paid, tx_id = check_payment_status(payment.id, payment.amount_vnd)
     if is_paid:
         # Cập nhật payment

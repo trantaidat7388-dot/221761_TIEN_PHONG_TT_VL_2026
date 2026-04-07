@@ -1,7 +1,7 @@
 from backend.core_engine.author_strategies import IEEEAuthorStrategy
 
 
-def test_ieee_author_block_keeps_email_in_thanks_not_affiliation():
+def test_ieee_author_block_shows_email_in_affiliation_not_footnote():
     strategy = IEEEAuthorStrategy()
     block = strategy.generate(
         [
@@ -16,7 +16,5 @@ def test_ieee_author_block_keeps_email_in_thanks_not_affiliation():
         ]
     )
 
-    # Corresponding email must be in footnote note
-    assert "\\thanks{* Corresponding author: b@x.com}" in block
-    # Email should not remain in affiliation block anymore
-    assert "\\IEEEauthorblockA{\\textit{Inst B, City, Country} \\\\ b@x.com}" not in block
+    assert "\\texttt{b@x.com}" in block
+    assert "\\thanks{" not in block

@@ -13,12 +13,84 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import time
 import zipfile
 from typing import Any
 
 from .docx_compat import mo_tai_lieu_word
 from .utils import sua_docx_co_macro
+
+
+def _tim_lenh_soffice() -> str | None:
+    """Find a usable LibreOffice command for headless conversion."""
+    env_path = os.environ.get("LIBREOFFICE_PATH")
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    candidates = [
+        shutil.which("soffice"),
+        shutil.which("soffice.com"),
+        shutil.which("soffice.exe"),
+        shutil.which("libreoffice"),
+        r"C:\Program Files\LibreOffice\program\soffice.exe",
+        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+    ]
+    for cmd in candidates:
+        if cmd and os.path.exists(cmd):
+            return cmd
+    return None
+
+
+def chuyen_doc_sang_docx(duong_dan_doc: str) -> str:
+    """Convert legacy .doc to .docx using LibreOffice headless mode."""
+    if not duong_dan_doc.lower().endswith(".doc"):
+        return duong_dan_doc
+
+    soffice_cmd = _tim_lenh_soffice()
+    if not soffice_cmd:
+        raise RuntimeError(
+            "Khong ho tro file .doc vi chua tim thay LibreOffice (soffice). "
+            "Vui long cai LibreOffice hoac dat LIBREOFFICE_PATH tro den soffice.exe"
+        )
+
+    out_dir = os.path.dirname(duong_dan_doc) or "."
+    base_name = os.path.splitext(os.path.basename(duong_dan_doc))[0]
+    generated_docx = os.path.join(out_dir, base_name + ".docx")
+    converted_docx = os.path.join(out_dir, base_name + "_converted.docx")
+
+    try:
+        subprocess.run(
+            [
+                soffice_cmd,
+                "--headless",
+                "--convert-to",
+                "docx",
+                "--outdir",
+                out_dir,
+                duong_dan_doc,
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+        )
+    except subprocess.CalledProcessError as e:
+        details = (e.stderr or e.stdout or "").strip()
+        raise RuntimeError(f"Khong the chuyen .doc sang .docx: {details}")
+
+    if not os.path.exists(generated_docx):
+        raise RuntimeError("Khong tim thay file .docx sau khi chuyen doi tu .doc")
+
+    if os.path.exists(converted_docx):
+        try:
+            os.remove(converted_docx)
+        except Exception:
+            pass
+    shutil.move(generated_docx, converted_docx)
+    return converted_docx
 
 
 def chuyen_docm_sang_docx(duong_dan_docm: str) -> str:
@@ -62,6 +134,7 @@ def mo_tai_lieu_word_co_fallback(duong_dan_word: str) -> tuple[Any, list[str]]:
     """Load a Word file and return loaded document plus temporary files to cleanup.
 
     Fallback sequence:
+    1) If source is .doc, convert to .docx first.
     1) If source is .docm, convert to cleaned .docx first.
     2) Try loading with compatibility adapter.
     3) On Strict Open XML namespace error, convert to Transitional then retry.
@@ -72,7 +145,11 @@ def mo_tai_lieu_word_co_fallback(duong_dan_word: str) -> tuple[Any, list[str]]:
     duong_dan_thuc = duong_dan_word
     temp_files: list[str] = []
 
-    if duong_dan_word.lower().endswith(".docm"):
+    if duong_dan_word.lower().endswith(".doc"):
+        duong_dan_thuc = chuyen_doc_sang_docx(duong_dan_word)
+        temp_files.append(duong_dan_thuc)
+
+    if duong_dan_thuc.lower().endswith(".docm"):
         duong_dan_thuc = chuyen_docm_sang_docx(duong_dan_word)
         temp_files.append(duong_dan_thuc)
 

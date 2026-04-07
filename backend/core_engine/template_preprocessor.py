@@ -30,6 +30,7 @@ class TemplatePreprocessor:
         
         tex = cls._ensure_essential_packages(tex_content)
         tex = cls._normalize_paragraph_spacing(tex, doc_class)
+        tex = cls._normalize_float_numbering(tex, doc_class)
         
         # ── Hỗ trợ Tiếng Việt (fontspec cho XeLaTeX - chỉ fallback nếu chưa có font) ──
         if doc_class != 'ieee' and r'\setmainfont' not in tex and r'\usepackage{fontspec}' not in tex:
@@ -378,6 +379,36 @@ class TemplatePreprocessor:
             tex = tex[:start] + tex[remove_end:]
         return tex
 
+    @classmethod
+    def _normalize_float_numbering(cls, tex: str, doc_class: str) -> str:
+        """For generic templates, number figures/tables by section (e.g., 3.1)."""
+        if doc_class not in ('generic', 'springer'):
+            return tex
+
+        already_configured = (
+            re.search(r'\\(counterwithin|numberwithin)\s*\{figure\}\s*\{section\}', tex) is not None
+            or re.search(r'\\renewcommand\s*\{\\thefigure\}', tex) is not None
+            or re.search(r'@addtoreset\s*\{figure\}\s*\{section\}', tex) is not None
+        )
+        if already_configured:
+            return tex
+
+        block = (
+            "\\makeatletter\n"
+            "\\@addtoreset{figure}{section}\n"
+            "\\renewcommand{\\thefigure}{\\thesection.\\arabic{figure}}\n"
+            "\\@addtoreset{table}{section}\n"
+            "\\renewcommand{\\thetable}{\\thesection.\\arabic{table}}\n"
+            "\\makeatother\n"
+        )
+
+        doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
+        if not doc_match:
+            return tex
+
+        pos = doc_match.start()
+        return tex[:pos] + block + tex[pos:]
+
     @staticmethod
     def _is_commented(tex: str, pos: int) -> bool:
         """Return True if *pos* falls on a line whose first non-space character is %."""
@@ -406,6 +437,14 @@ class TemplatePreprocessor:
         # Detect tikz/pgf in template body or cls path (MDPI etc.)
         has_pgf = bool(re.search(r'tikz|pgf|mdpi', tex[:3000], re.IGNORECASE))
         use_pdflatex = has_pdftex and has_pgf
+
+        if use_pdflatex:
+            # Keep pdfLaTeX but avoid OT1 encoding because characters like
+            # \DJ/\dj are unavailable there.
+            tex = tex.replace(
+                '\\usepackage[OT1]{fontenc}',
+                '\\usepackage[T1]{fontenc}',
+            )
 
         # ── Before \documentclass ──
         PASS_XCOLOR = "\\PassOptionsToPackage{table,xcdraw}{xcolor}\n"
@@ -458,34 +497,46 @@ class TemplatePreprocessor:
         # (above) already handles templates that explicitly load fontenc in their body.
         INJECT_BLOCK = (
             "\\makeatletter\n"
+            "\\@ifpackageloaded{iftex}{}{\\usepackage{iftex}}\n"
+            "\\ifPDFTeX\\@ifpackageloaded{fontenc}{}{\\usepackage[T1]{fontenc}}\\fi\n"
             "\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n"
             "\\@ifundefined{Bbbk}{}{\\let\\Bbbk\\relax}\n"
             "\\@ifpackageloaded{amssymb}{}{\\usepackage{amssymb}}\n"
             "\\@ifpackageloaded{xurl}{}{\\usepackage{xurl}}\n"
             "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
             "\\@ifpackageloaded{graphicx}{}{\\usepackage{graphicx}}\n"
-            "\\@ifpackageloaded{multirow}{}{\\usepackage{multirow}}\n"
             "\\@ifpackageloaded{float}{}{\\usepackage{float}}\n"
             "\\@ifpackageloaded{placeins}{}{\\usepackage{placeins}}\n"
             "\\makeatother\n"
         )
 
         if '@ifpackageloaded{amsmath}' in tex:
-            # Preamble was already processed before; still guarantee xcolor is ensured.
+            # Preamble was already processed before; still guarantee required guards.
             has_xcolor_guard = '@ifpackageloaded{xcolor}' in tex
             has_xcolor_pkg = re.search(r'\\usepackage(?:\[[^\]]*\])?\{xcolor\}', tex) is not None
-            if has_xcolor_guard or has_xcolor_pkg:
+            has_fontenc_t1 = re.search(r'\\usepackage\[T1\]\{fontenc\}', tex) is not None
+            has_fontenc_guard = '\\ifPDFTeX\\@ifpackageloaded{fontenc}{}{\\usepackage[T1]{fontenc}}\\fi' in tex
+            has_iftex_pkg = re.search(r'\\usepackage(?:\[[^\]]*\])?\{iftex\}', tex) is not None
+
+            if (has_xcolor_guard or has_xcolor_pkg) and (has_fontenc_t1 or has_fontenc_guard):
                 return tex
             doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
             if not doc_match:
                 return tex
-            xcolor_block = (
-                "\\makeatletter\n"
-                "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
-                "\\makeatother\n"
-            )
+            repair_lines = ["\\makeatletter"]
+            if not has_iftex_pkg:
+                repair_lines.append("\\@ifpackageloaded{iftex}{}{\\usepackage{iftex}}")
+            if not (has_fontenc_t1 or has_fontenc_guard):
+                repair_lines.append("\\ifPDFTeX\\@ifpackageloaded{fontenc}{}{\\usepackage[T1]{fontenc}}\\fi")
+            if not (has_xcolor_guard or has_xcolor_pkg):
+                repair_lines.append("\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}")
+            repair_lines.append("\\makeatother")
+            repair_block = "\n".join(repair_lines) + "\n"
+
             pos = doc_match.start()
-            return tex[:pos] + xcolor_block + tex[pos:]
+            if repair_block == "\\makeatletter\n\\makeatother\n":
+                return tex
+            return tex[:pos] + repair_block + tex[pos:]
 
         # Match only non-commented \begin{document} (avoid % comment matches)
         doc_match = re.search(r'^[ \t]*\\begin\{document\}', tex, re.MULTILINE)
