@@ -38,6 +38,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Chuyển Đổi"])
 
 
+def _la_file_word_hop_le(ten_file: str) -> bool:
+    ten = (ten_file or "").lower()
+    return ten.endswith('.doc') or ten.endswith('.docx') or ten.endswith('.docm')
+
+
 def _ghi_lich_su_chuyen_doi(
     db: Session,
     user_id: int,
@@ -80,8 +85,8 @@ async def chuyen_doi_file(
     """Endpoint chuyển đổi file Word → LaTeX (chế độ thường)."""
     
     ten_file = file.filename.lower()
-    if not (ten_file.endswith('.docx') or ten_file.endswith('.docm')):
-        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .docx hoặc .docm")
+    if not _la_file_word_hop_le(ten_file):
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .doc, .docx hoac .docm")
     
     current_user = None
     auth_header = request.headers.get("Authorization", "")
@@ -216,7 +221,8 @@ async def chuyen_doi_file(
             duong_dan_template=str(template_path),
             duong_dan_dau_ra=str(output_path),
             thu_muc_anh=str(images_folder),
-            mode='demo'
+            mode='demo',
+            expected_doc_class='ieee' if template_type in {'ieee_conference', 'twocolumn'} else None,
         )
         await run_in_threadpool(bo_chuyen_doi.chuyen_doi)
 
@@ -399,8 +405,8 @@ async def chuyen_doi_file_stream(
             logger.warning("Bearer token không hợp lệ cho SSE request", exc_info=e)
 
     ten_file = file.filename.lower()
-    if not (ten_file.endswith('.docx') or ten_file.endswith('.docm')):
-        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .docx hoặc .docm")
+    if not _la_file_word_hop_le(ten_file):
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .doc, .docx hoac .docm")
 
     contents = await file.read()
     if len(contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
@@ -510,7 +516,8 @@ async def chuyen_doi_file_stream(
                 duong_dan_template=str(template_path),
                 duong_dan_dau_ra=str(output_path),
                 thu_muc_anh=str(images_folder),
-                mode='demo'
+                mode='demo',
+                expected_doc_class='ieee' if template_type in {'ieee_conference', 'twocolumn'} else None,
             )
 
             yield sse_event(3, "Đang nạp dữ liệu vào template Jinja2...")
