@@ -464,6 +464,7 @@ class TemplatePreprocessor:
             "\\@ifpackageloaded{xurl}{}{\\usepackage{xurl}}\n"
             "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
             "\\@ifpackageloaded{graphicx}{}{\\usepackage{graphicx}}\n"
+            "\\@ifpackageloaded{multirow}{}{\\usepackage{multirow}}\n"
             "\\@ifpackageloaded{float}{}{\\usepackage{float}}\n"
             "\\@ifpackageloaded{placeins}{}{\\usepackage{placeins}}\n"
             "\\makeatother\n"
