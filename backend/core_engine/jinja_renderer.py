@@ -227,17 +227,17 @@ class JinjaLaTeXRenderer:
             references_block=references_block,
         )
 
-        # Thêm magic comment để trình biên dịch trên Overleaf/TeXworks ưu tiên dùng XeLaTeX
-        magic_comment = "% !TeX program = xelatex\n"
+        # IEEE templates are typically expected to compile with pdfLaTeX for
+        # canonical IEEE font metrics. For other templates, keep XeLaTeX default.
+        force_xelatex = doc_class != "ieee"
+        magic_comment = "% !TeX program = xelatex\n" if force_xelatex else ""
 
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(magic_comment + tex_content)
 
-        # Tạo latexmkrc để ÉP Overleaf dùng XeLaTeX (Overleaf bỏ qua magic comment)
-        # $pdf_mode = 5 yêu cầu latexmk >= 4.51 (TeX Live 2019+, Overleaf đều có)
-        # $pdflatex override: fallback cho latexmk cũ hơn
         latexmkrc_path = os.path.join(os.path.dirname(output_path), 'latexmkrc')
-        if not os.path.exists(latexmkrc_path):
+        if force_xelatex and not os.path.exists(latexmkrc_path):
+            # Ép Overleaf dùng XeLaTeX cho template cần Unicode đầy đủ.
             with open(latexmkrc_path, 'w', encoding='utf-8') as f:
                 f.write(
                     "# Force XeLaTeX for full Unicode support (Vietnamese, CJK, etc.)\n"
@@ -246,6 +246,12 @@ class JinjaLaTeXRenderer:
                     "# Fallback for older latexmk versions\n"
                     "$pdflatex = 'xelatex -interaction=nonstopmode -halt-on-error -synctex=1 %O %S';\n"
                 )
+        elif (not force_xelatex) and os.path.exists(latexmkrc_path):
+            # Avoid stale XeLaTeX forcing in IEEE output packages.
+            try:
+                os.remove(latexmkrc_path)
+            except OSError:
+                pass
 
     def _normalize_ieee_figure_placement(self, body_tex: str) -> str:
         """Normalize IEEE figure hints to the template-compatible default style."""
