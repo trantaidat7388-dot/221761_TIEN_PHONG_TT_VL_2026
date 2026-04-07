@@ -50,8 +50,6 @@ class JinjaLaTeXRenderer:
             if t == "section":
                 lvl = node.get("level", 1)
                 text = node.get("text", "")
-                if doc_class == "ieee":
-                    text = str(text).upper()
                 # Keep pending floats from drifting too far into later sections in IEEE mode.
                 if doc_class == "ieee" and has_seen_float:
                     out.append("\\FloatBarrier\n")
