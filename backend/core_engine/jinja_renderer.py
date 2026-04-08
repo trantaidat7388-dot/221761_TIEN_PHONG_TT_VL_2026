@@ -115,10 +115,14 @@ class JinjaLaTeXRenderer:
                 out.append(f"\\resizebox{{{table_width_expr}}}{{!}}{{%\n")
                 out.append(f"\\begin{{tabular}}{{{col_def}}}\n\\hline\n")
                 
+                # Track active multirow spans: col_index -> remaining rows
+                active_multirows = {}  # col_index -> rows_remaining
+
                 for r_idx, row in enumerate(rows_data):
                     tex_cells = []
                     c_logical = 0   # Logical column index in final tabular grid
                     is_header_row = bool(node.get("has_header")) and r_idx == 0
+                    row_multirow_starts = {}  # col -> rowspan (new multirows starting this row)
 
                     # Table parser already resolves merge structure. Rendering should
                     # respect those logical cells directly to avoid double-merge drift.
@@ -140,13 +144,22 @@ class JinjaLaTeXRenderer:
                         token = text
                         if rowspan > 1:
                             token = f"\\multirow{{{rowspan}}}{{*}}{{{token}}}"
+                            # Record multirow starts for this row
+                            for dc in range(colspan):
+                                row_multirow_starts[c_logical + dc] = rowspan
                         if colspan > 1:
                             width_slice = col_widths[c_logical:c_logical + colspan]
                             if width_slice:
                                 mc_width = sum(width_slice)
                             else:
                                 mc_width = (0.98 / cols) * colspan if cols > 0 else 0.15 * colspan
-                            token = f"\\multicolumn{{{colspan}}}{{p{{{mc_width:.3f}\\linewidth}}}}{{{token}}}"
+                            
+                            if c_logical == 0:
+                                mc_format = f"|p{{{mc_width:.3f}\\linewidth}}|"
+                            else:
+                                mc_format = f"p{{{mc_width:.3f}\\linewidth}}|"
+                                
+                            token = f"\\multicolumn{{{colspan}}}{{{mc_format}}}{{{token}}}"
 
                         tex_cells.append(token)
                         c_logical += colspan
@@ -168,7 +181,44 @@ class JinjaLaTeXRenderer:
                             if mc_match:
                                 skip_mc = int(mc_match.group(1)) - 1
                     
-                    out.append(" & ".join(dong_filtered) + " \\\\\n\\hline\n")
+                    # Update active multirow tracking
+                    # First, decrement existing active multirows
+                    new_active = {}
+                    for col_idx, remaining in active_multirows.items():
+                        if remaining > 1:
+                            new_active[col_idx] = remaining - 1
+                    # Then add new multirow starts from this row
+                    for col_idx, rspan in row_multirow_starts.items():
+                        new_active[col_idx] = rspan
+                    active_multirows = new_active
+
+                    # Determine horizontal rule: use \cline if any multirow is spanning
+                    # into the next row, otherwise use \hline
+                    spanning_cols = set()
+                    for col_idx, remaining in active_multirows.items():
+                        if remaining > 1:  # Still spanning into the next row
+                            spanning_cols.add(col_idx)
+                    
+                    if spanning_cols and r_idx < len(rows_data) - 1:
+                        # Build \cline commands for non-spanning column ranges
+                        cline_parts = []
+                        range_start = None
+                        for ci in range(cols):
+                            if ci not in spanning_cols:
+                                if range_start is None:
+                                    range_start = ci
+                            else:
+                                if range_start is not None:
+                                    cline_parts.append(f"\\cline{{{range_start + 1}-{ci}}}")
+                                    range_start = None
+                        if range_start is not None:
+                            cline_parts.append(f"\\cline{{{range_start + 1}-{cols}}}")
+                        
+                        hline_str = "".join(cline_parts) if cline_parts else "\\hline"
+                    else:
+                        hline_str = "\\hline"
+
+                    out.append(" & ".join(dong_filtered) + " \\\\\n" + hline_str + "\n")
                     
                 out.append("\\end{tabular}%\n}\n")
                 out.append("\\endgroup\n")
@@ -417,7 +467,8 @@ class JinjaLaTeXRenderer:
             inject_lines.append("\\usepackage{iftex}")
         if not has_fontenc:
             inject_lines.append("\\ifPDFTeX")
-            inject_lines.append("\\usepackage[T1]{fontenc}")
+            inject_lines.append("\\usepackage[T5]{fontenc}")
+            inject_lines.append("\\usepackage[utf8]{inputenc}")
             inject_lines.append("\\fi")
         if not has_multirow:
             inject_lines.append("\\usepackage{multirow}")

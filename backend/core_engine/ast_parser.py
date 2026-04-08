@@ -427,8 +427,8 @@ class WordASTParser:
                 text = phan_tu.text.strip()
                 if not text:
                     continue
-                # FIX 1: Support decimal chapter numbers like "Figure 3.1"
-                if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG\.?)\b', text, re.IGNORECASE):
+                # FIX 1: Support decimal chapter numbers like "Figure 3.1" and IEEE "Fig. 1."
+                if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG)(?:\.|\b)', text, re.IGNORECASE):
                     used_nodes.add(idx_sau)
                     caption_text = self._chuan_hoa_ten_caption(text, kind='figure')
                     return caption_text
@@ -450,8 +450,8 @@ class WordASTParser:
             return caption_text
 
         if kind == 'table':
-            # Examples stripped: "Table 1:", "TABLE 3.1 -", "BANG 2."
-            pattern = r'^(Bảng|BANG|Bang|Table|TABLE)\.?\s*\d+(\.\d+)*\s*[:\.\-–—]?\s*'
+            # Examples stripped: "Table 1:", "TABLE 3.1 -", "BANG 2.", "TABLE I" (IEEE)
+            pattern = r'^(Bảng|BANG|Bang|Table|TABLE)\.?\s*[\dIIVX]+(\.\d+)*\s*[:\.\-–—]?\s*'
         else:
             # Examples stripped: "Figure 2:", "Fig. 3.1", "HINH 1 -", "ẢNH 5"
             pattern = r'^(Hình|HINH|Hình|Ảnh|ANH|ẢNH|Figure|FIGURE|Fig\.?)\s*\d+(\.\d+)*\s*[:\.\-–—]?\s*'
@@ -511,8 +511,8 @@ class WordASTParser:
                         if text and re.match(r'^(BẢNG|BANG|TABLE)\b', text, re.IGNORECASE):
                             used_nodes.add(idx - 1)
             if etype == 'paragraph':
-                # Check if this paragraph has images (look for drawings/blips)
-                has_img = bool(element._p.findall(f'.//{{{A_NAMESPACE}}}blip'))
+                # Check if this paragraph has images (look for drawings/blips or vml/imagedata)
+                has_img = bool(element._p.findall(f'.//{{{A_NAMESPACE}}}blip')) or bool(element._p.findall(r'.//{urn:schemas-microsoft-com:vml}imagedata'))
                 if has_img:
                     # Figure caption: look 1-5 paragraphs BELOW
                     # FIX 1: Match decimal figure numbers like "Figure 3.1"
@@ -528,7 +528,7 @@ class WordASTParser:
                         a_text = a_el.text.strip()
                         if not a_text:
                             continue
-                        if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG\.?)\b', a_text, re.IGNORECASE):
+                        if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG)(?:\.|\b)', a_text, re.IGNORECASE):
                             used_nodes.add(idx_after)
                             break
                         if hasattr(a_el, 'style') and a_el.style and a_el.style.name and 'Heading' in a_el.style.name:
@@ -547,7 +547,7 @@ class WordASTParser:
             
             if etype == "paragraph":
                 text = element.text.strip()
-                has_img_para = bool(element._p.findall(f'.//{{{A_NAMESPACE}}}blip'))
+                has_img_para = bool(element._p.findall(f'.//{{{A_NAMESPACE}}}blip')) or bool(element._p.findall(r'.//{urn:schemas-microsoft-com:vml}imagedata'))
                 if not text and state == "pre_title" and (not has_img_para):
                     continue # Skip empty leading lines (but keep image-only paragraphs)
                 if text == "Short Title": continue
@@ -645,7 +645,7 @@ class WordASTParser:
                 elif state == "abstract":
                     # FIX 3: Smart split — paragraph may contain BOTH "Abstract." and "Keywords:"
                     combined_match = re.search(
-                        r'(?:abstract\.?\s*)(.+?)\s*(?:keywords?\s*[:\-–]\s*)(.+)',
+                        r'(?:abstract\.?\s*)(.+?)\s*(?:keywords?|index\s+terms?)[^\w]*(.+)',
                         text, re.IGNORECASE | re.DOTALL
                     )
                     if combined_match:
@@ -689,6 +689,32 @@ class WordASTParser:
                         self.ir["references"].append(self._parse_paragraph(element))
                 
             elif etype == "table":
+                # Bypass: Nếu bảng đứng trước abstract, có thể đây là Author Table đặc thù của IEEE
+                if state in ("pre_title", "title", "authors") and not abstract_buf:
+                    try:
+                        table_lines = []
+                        table_lines = []
+                        seen_cells = set()
+                        for row in element.rows:
+                            for cell in row.cells:
+                                cell_id = id(cell._tc)
+                                if cell_id in seen_cells:
+                                    continue
+                                seen_cells.add(cell_id)
+                                cell_text = "\n".join([p.text.strip() for p in cell.paragraphs if p.text.strip()]).strip()
+                                if cell_text:
+                                    table_lines.extend([line.strip() for line in cell_text.split('\n') if line.strip()])
+                                        
+                        table_text = "\n".join(table_lines)
+                        if len(table_text) < 1500 and not self._la_bang_chua_anh(element):
+                            state = "authors"
+                            authors_buf.extend(table_lines)
+                            # Đánh dấu bảng này đã được dùng cho authors để tránh tự xuất hiện lại trong body (nếu được xử lý tiếp)
+                            used_nodes.add(idx)
+                            continue
+                    except Exception as e:
+                        print(f"[WARN] Error parsing potential IEEE author table: {e}")
+                        
                 # Tables always force body
                 state = "body"
                 eq_node = self._detect_equation_table(element)
@@ -941,24 +967,23 @@ class WordASTParser:
 
                 current = None
 
-        for info in expanded:
-            if authors:
-                break
-            clean = info.strip()
-            if not clean:
-                continue
-            is_affil = _looks_like_affiliation(clean)
-            if not current:
-                current = {"name": clean, "affiliations": []}
-            elif is_affil or (len(clean) >= 40 and '@' in clean):
-                current["affiliations"].append(clean)
-            elif len(clean) < 50 and not is_affil:
+        if not authors:
+            for info in expanded:
+                clean = info.strip()
+                if not clean:
+                    continue
+                is_affil = _looks_like_affiliation(clean)
+                if not current:
+                    current = {"name": clean, "affiliations": []}
+                elif is_affil or (len(clean) >= 40 and '@' in clean):
+                    current["affiliations"].append(clean)
+                elif len(clean) < 50 and not is_affil:
+                    authors.append(current)
+                    current = {"name": clean, "affiliations": []}
+                else:
+                    current["affiliations"].append(clean)
+            if current:
                 authors.append(current)
-                current = {"name": clean, "affiliations": []}
-            else:
-                current["affiliations"].append(clean)
-        if current:
-            authors.append(current)
 
         # Post-process: map superscript numbers/symbols in names to numbered affiliations
         affil_map = {}  # marker -> affiliation text

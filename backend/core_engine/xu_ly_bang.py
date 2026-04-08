@@ -696,7 +696,11 @@ class BoXuLyBang:
                     token = rf"\multirow{{{rowspan}}}{{*}}{{{token}}}"
                 if colspan > 1:
                     mc_width = colspan * width_frac
-                    token = rf"\multicolumn{{{colspan}}}{{p{{{mc_width:.3f}\linewidth}}}}{{{token}}}"
+                    if c_logical == 0:
+                        mc_format = rf"|p{{{mc_width:.3f}\linewidth}}|"
+                    else:
+                        mc_format = rf"p{{{mc_width:.3f}\linewidth}}|"
+                    token = rf"\multicolumn{{{colspan}}}{{{mc_format}}}{{{token}}}"
 
                 tex_cells.append(token)
                 c_logical += colspan
@@ -715,7 +719,33 @@ class BoXuLyBang:
             
             latex += "    " + " & ".join(dong_filtered) + r" \\" + "\n"
             
-            latex += r"  \hline" + "\n"
+            # Determine horizontal rule: use \cline if any multirow is spanning
+            spanning_cols = set()
+            for ci in range(so_cot):
+                info_ci = meta.get((r, ci))
+                if info_ci and info_ci.get('start'):
+                    cell_id_ci = info_ci['id']
+                    rspan = int(rowspan_map.get(cell_id_ci, 1))
+                    if rspan > 1:
+                        for dc in range(int(info_ci.get('colspan', 1) or 1)):
+                            spanning_cols.add(ci + dc)
+            
+            if spanning_cols and r < so_hang - 1:
+                cline_parts = []
+                range_start = None
+                for ci in range(so_cot):
+                    if ci not in spanning_cols:
+                        if range_start is None:
+                            range_start = ci
+                    else:
+                        if range_start is not None:
+                            cline_parts.append(rf"\cline{{{range_start + 1}-{ci}}}")
+                            range_start = None
+                if range_start is not None:
+                    cline_parts.append(rf"\cline{{{range_start + 1}-{so_cot}}}")
+                latex += "  " + "".join(cline_parts) + "\n" if cline_parts else "  " + r"\hline" + "\n"
+            else:
+                latex += r"  \hline" + "\n"
         latex += r"  \end{tabular}%" + "\n"
         latex += r"  }" + "\n"
         caption_bang = self.bo_chuyen.bat_caption_bang()
