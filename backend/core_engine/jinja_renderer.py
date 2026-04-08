@@ -115,58 +115,45 @@ class JinjaLaTeXRenderer:
                 out.append(f"\\resizebox{{{table_width_expr}}}{{!}}{{%\n")
                 out.append(f"\\begin{{tabular}}{{{col_def}}}\n\\hline\n")
                 
-                # Theo dõi các ô bị chiếm bởi rowspan từ các hàng phía trên
-                occupied_cells = {} # (row_idx, col_idx) -> True
-                
                 for r_idx, row in enumerate(rows_data):
                     tex_cells = []
-                    c_logical = 0   # Chỉ số cột thực tế trong LaTeX
-                    cell_ptr = 0    # Con trỏ duyệt qua danh sách ô trong data của IR
+                    c_logical = 0   # Logical column index in final tabular grid
                     is_header_row = bool(node.get("has_header")) and r_idx == 0
-                    
-                    while c_logical < cols:
-                        # Kiểm tra nếu ô này đã bị chiếm bởi rowspan từ phía trên
-                        if occupied_cells.get((r_idx, c_logical)):
+
+                    # Table parser already resolves merge structure. Rendering should
+                    # respect those logical cells directly to avoid double-merge drift.
+                    for cell in row:
+                        if c_logical >= cols:
+                            break
+
+                        if cell.get("type") == "empty":
                             tex_cells.append("")
                             c_logical += 1
                             continue
-                        
-                        # Nếu còn ô trong dữ liệu của hàng này
-                        if cell_ptr < len(row):
-                            cell = row[cell_ptr]
-                            cell_ptr += 1
-                            
-                            # Bỏ qua nếu đây là marker 'empty' (vốn đã được xử lý bởi occupied_cells)
-                            if cell.get("type") == "empty":
-                                tex_cells.append("")
-                                c_logical += 1
-                                continue
-                                
-                            colspan = cell.get("colspan", 1)
-                            rowspan = cell.get("rowspan", 1)
-                            text = cell.get("text") or ""
-                            if is_header_row and text.strip() and "\\textbf{" not in text:
-                                text = f"\\textbf{{{text}}}"
-                            
-                            # Đánh dấu các ô bị chiếm trong tương lai (col/row span)
-                            for dr in range(rowspan):
-                                for dc in range(colspan):
-                                    if dr > 0 or dc > 0:
-                                        occupied_cells[(r_idx + dr, c_logical + dc)] = True
-                                        
-                            token = text
-                            if rowspan > 1:
-                                token = f"\\multirow{{{rowspan}}}{{*}}{{{token}}}"
-                            if colspan > 1:
-                                mc_width = colspan * width_frac
-                                token = f"\\multicolumn{{{colspan}}}{{p{{{mc_width:.3f}\\linewidth}}}}{{{token}}}"
-                                
-                            tex_cells.append(token)
-                            c_logical += colspan
-                        else:
-                            # Hết dữ liệu ô nhưng chưa đủ số cột
-                            tex_cells.append("")
-                            c_logical += 1
+
+                        colspan = max(1, int(cell.get("colspan", 1) or 1))
+                        rowspan = max(1, int(cell.get("rowspan", 1) or 1))
+                        text = cell.get("text") or ""
+                        if is_header_row and text.strip() and "\\textbf{" not in text:
+                            text = f"\\textbf{{{text}}}"
+
+                        token = text
+                        if rowspan > 1:
+                            token = f"\\multirow{{{rowspan}}}{{*}}{{{token}}}"
+                        if colspan > 1:
+                            width_slice = col_widths[c_logical:c_logical + colspan]
+                            if width_slice:
+                                mc_width = sum(width_slice)
+                            else:
+                                mc_width = (0.98 / cols) * colspan if cols > 0 else 0.15 * colspan
+                            token = f"\\multicolumn{{{colspan}}}{{p{{{mc_width:.3f}\\linewidth}}}}{{{token}}}"
+
+                        tex_cells.append(token)
+                        c_logical += colspan
+
+                    while c_logical < cols:
+                        tex_cells.append("")
+                        c_logical += 1
                     
                     # Lọc để đóng gói thành dòng LaTeX (skip các ô bị multicolumn chiếm trong cùng hàng)
                     dong_filtered = []
@@ -230,6 +217,7 @@ class JinjaLaTeXRenderer:
             bib_file="references",
             references_block=references_block,
         )
+        tex_content = self._normalize_tex_preamble(tex_content)
 
         # Prefer pdfLaTeX by default, but switch to XeLaTeX when the rendered
         # content includes packages that require a Unicode engine.
@@ -275,7 +263,7 @@ class JinjaLaTeXRenderer:
             next_section = section_pattern.search(body_tex, end)
             if next_section is not None:
                 tail_text = body_tex[end:next_section.start()]
-                if len(tail_text.strip()) <= 420:
+                if len(tail_text.strip()) <= 120:
                     fig_block = self._convert_figure_float_to_inline(fig_block, with_counter=True)
 
             chunks.append(body_tex[cursor:start])
@@ -396,7 +384,49 @@ class JinjaLaTeXRenderer:
             return "xelatex"
         if re.search(r"\\usepackage\{polyglossia\}", tex_content):
             return "xelatex"
+
+        # Respect templates that explicitly pin pdfTeX in documentclass options.
+        docclass_opts = re.search(r"\\documentclass\s*\[([^\]]*)\]", tex_content)
+        if docclass_opts is not None:
+            options = [o.strip().lower() for o in docclass_opts.group(1).split(",")]
+            if any(o in ("pdftex", "pdflatex") for o in options):
+                return "pdflatex"
+
+        # Fallback for multilingual content: non-ASCII often compiles more safely
+        # with XeLaTeX than pdfLaTeX.
+        if re.search(r"[^\x00-\x7f]", tex_content):
+            return "xelatex"
         return "pdflatex"
+
+    def _normalize_tex_preamble(self, tex_content: str) -> str:
+        """Normalize preamble so pdfLaTeX avoids OT1 pitfalls (e.g., \DJ unavailable)."""
+        tex_content = tex_content.replace(
+            "\\usepackage[OT1]{fontenc}",
+            "\\usepackage[T1]{fontenc}",
+        )
+
+        has_fontenc = re.search(r"\\usepackage(?:\[[^\]]*\])?\{fontenc\}", tex_content) is not None
+        has_iftex = re.search(r"\\usepackage(?:\[[^\]]*\])?\{iftex\}", tex_content) is not None
+        has_multirow = re.search(r"\\usepackage(?:\[[^\]]*\])?\{multirow\}", tex_content) is not None
+        doc_match = re.search(r"^[ \t]*\\begin\{document\}", tex_content, re.MULTILINE)
+        if doc_match is None:
+            return tex_content
+
+        inject_lines = []
+        if not has_iftex:
+            inject_lines.append("\\usepackage{iftex}")
+        if not has_fontenc:
+            inject_lines.append("\\ifPDFTeX")
+            inject_lines.append("\\usepackage[T1]{fontenc}")
+            inject_lines.append("\\fi")
+        if not has_multirow:
+            inject_lines.append("\\usepackage{multirow}")
+        if not inject_lines:
+            return tex_content
+        inject_block = "\n".join(inject_lines) + "\n"
+
+        pos = doc_match.start()
+        return tex_content[:pos] + inject_block + tex_content[pos:]
 
 
     def _generate_author_block(self, authors: list, doc_class: str) -> str:

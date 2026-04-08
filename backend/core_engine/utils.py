@@ -20,6 +20,19 @@ def _lay_so_nguyen_tu_env(name: str, default: int, min_value: int = 1) -> int:
 
 LATEX_COMPILE_TIMEOUT_SECONDS = _lay_so_nguyen_tu_env("LATEX_COMPILE_TIMEOUT_SECONDS", 30, min_value=5)
 
+
+def _nen_thu_lai_bang_xelatex(log_text: str) -> bool:
+    """Return True when pdflatex errors indicate Unicode/font encoding issues."""
+    if not log_text:
+        return False
+    patterns = [
+        r"LaTeX Error: Command \\DJ unavailable in encoding OT1",
+        r"Package inputenc Error: Unicode character",
+        r"Unicode character .* not set up for use with LaTeX",
+        r"Command \\dj unavailable in encoding OT1",
+    ]
+    return any(re.search(p, log_text, re.IGNORECASE) for p in patterns)
+
 def sua_docx_co_macro(doc_path: str):
     """
     Tẩy rửa file Word có chứa Macro (.docm hoặc .docx dính macro):
@@ -84,6 +97,49 @@ def loc_ky_tu(text: str) -> str:
     # Escape các ký tự đặc biệt LaTeX (\, %, $, _, &, #, {, }, ~, ^)
     if not text:
         return ""
+
+    def _normalize_private_use_symbol_chars(raw: str) -> str:
+        """Convert common Symbol-font private-use chars (U+F0xx) to safe text/LaTeX."""
+        greek_map = {
+            'a': r'\ensuremath{\alpha}',
+            'b': r'\ensuremath{\beta}',
+            'g': r'\ensuremath{\gamma}',
+            'd': r'\ensuremath{\delta}',
+            'e': r'\ensuremath{\epsilon}',
+            'm': r'\ensuremath{\mu}',
+            'p': r'\ensuremath{\pi}',
+            'r': r'\ensuremath{\rho}',
+            's': r'\ensuremath{\sigma}',
+            't': r'\ensuremath{\tau}',
+            'f': r'\ensuremath{\phi}',
+            'w': r'\ensuremath{\omega}',
+            'G': r'\ensuremath{\Gamma}',
+            'D': r'\ensuremath{\Delta}',
+            'L': r'\ensuremath{\Lambda}',
+            'P': r'\ensuremath{\Pi}',
+            'S': r'\ensuremath{\Sigma}',
+            'F': r'\ensuremath{\Phi}',
+            'W': r'\ensuremath{\Omega}',
+        }
+
+        out = []
+        for ch in raw:
+            cp = ord(ch)
+            if 0xF000 <= cp <= 0xF0FF:
+                base = cp - 0xF000
+                if base == 0x20:
+                    out.append(' ')
+                    continue
+                ascii_ch = chr(base)
+                if ascii_ch in greek_map:
+                    out.append(greek_map[ascii_ch])
+                elif 0x20 <= base <= 0x7E:
+                    out.append(ascii_ch)
+                else:
+                    out.append(' ')
+            else:
+                out.append(ch)
+        return ''.join(out)
     
     # BƯỚC 1: Thay Unicode bằng PLACEHOLDER trước khi escape ký tự đặc biệt
     # Placeholder dùng ASCII thuần túy, không chứa ký tự LaTeX đặc biệt
@@ -114,7 +170,7 @@ def loc_ky_tu(text: str) -> str:
         ('\u2026', '...'),   # ellipsis
     ]
     
-    ket_qua = text
+    ket_qua = _normalize_private_use_symbol_chars(text)
 
     # Remove directional control chars and uncommon script noise that can break
     # pdfLaTeX in otherwise Latin-based documents (e.g., stray Hebrew tokens).
@@ -326,6 +382,20 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
             
             if error_msg:
                 print(f"[LATEX] Error Snippet (last lines): ... {error_msg[-300:]}")
+
+            if engine == 'pdflatex' and _nen_thu_lai_bang_xelatex(error_msg):
+                print("[LATEX] RETRY: Encoding/Unicode issue detected. Re-trying with xelatex...")
+                retry_ok, retry_err = bien_dich_latex(
+                    duong_dan_dau_ra=duong_dan_dau_ra,
+                    thu_muc_bien_dich=thu_muc_bien_dich,
+                    engine='xelatex',
+                )
+                if retry_ok:
+                    return True, ""
+                error_msg = (
+                    "pdflatex failed due to encoding/unicode issue and xelatex retry also failed.\n\n"
+                    f"[pdflatex]\n{error_msg}\n\n[xelatex]\n{retry_err}"
+                )
             return False, error_msg
     except FileNotFoundError:
         msg = f"LỖI: Không tìm thấy '{engine}'. Kiểm tra PATH hoặc cài đặt LaTeX."

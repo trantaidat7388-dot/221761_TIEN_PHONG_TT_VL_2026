@@ -1,6 +1,19 @@
 import re
 
 
+def _escape_latex_text(text: str) -> str:
+    """Escape LaTeX special chars in plain metadata fields (author/affiliation)."""
+    if not text:
+        return ""
+    # Preserve existing escaped sequences by only escaping unescaped symbols.
+    text = re.sub(r'(?<!\\)#', r'\\#', text)
+    text = re.sub(r'(?<!\\)%', r'\\%', text)
+    text = re.sub(r'(?<!\\)&', r'\\&', text)
+    text = re.sub(r'(?<!\\)_', r'\\_', text)
+    text = re.sub(r'(?<!\\)\$', r'\\$', text)
+    return text
+
+
 def _split_affiliation_line(line: str) -> list:
     """Split long comma-separated affiliation into shorter chunks for IEEE blocks.
 
@@ -42,7 +55,7 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
         block = "\\author{\n"
         parts = []
         for author in authors:
-            name = author['name']
+            name = _escape_latex_text(author['name'])
             has_corresponding_marker = False
             emails = []
 
@@ -73,7 +86,7 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
                                 if em not in emails:
                                     emails.append(em)
                             continue
-                        compact = re.sub(r'\s{2,}', ' ', sl).strip()
+                        compact = _escape_latex_text(re.sub(r'\s{2,}', ' ', sl).strip())
                         if compact:
                             affil_lines.append(f"\\textit{{{compact}}}")
                 for em in emails:
@@ -112,7 +125,7 @@ class SpringerAuthorStrategy(AuthorBlockStrategy):
         # Build \author{...} block
         author_parts = []
         for author in authors:
-            name = author['name']
+            name = _escape_latex_text(author['name'])
             insts = []
             corr_marker = ''
             for aff in author.get('affiliations', []):
@@ -138,7 +151,7 @@ class SpringerAuthorStrategy(AuthorBlockStrategy):
         if affil_map:
             inst_parts = []
             for aff_text in affil_map:
-                entry = ", ".join([s.strip() for s in aff_text.split('\n') if s.strip()])
+                entry = ", ".join([_escape_latex_text(s.strip()) for s in aff_text.split('\n') if s.strip()])
                 inst_parts.append(entry)
             institute_text = " \\and ".join(inst_parts)
             if all_emails:
@@ -157,7 +170,7 @@ class ElsevierAuthorStrategy(AuthorBlockStrategy):
         """Generate author block in Elsevier format (\\author + \\affiliation)."""
         parts = []
         for author in authors:
-            parts.append(f"\\author{{{author['name']}}}")
+            parts.append(f"\\author{{{_escape_latex_text(author['name'])}}}")
             for aff in author.get('affiliations', []):
                 aff_clean = aff.strip()
                 lines = [s.strip() for s in aff_clean.split('\n') if s.strip()]
@@ -168,9 +181,9 @@ class ElsevierAuthorStrategy(AuthorBlockStrategy):
                         email_line = line
                     else:
                         plain_lines.append(line)
-                org = plain_lines[0] if plain_lines else aff_clean
-                city = plain_lines[1] if len(plain_lines) > 1 else ''
-                country = plain_lines[2] if len(plain_lines) > 2 else ''
+                org = _escape_latex_text(plain_lines[0] if plain_lines else aff_clean)
+                city = _escape_latex_text(plain_lines[1] if len(plain_lines) > 1 else '')
+                country = _escape_latex_text(plain_lines[2] if len(plain_lines) > 2 else '')
                 kv_parts = [f"organization={{{org}}}"]
                 if city:
                     kv_parts.append(f"city={{{city}}}")
@@ -186,7 +199,7 @@ class ACMAuthorStrategy(AuthorBlockStrategy):
         """Generate author block in ACM format."""
         parts = []
         for author in authors:
-            parts.append(f"\\author{{{author['name']}}}")
+            parts.append(f"\\author{{{_escape_latex_text(author['name'])}}}")
             affs = author.get('affiliations', [])
             if affs:
                 for aff in affs:
@@ -205,21 +218,21 @@ class ACMAuthorStrategy(AuthorBlockStrategy):
                     city_match = re.search(r'\\city\{([^}]*)\}', aff_clean)
                     country_match = re.search(r'\\country\{([^}]*)\}', aff_clean)
 
-                    institution = (
+                    institution = _escape_latex_text((
                         institution_match.group(1).strip()
                         if institution_match and institution_match.group(1).strip()
                         else (plain_lines[0] if plain_lines else 'University')
-                    )
-                    city = (
+                    ))
+                    city = _escape_latex_text((
                         city_match.group(1).strip()
                         if city_match and city_match.group(1).strip()
                         else (plain_lines[1] if len(plain_lines) > 1 else 'Your City')
-                    )
-                    country = (
+                    ))
+                    country = _escape_latex_text((
                         country_match.group(1).strip()
                         if country_match and country_match.group(1).strip()
                         else 'Vietnam'
-                    )
+                    ))
 
                     aff_block = (
                         "\\affiliation{%\n"
@@ -264,7 +277,7 @@ class MDPIAuthorStrategy(AuthorBlockStrategy):
 
         author_parts = []
         for author in authors:
-            name = author['name']
+            name = _escape_latex_text(author['name'])
             insts = []
             for aff in author.get('affiliations', []):
                 lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
@@ -277,13 +290,13 @@ class MDPIAuthorStrategy(AuthorBlockStrategy):
             author_parts.append(name)
         block = "\\Author{" + ", ".join(author_parts) + "}"
 
-        plain_names = [a['name'] for a in authors]
+        plain_names = [_escape_latex_text(a['name']) for a in authors]
         block += "\n\\AuthorNames{" + ", ".join(plain_names) + "}"
 
         if affil_map:
             addr_parts = []
             for aff_text, num in affil_map.items():
-                entry = f"$^{{{num}}}$ \\quad {aff_text}"
+                entry = f"$^{{{num}}}$ \\quad {_escape_latex_text(aff_text)}"
                 email = affil_emails.get(aff_text)
                 if email:
                     entry += f"; {email}"
@@ -302,7 +315,7 @@ class OSCMAuthorStrategy(AuthorBlockStrategy):
         """
         parts = []
         for i, author in enumerate(authors):
-            name = author['name']
+            name = _escape_latex_text(author['name'])
             # Extract affiliation and email from the author's affiliations
             affil_text = ''
             email_text = ''
@@ -316,9 +329,9 @@ class OSCMAuthorStrategy(AuthorBlockStrategy):
                             email_text = line
                     else:
                         if affil_text:
-                            affil_text += '; ' + line
+                            affil_text += '; ' + _escape_latex_text(line)
                         else:
-                            affil_text = line
+                            affil_text = _escape_latex_text(line)
 
             if not affil_text:
                 affil_text = 'Affiliation, Country'
@@ -363,8 +376,8 @@ class JOVAuthorStrategy(AuthorBlockStrategy):
                     address_text = ''
                     
             parts.append(
-                f"\\author{{{family_name}}}{{{first_name}}}"
-                f"{{{affil_text}}}{{{address_text}}}{{}}{{{email_text}}}"
+                f"\\author{{{_escape_latex_text(family_name)}}}{{{_escape_latex_text(first_name)}}}"
+                f"{{{_escape_latex_text(affil_text)}}}{{{_escape_latex_text(address_text)}}}{{}}{{{email_text}}}"
             )
             
         return "\n".join(parts)
@@ -377,11 +390,11 @@ class GenericAuthorStrategy(AuthorBlockStrategy):
         for a in authors:
             for aff in a.get('affiliations', []):
                 if aff.strip() and aff.strip() not in affils:
-                    affils.append(aff.strip())
+                    affils.append(_escape_latex_text(aff.strip()))
         affil_note = ""
         if affils:
             affil_note = "\\thanks{" + "; ".join(affils) + "}"
-        names = [a['name'] for a in authors]
+        names = [_escape_latex_text(a['name']) for a in authors]
         block = "\\author{" + ", ".join(names)
         if affil_note:
             block += " " + affil_note

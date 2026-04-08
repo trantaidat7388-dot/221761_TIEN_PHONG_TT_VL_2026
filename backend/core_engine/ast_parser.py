@@ -1,7 +1,7 @@
 import os
 import re
 import hashlib
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from docx.table import Table
 from docx.text.paragraph import Paragraph
@@ -107,6 +107,68 @@ class WordASTParser:
             if kw in norm:
                 return True
         return False
+
+    def _image_ext_from_content_type(self, content_type: str) -> str:
+        ct = (content_type or '').lower()
+        if 'jpeg' in ct:
+            return 'jpg'
+        if 'x-emf' in ct or ct.endswith('/emf'):
+            return 'emf'
+        if 'x-wmf' in ct or ct.endswith('/wmf'):
+            return 'wmf'
+        if '/' in ct:
+            return ct.split('/')[-1]
+        return 'png'
+
+    def _save_image_from_relationship(self, rel) -> Optional[str]:
+        """Persist image blob and return LaTeX path; convert EMF/WMF to PNG when possible."""
+        try:
+            img_blob = rel.target_part.blob
+            img_ext = self._image_ext_from_content_type(getattr(rel.target_part, 'content_type', ''))
+
+            img_hash = hashlib.md5(img_blob).hexdigest()[:8]
+            if self.thu_muc_anh:
+                os.makedirs(self.thu_muc_anh, exist_ok=True)
+                out_dir = self.thu_muc_anh
+            else:
+                out_dir = ''
+
+            if img_ext in ('emf', 'wmf'):
+                source_name = f"img_{img_hash}.{img_ext}"
+                source_path = os.path.join(out_dir, source_name) if out_dir else source_name
+                if not os.path.exists(source_path):
+                    with open(source_path, "wb") as f:
+                        f.write(img_blob)
+                try:
+                    from PIL import Image
+                    with Image.open(source_path) as img:
+                        png_name = f"img_{img_hash}.png"
+                        png_path = os.path.join(out_dir, png_name) if out_dir else png_name
+                        img.convert("RGBA").save(png_path, format="PNG")
+                    try:
+                        if os.path.exists(source_path):
+                            os.remove(source_path)
+                    except Exception:
+                        pass
+                    final_name = png_name
+                except Exception:
+                    print(f"[WARN] Skip unsupported vector image format: {source_name}")
+                    return None
+            else:
+                final_name = f"img_{img_hash}.{img_ext}"
+                final_path = os.path.join(out_dir, final_name) if out_dir else final_name
+                if not os.path.exists(final_path):
+                    with open(final_path, "wb") as f:
+                        f.write(img_blob)
+
+            ten_thu_muc = os.path.basename(self.thu_muc_anh) if self.thu_muc_anh else ''
+            return f"{ten_thu_muc}/{final_name}" if ten_thu_muc else final_name
+        except Exception:
+            return None
+
+    def _includegraphics_options(self, width_expr: str) -> str:
+        """Use bounded image sizing to preserve layout when source vector crop info is lossy."""
+        return f"width={width_expr},height=0.35\\textheight,keepaspectratio"
         
     def _is_body_label(self, text: str) -> bool:
         norm = re.sub(r"^[\d\.]+\s*", "", text.strip().upper())
@@ -239,24 +301,10 @@ class WordASTParser:
                                 rel = para.part.rels.get(embed)
                                 if not rel:
                                     continue
-                                img_blob = rel.target_part.blob
-                                img_ext = rel.target_part.content_type.split('/')[-1]
-                                if img_ext == 'jpeg': img_ext = 'jpg'
-                                elif img_ext == 'x-emf': img_ext = 'emf'
-
-                                self.dem_anh += 1
-                                img_hash = hashlib.md5(img_blob).hexdigest()[:8]
-                                img_name = f"img_{img_hash}.{img_ext}"
-
-                                if self.thu_muc_anh:
-                                    os.makedirs(self.thu_muc_anh, exist_ok=True)
-                                    img_path = os.path.join(self.thu_muc_anh, img_name)
-                                else:
-                                    img_path = img_name
-
-                                if not os.path.exists(img_path):
-                                    with open(img_path, "wb") as f:
-                                        f.write(img_blob)
+                                latex_path = self._save_image_from_relationship(rel)
+                                if not latex_path:
+                                    continue
+                                img_name = os.path.basename(latex_path)
                                 if img_name not in seen_names:
                                     seen_names.add(img_name)
                                     danh_sach_anh.append(img_name)
@@ -1141,32 +1189,17 @@ class WordASTParser:
                     if r_id:
                         try:
                             rel = p.part.rels[r_id]
-                            img_blob = rel.target_part.blob
-                            img_ext = rel.target_part.content_type.split('/')[-1]
-                            if img_ext == 'jpeg': img_ext = 'jpg'
-                            elif img_ext == 'x-emf': img_ext = 'emf'
-                            
-                            img_hash = hashlib.md5(img_blob).hexdigest()[:8]
-                            img_name = f"img_{img_hash}.{img_ext}"
-                            
-                            if self.thu_muc_anh:
-                                os.makedirs(self.thu_muc_anh, exist_ok=True)
-                                img_path = os.path.join(self.thu_muc_anh, img_name)
-                            else:
-                                img_path = img_name
-                                
-                            if not os.path.exists(img_path):
-                                with open(img_path, "wb") as f:
-                                    f.write(img_blob)
-                            
-                            ten_thu_muc = os.path.basename(self.thu_muc_anh)
-                            latex_path = f"{ten_thu_muc}/{img_name}"
+                            latex_path = self._save_image_from_relationship(rel)
+                            if not latex_path:
+                                return
                             
                             if in_table:
-                                latex_img = f"\n\\begin{{center}}\n\\includegraphics[width=\\linewidth]{{{latex_path}}}\n\\end{{center}}\n"
+                                img_opts = self._includegraphics_options("\\linewidth")
+                                latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                             else:
                                 self.dem_anh += 1
-                                latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[width=0.9\\columnwidth]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                                img_opts = self._includegraphics_options("0.9\\columnwidth")
+                                latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                             text += latex_img
                         except Exception:
                             pass
@@ -1178,29 +1211,12 @@ class WordASTParser:
                     if r_id:
                         try:
                             rel = p.part.rels[r_id]
-                            img_blob = rel.target_part.blob
-                            img_ext = rel.target_part.content_type.split('/')[-1]
-                            
-                            if img_ext == 'jpeg': img_ext = 'jpg'
-                            elif img_ext == 'x-emf': img_ext = 'emf'
-                            
-                            img_hash = hashlib.md5(img_blob).hexdigest()[:8]
-                            img_name = f"img_{img_hash}.{img_ext}"
-                            
-                            if self.thu_muc_anh:
-                                os.makedirs(self.thu_muc_anh, exist_ok=True)
-                                img_path = os.path.join(self.thu_muc_anh, img_name)
-                            else:
-                                img_path = img_name
-                                
-                            if not os.path.exists(img_path):
-                                with open(img_path, "wb") as f:
-                                    f.write(img_blob)
-                            
-                            ten_thu_muc = os.path.basename(self.thu_muc_anh)
-                            latex_path = f"{ten_thu_muc}/{img_name}"
+                            latex_path = self._save_image_from_relationship(rel)
+                            if not latex_path:
+                                return
                             if in_table:
-                                latex_img = f"\n\\begin{{center}}\n\\includegraphics[width=\\linewidth]{{{latex_path}}}\n\\end{{center}}\n"
+                                img_opts = self._includegraphics_options("\\linewidth")
+                                latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                             else:
                                 self.dem_anh += 1
                                 width_ratio = _ty_le_rong_hinh_tu_drawing(node)
@@ -1208,7 +1224,8 @@ class WordASTParser:
                                     width_expr = f"{width_ratio:.3f}\\columnwidth"
                                 else:
                                     width_expr = "0.9\\columnwidth"
-                                latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[width={width_expr}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                                img_opts = self._includegraphics_options(width_expr)
+                                latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                             text += latex_img
                         except Exception:
                             pass
@@ -1218,34 +1235,16 @@ class WordASTParser:
                 if r_id:
                     try:
                         rel = p.part.rels[r_id]
-                        img_blob = rel.target_part.blob
-                        img_ext = rel.target_part.content_type.split('/')[-1]
-
-                        if img_ext == 'jpeg':
-                            img_ext = 'jpg'
-                        elif img_ext == 'x-emf':
-                            img_ext = 'emf'
-
-                        img_hash = hashlib.md5(img_blob).hexdigest()[:8]
-                        img_name = f"img_{img_hash}.{img_ext}"
-
-                        if self.thu_muc_anh:
-                            os.makedirs(self.thu_muc_anh, exist_ok=True)
-                            img_path = os.path.join(self.thu_muc_anh, img_name)
-                        else:
-                            img_path = img_name
-
-                        if not os.path.exists(img_path):
-                            with open(img_path, "wb") as f:
-                                f.write(img_blob)
-
-                        ten_thu_muc = os.path.basename(self.thu_muc_anh)
-                        latex_path = f"{ten_thu_muc}/{img_name}"
+                        latex_path = self._save_image_from_relationship(rel)
+                        if not latex_path:
+                            return
                         if in_table:
-                            latex_img = f"\n\\begin{{center}}\n\\includegraphics[width=\\linewidth]{{{latex_path}}}\n\\end{{center}}\n"
+                            img_opts = self._includegraphics_options("\\linewidth")
+                            latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                         else:
                             self.dem_anh += 1
-                            latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[width=0.9\\columnwidth]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                            img_opts = self._includegraphics_options("0.9\\columnwidth")
+                            latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                         text += latex_img
                     except Exception:
                         pass
@@ -1377,21 +1376,33 @@ class WordASTParser:
                     'colspan': colspan,
                     'vmerge': vmerge,
                     'start': not (vmerge in ('continue', 'cont')),
+                    'col_start': c,
                 }
 
                 for k in range(colspan):
                     if c + k < so_cot:
                         luoi[r][c + k] = cell_id
-                        if (r, c + k) not in meta:
-                            meta[(r, c + k)] = meta[(r, c)]
+                        if k > 0:
+                            # Horizontal merge continuation cells must not be treated
+                            # as independent starts, otherwise content is duplicated.
+                            meta[(r, c + k)] = {
+                                'id': cell_id,
+                                'tc': tc,
+                                'colspan': 1,
+                                'vmerge': vmerge,
+                                'start': False,
+                                'col_start': c,
+                            }
 
                 c += colspan
 
         # Compute rowspan
         rowspan_map = {}
         for (r, c), info in list(meta.items()):
-            if not info.get('start'): continue
-            if meta.get((r, c)) != info: continue
+            if not info.get('start'):
+                continue
+            if info.get('col_start', c) != c:
+                continue
 
             cell_id = info['id']
             rowspan = 1

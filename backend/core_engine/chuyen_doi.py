@@ -1963,8 +1963,15 @@ class ChuyenDoiWordSangLatex:
         template_dir = os.path.dirname(duong_dan_tex_chinh)
         template_name = os.path.basename(duong_dan_tex_chinh)
 
-        if "<< body >>" not in raw_template and "{{ body }}" not in raw_template:
-            print("[*] Template chưa được tag, đang tự động gán tag (TexSoup)...")
+        has_body_tag = "<< body >>" in raw_template or "{{ body }}" in raw_template
+        has_title_tag = "<< metadata.title >>" in raw_template
+        has_author_tag = "<< metadata.author_block >>" in raw_template
+        has_abstract_tag = "<< metadata.abstract >>" in raw_template
+        has_keywords_tag = "<< metadata.keywords_str >>" in raw_template
+
+        needs_autotag = not (has_body_tag and has_title_tag and has_author_tag and has_abstract_tag and has_keywords_tag)
+        if needs_autotag:
+            print("[*] Template thiếu tag metadata/body, đang tự động gán tag (TexSoup)...")
             config = {}
             config_path = os.path.join(template_dir, 'config.json')
             if os.path.exists(config_path):
