@@ -392,7 +392,8 @@ class IEEEWordRenderer:
                 run.italic = True
             return
 
-        # If has equation number, use a 2-column invisible table for more formula width.
+        # If has equation number, use a 2-column invisible table with minimal number column
+        # to maximize usable formula width in IEEE two-column layout.
         parent = anchor_p._p.getparent()
         try:
             temp_table = doc.add_table(rows=1, cols=2)
@@ -400,8 +401,8 @@ class IEEEWordRenderer:
             temp_table = doc.add_table(rows=1, cols=2, width=Inches(3.3))
 
         col_width = self._get_current_column_width_inch(doc)
-        number_width = 0.42
-        equation_width = max(2.4, col_width - number_width)
+        number_width = 0.28
+        equation_width = max(2.8, col_width - number_width)
         temp_table.columns[0].width = Inches(equation_width)
         temp_table.columns[1].width = Inches(number_width)
 
@@ -1138,8 +1139,8 @@ class IEEEWordRenderer:
         if eq_num:
             temp_table = doc.add_table(rows=1, cols=2)
             col_width = self._get_current_column_width_inch(doc)
-            number_width = 0.42
-            equation_width = max(2.4, col_width - number_width)
+            number_width = 0.28
+            equation_width = max(2.8, col_width - number_width)
             temp_table.columns[0].width = Inches(equation_width)
             temp_table.columns[1].width = Inches(number_width)
             try:
@@ -1518,6 +1519,9 @@ class IEEEWordRenderer:
     def _latex_math_to_readable(self, math_text: str) -> str:
         """Convert LaTeX math notation to readable Unicode-ish text."""
         s = math_text
+        # Remove common LaTeX line-break/alignment markers to avoid unintended Word wrapping.
+        s = s.replace("\\\\", " ")
+        s = s.replace("&", " ")
         # Common replacements
         replacements = [
             (r"\\frac\{1\}\{2\}", "½"),
