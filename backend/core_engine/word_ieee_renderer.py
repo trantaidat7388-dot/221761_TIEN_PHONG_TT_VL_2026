@@ -382,6 +382,8 @@ class IEEEWordRenderer:
                 except Exception:
                     clean = re.sub(r"«OMML:([A-Za-z0-9+/=]+)»", "", raw_text)
                     run = p.add_run(self._latex_math_to_readable(clean).strip())
+                    run.font.name = "Times New Roman"
+                    run.font.size = self._equation_font_size_for_text(run.text)
                     run.italic = True
             else:
                 clean = re.sub(r"\\begin\{equation\*?\}", "", raw_text)
@@ -389,6 +391,8 @@ class IEEEWordRenderer:
                 clean = re.sub(r"\\\[", "", clean)
                 clean = re.sub(r"\\\]", "", clean)
                 run = p.add_run(self._latex_math_to_readable(clean).strip())
+                run.font.name = "Times New Roman"
+                run.font.size = self._equation_font_size_for_text(run.text)
                 run.italic = True
             return
 
@@ -432,6 +436,8 @@ class IEEEWordRenderer:
             except Exception:
                 clean = re.sub(r"«OMML:([A-Za-z0-9+/=]+)»", "", raw_text)
                 run = p_eq.add_run(self._latex_math_to_readable(clean).strip())
+                run.font.name = "Times New Roman"
+                run.font.size = self._equation_font_size_for_text(run.text)
                 run.italic = True
         else:
              clean = re.sub(r"\\begin\{equation\*?\}", "", raw_text)
@@ -440,6 +446,8 @@ class IEEEWordRenderer:
              clean = re.sub(r"\\\[", "", clean)
              clean = re.sub(r"\\\]", "", clean)
              run = p_eq.add_run(self._latex_math_to_readable(clean).strip())
+             run.font.name = "Times New Roman"
+             run.font.size = self._equation_font_size_for_text(run.text)
              run.italic = True
 
         # Second cell: number
@@ -1166,12 +1174,12 @@ class IEEEWordRenderer:
                     if clean:
                         run = p_eq.add_run(clean)
                         run.font.name = "Times New Roman"
-                        run.font.size = Pt(10)
+                        run.font.size = self._equation_font_size_for_text(clean)
                         run.italic = True
             elif clean:
                 run = p_eq.add_run(clean)
                 run.font.name = "Times New Roman"
-                run.font.size = Pt(10)
+                run.font.size = self._equation_font_size_for_text(clean)
                 run.italic = True
 
             p_num = temp_table.cell(0, 1).paragraphs[0]
@@ -1194,12 +1202,12 @@ class IEEEWordRenderer:
                 if clean:
                     run = p.add_run(clean)
                     run.font.name = "Times New Roman"
-                    run.font.size = Pt(10)
+                    run.font.size = self._equation_font_size_for_text(clean)
                     run.italic = True
         elif clean:
             run = p.add_run(clean)
             run.font.name = "Times New Roman"
-            run.font.size = Pt(10)
+            run.font.size = self._equation_font_size_for_text(clean)
             run.italic = True
 
     # ========================================================================
@@ -1556,6 +1564,15 @@ class IEEEWordRenderer:
         s = s.replace("{", "").replace("}", "")
         s = re.sub(r"\s+", " ", s).strip()
         return s
+
+    def _equation_font_size_for_text(self, equation_text: str):
+        """Adaptive equation font size to reduce wrapping for long formulas."""
+        length = len((equation_text or "").strip())
+        if length >= 110:
+            return Pt(8)
+        if length >= 80:
+            return Pt(9)
+        return Pt(10)
 
     def _to_superscript(self, text: str) -> str:
         """Convert text to Unicode superscript where possible."""
