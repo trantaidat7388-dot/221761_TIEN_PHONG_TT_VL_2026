@@ -791,17 +791,49 @@ class IEEEWordRenderer:
         if not author_blocks:
             return
 
-        # Determine column count (IEEE: max 3 per row)
-        cols = min(3, max(1, len(author_blocks)))
+        # Determine IEEE-like author grid:
+        # - up to 3 authors: single row, natural columns
+        # - 4+ authors: 3 columns; trailing row with 1 author is centered
+        if len(author_blocks) <= 3:
+            cols = max(1, len(author_blocks))
+        else:
+            cols = 3
 
         # Always use invisible-bordered table (it prevents continuous section break layout issues)
         rows_count = (len(author_blocks) + cols - 1) // cols
         table = doc.add_table(rows=rows_count, cols=cols)
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
+        # Build placement positions (row, col) for each author block.
+        positions: list[tuple[int, int]] = []
+        total = len(author_blocks)
+        if cols < 3:
+            for idx in range(total):
+                positions.append((idx // cols, idx % cols))
+        else:
+            first_row_count = min(3, total)
+            for i in range(first_row_count):
+                positions.append((0, i))
+
+            remaining = total - first_row_count
+            offset = 0
+            row = 1
+            while remaining > 0:
+                row_count = min(3, remaining)
+                if row_count == 1:
+                    row_cols = [1]   # center single trailing author
+                elif row_count == 2:
+                    row_cols = [0, 2]  # visually centered pair
+                else:
+                    row_cols = [0, 1, 2]
+                for c in row_cols:
+                    positions.append((row, c))
+                remaining -= row_count
+                offset += row_count
+                row += 1
+
         for idx, block in enumerate(author_blocks):
-            r = idx // cols
-            c = idx % cols
+            r, c = positions[idx]
             cell = table.cell(r, c)
             cell.text = ""
             name_text = str(block.get("name") or "")
