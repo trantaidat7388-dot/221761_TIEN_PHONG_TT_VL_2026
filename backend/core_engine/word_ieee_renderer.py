@@ -661,9 +661,11 @@ class IEEEWordRenderer:
                 pass
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run(self._latex_to_plain(title))
-        run.bold = True
-        run.font.name = "Times New Roman"
-        run.font.size = Pt(24)
+        # With uploaded IEEE templates, preserve style-defined typography to stay close to IEEEtran output.
+        if not self._using_uploaded_template:
+            run.bold = True
+            run.font.name = "Times New Roman"
+            run.font.size = Pt(24)
 
     def _add_abstract_and_keywords(self, doc: Document, metadata: Dict[str, Any]) -> None:
         abstract = self._latex_to_plain(metadata.get("abstract") or "")
@@ -676,21 +678,8 @@ class IEEEWordRenderer:
                     p.style = abs_style
                 except Exception:
                     pass
-                # IEEE Abstract style: "Abstract—" prefix, italic body
-                run_label = p.add_run("Abstract")
-                run_label.bold = True
-                run_label.italic = True
-                run_label.font.name = "Times New Roman"
-                run_label.font.size = Pt(9)
-                run_dash = p.add_run("—")
-                run_dash.bold = True
-                run_dash.italic = True
-                run_dash.font.name = "Times New Roman"
-                run_dash.font.size = Pt(9)
-                run_body = p.add_run(abstract)
-                run_body.italic = True
-                run_body.font.name = "Times New Roman"
-                run_body.font.size = Pt(9)
+                # Keep template typography; only inject semantic text.
+                p.add_run(f"Abstract—{abstract}")
             else:
                 p = doc.add_paragraph(f"Abstract—{abstract}")
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -707,20 +696,7 @@ class IEEEWordRenderer:
                     p.style = kw_style
                 except Exception:
                     pass
-                run_label = p.add_run("Keywords")
-                run_label.bold = True
-                run_label.italic = True
-                run_label.font.name = "Times New Roman"
-                run_label.font.size = Pt(9)
-                run_dash = p.add_run("—")
-                run_dash.bold = True
-                run_dash.italic = True
-                run_dash.font.name = "Times New Roman"
-                run_dash.font.size = Pt(9)
-                run_body = p.add_run(f"{kw}.")
-                run_body.italic = True
-                run_body.font.name = "Times New Roman"
-                run_body.font.size = Pt(9)
+                p.add_run(f"Keywords—{kw}.")
             else:
                 p = doc.add_paragraph(f"Index Terms—{kw}.")
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -849,11 +825,12 @@ class IEEEWordRenderer:
 
             if name_text:
                 self._add_rich_runs(p_name, name_text)
-                for run in p_name.runs:
-                    run.font.name = "Times New Roman"
-                    run.font.size = Pt(11)
-                    run.bold = False
-                    run.italic = False
+                if not self._using_uploaded_template:
+                    for run in p_name.runs:
+                        run.font.name = "Times New Roman"
+                        run.font.size = Pt(10)
+                        run.bold = False
+                        run.italic = False
 
             for line in lines:
                 p_aff = cell.add_paragraph(line)
@@ -863,10 +840,11 @@ class IEEEWordRenderer:
                         p_aff.style = author_style
                     except Exception:
                         pass
-                for run in p_aff.runs:
-                    run.font.name = "Times New Roman"
-                    run.font.size = Pt(9)
-                    run.italic = False
+                if not self._using_uploaded_template:
+                    for run in p_aff.runs:
+                        run.font.name = "Times New Roman"
+                        run.font.size = Pt(8)
+                        run.italic = False
 
         # Hide borders
         try:
