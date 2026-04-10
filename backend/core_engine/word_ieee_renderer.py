@@ -743,15 +743,35 @@ class IEEEWordRenderer:
         author_style = self._pick_style_name(["Author", "author"])
 
         # Build author paragraph text blocks
+        used_emails: set[str] = set()
         author_blocks: list[Dict[str, List[str] | str]] = []
         for author in authors:
             name = self._clean_author_name(str(author.get("name") or ""))
-            affs = [
+            raw_affs = [
                 self._latex_to_plain(str(x)).strip()
                 for x in (author.get("affiliations") or [])
                 if str(x).strip() and str(x).strip() not in {"*", "†", "‡"}
             ]
-            email = self._latex_to_plain(str(author.get("email") or "")).strip()
+            explicit_email = self._latex_to_plain(str(author.get("email") or "")).strip()
+
+            # Split affiliation and email candidates (some sources put all authors' emails into affiliations).
+            email_candidates: list[str] = []
+            affs: list[str] = []
+            for line in raw_affs:
+                if self._looks_like_email(line):
+                    email_candidates.append(line)
+                else:
+                    affs.append(line)
+
+            # Keep affiliation compact in IEEE author row (avoid long repeated blocks).
+            affs = affs[:2]
+
+            email = explicit_email if self._looks_like_email(explicit_email) else ""
+            if not email:
+                email = self._pick_best_email_for_author(name, email_candidates, used_emails)
+            if email:
+                used_emails.add(email.lower())
+
             lines = []
             if name:
                 lines.append(name)
@@ -832,6 +852,33 @@ class IEEEWordRenderer:
             pass
 
         doc.add_paragraph("")
+
+    def _looks_like_email(self, text: str) -> bool:
+        return bool(re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", (text or "").strip()))
+
+    def _pick_best_email_for_author(self, author_name: str, candidates: List[str], used_emails: set[str]) -> str:
+        """Pick one likely email for an author from pooled candidates without reusing the same email."""
+        clean_candidates = [c.strip() for c in candidates if self._looks_like_email(c)]
+        if not clean_candidates:
+            return ""
+
+        tokens = [t.lower() for t in re.findall(r"[A-Za-z]+", author_name or "") if len(t) >= 3]
+
+        # Prefer candidate whose local-part matches any author token and is not already used.
+        for c in clean_candidates:
+            key = c.lower()
+            if key in used_emails:
+                continue
+            local = key.split("@", 1)[0]
+            if any(t in local for t in tokens):
+                return c
+
+        # Fallback to first non-used candidate.
+        for c in clean_candidates:
+            if c.lower() not in used_emails:
+                return c
+
+        return ""
 
     def _clean_author_name(self, raw_name: str) -> str:
         text = (raw_name or "").strip()
