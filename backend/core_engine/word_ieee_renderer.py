@@ -29,7 +29,7 @@ from lxml import etree
 from docx import Document
 from docx.enum.section import WD_SECTION
 from docx.enum.section import WD_ORIENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.shared import Inches, Pt, Cm, RGBColor
 from docx.oxml.ns import qn
@@ -401,8 +401,20 @@ class IEEEWordRenderer:
                 run.italic = True
             return
 
-        # If has equation number, use a 2-column invisible table with minimal number column
-        # to maximize usable formula width in IEEE two-column layout.
+        # For plain-text LaTeX equations, use IEEE tab-stop layout to keep equation centered
+        # and number right-aligned without table artifacts.
+        if not omml_match:
+            clean = re.sub(r"\\begin\{equation\*?\}", "", raw_text)
+            clean = re.sub(r"\\end\{equation\*?\}", "", clean)
+            clean = re.sub(r"\\tag\{([^}]*)\}", "", clean)
+            clean = re.sub(r"\\\[", "", clean)
+            clean = re.sub(r"\\\]", "", clean)
+            eq_text = self._latex_math_to_readable(clean).strip()
+            p = anchor_p.insert_paragraph_before()
+            self._apply_ieee_equation_tab_layout(p, doc, eq_text, eq_num)
+            return
+
+        # OMML equations keep table-based layout for robust math XML embedding.
         parent = anchor_p._p.getparent()
         try:
             temp_table = doc.add_table(rows=1, cols=2)
@@ -1156,6 +1168,12 @@ class IEEEWordRenderer:
         clean = self._latex_math_to_readable(clean).strip()
 
         if eq_num:
+            if not omml_match:
+                p = doc.add_paragraph()
+                self._apply_ieee_equation_tab_layout(p, doc, clean, eq_num)
+                doc.add_paragraph("")
+                return
+
             temp_table = doc.add_table(rows=1, cols=2)
             col_width = self._get_current_column_width_inch(doc)
             number_width = 0.34
@@ -1827,12 +1845,10 @@ class IEEEWordRenderer:
 
         cols = int(node.get("cols", 1) or 1)
         # Prefer full-width earlier so multi-column tables are easier to read.
-        if cols >= 4:
+        if cols >= 3:
             if required_width <= full_width * 1.20:
                 return "full"
             return "landscape"
-        if cols == 3 and required_width > single_col_width * 0.92:
-            return "full"
 
         # Keep very small tables in-column.
         if cols <= 3 and required_width <= single_col_width * 1.35:
@@ -1848,6 +1864,27 @@ class IEEEWordRenderer:
         if cols <= 5 and required_width <= full_width * 1.35:
             return "full"
         return "landscape"
+
+    def _apply_ieee_equation_tab_layout(self, paragraph, doc: Document, eq_text: str, eq_num: str) -> None:
+        """Apply IEEE-style equation layout: centered equation + right equation number."""
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        paragraph.paragraph_format.space_before = Pt(6)
+        paragraph.paragraph_format.space_after = Pt(6)
+
+        col_width = self._get_current_column_width_inch(doc)
+        tab_stops = paragraph.paragraph_format.tab_stops
+        tab_stops.add_tab_stop(Inches(max(1.4, col_width * 0.50)), WD_TAB_ALIGNMENT.CENTER)
+        tab_stops.add_tab_stop(Inches(max(2.6, col_width)), WD_TAB_ALIGNMENT.RIGHT)
+
+        run = paragraph.add_run("\t" + (eq_text or ""))
+        run.font.name = "Times New Roman"
+        run.font.size = self._equation_font_size_for_text(eq_text)
+        run.italic = True
+
+        if eq_num:
+            run_num = paragraph.add_run("\t" + eq_num)
+            run_num.font.name = "Times New Roman"
+            run_num.font.size = Pt(10)
 
     def _set_cell_no_wrap(self, cell) -> None:
         """Prevent Word from wrapping equation text inside a narrow table cell."""
