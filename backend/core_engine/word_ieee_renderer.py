@@ -367,7 +367,12 @@ class IEEEWordRenderer:
         # Check for OMML marker first
         omml_match = re.search(r"«OMML:([A-Za-z0-9+/=]+)»", raw_text)
         tag_match = re.search(r"\\tag\{([^}]*)\}", raw_text)
-        eq_num = f"({tag_match.group(1)})" if tag_match else ""
+        if tag_match:
+            # Normalize tag content to avoid hidden newlines that break as "(1" then ")".
+            tag_text = re.sub(r"\s+", "", tag_match.group(1) or "")
+            eq_num = f"({tag_text})" if tag_text else ""
+        else:
+            eq_num = ""
 
         if not eq_num:
             # Fallback to simple paragraph if no equation number
@@ -405,7 +410,7 @@ class IEEEWordRenderer:
             temp_table = doc.add_table(rows=1, cols=2, width=Inches(3.3))
 
         col_width = self._get_current_column_width_inch(doc)
-        number_width = 0.22
+        number_width = 0.34
         equation_width = max(2.8, col_width - number_width)
         temp_table.columns[0].width = Inches(equation_width)
         temp_table.columns[1].width = Inches(number_width)
@@ -453,9 +458,10 @@ class IEEEWordRenderer:
 
         # Second cell: number
         cell_num = temp_table.cell(0, 1)
+        self._set_cell_no_wrap(cell_num)
         p_num = cell_num.paragraphs[0]
         p_num.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        p_num.paragraph_format.space_before = Pt(6)
+        p_num.paragraph_format.space_before = Pt(0)
         run_num = p_num.add_run(eq_num)
         run_num.font.name = "Times New Roman"
         run_num.font.size = Pt(10)
@@ -1134,7 +1140,11 @@ class IEEEWordRenderer:
         
         # Determine the equation number (tag) if present
         tag_match = re.search(r"\\tag\{([^}]*)\}", raw_text)
-        eq_num = f"({tag_match.group(1)})" if tag_match else ""
+        if tag_match:
+            tag_text = re.sub(r"\s+", "", tag_match.group(1) or "")
+            eq_num = f"({tag_text})" if tag_text else ""
+        else:
+            eq_num = ""
 
         clean = raw_text
         clean = re.sub(r"«OMML:([A-Za-z0-9+/=]+)»", "", clean)
@@ -1148,7 +1158,7 @@ class IEEEWordRenderer:
         if eq_num:
             temp_table = doc.add_table(rows=1, cols=2)
             col_width = self._get_current_column_width_inch(doc)
-            number_width = 0.22
+            number_width = 0.34
             equation_width = max(2.8, col_width - number_width)
             temp_table.columns[0].width = Inches(equation_width)
             temp_table.columns[1].width = Inches(number_width)
@@ -1185,7 +1195,9 @@ class IEEEWordRenderer:
                 run.italic = True
 
             p_num = temp_table.cell(0, 1).paragraphs[0]
+            self._set_cell_no_wrap(temp_table.cell(0, 1))
             p_num.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            p_num.paragraph_format.space_before = Pt(0)
             run_num = p_num.add_run(eq_num)
             run_num.font.name = "Times New Roman"
             run_num.font.size = Pt(10)
