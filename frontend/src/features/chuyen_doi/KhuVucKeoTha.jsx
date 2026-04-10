@@ -29,7 +29,7 @@ const KhuVucKeoTha = ({
     if (rejectedFiles.length > 0) {
       const loi = rejectedFiles[0].errors[0]
       if (loi.code === 'file-invalid-type') {
-        onChonFile(null, 'Chi chap nhan file .doc, .docx hoac .docm')
+        onChonFile(null, 'Chi chap nhan file .docx hoac .docm')
       } else if (loi.code === 'file-too-large') {
         onChonFile(null, 'File quá lớn (tối đa 10MB)')
       }
@@ -44,8 +44,7 @@ const KhuVucKeoTha = ({
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      // Chap nhan file Word legacy (.doc) va OpenXML (.docx/.docm)
-      'application/msword': ['.doc'],
+      // Chap nhan file Word OpenXML (.docx/.docm)
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
       'application/vnd.ms-word.document.macroEnabled.12': ['.docm']
     },
@@ -136,7 +135,7 @@ const KhuVucKeoTha = ({
                 <div className="flex items-center gap-4 text-xs text-white/40">
                   <span className="flex items-center gap-1">
                     <FileText className="w-4 h-4" />
-                    Chap nhan .doc / .docx / .docm
+                    Chap nhan .docx / .docm
                   </span>
                   <span>•</span>
                   <span>Tối đa 10MB</span>

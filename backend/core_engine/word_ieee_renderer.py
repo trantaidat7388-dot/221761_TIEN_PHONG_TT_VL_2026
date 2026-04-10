@@ -29,7 +29,7 @@ from lxml import etree
 from docx import Document
 from docx.enum.section import WD_SECTION
 from docx.enum.section import WD_ORIENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_BREAK
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.shared import Inches, Pt, Cm, RGBColor
 from docx.oxml.ns import qn
@@ -748,21 +748,19 @@ class IEEEWordRenderer:
             if email:
                 used_emails.add(email.lower())
 
-            lines = []
+            org1 = ""
+            org2 = ""
+            city_country = ""
+            if affs:
+                org1, city_country = self._split_org_city_from_affiliation(affs[0])
+                if len(affs) > 1:
+                    org2 = affs[1]
+
+            # IEEE-like fixed profile lines under name to keep columns visually aligned.
+            profile_lines = [org1, org2, city_country, email]
+
             if name:
-                lines.append(name)
-            lines.extend(affs)
-            if email:
-                lines.append(email)
-            deduped: list[str] = []
-            seen = set()
-            for line in lines:
-                key = line.lower().strip()
-                if key and key not in seen:
-                    seen.add(key)
-                    deduped.append(line)
-            if deduped:
-                author_blocks.append({"name": deduped[0], "lines": deduped[1:]})
+                author_blocks.append({"name": name, "lines": profile_lines})
 
         if not author_blocks:
             return
@@ -815,36 +813,32 @@ class IEEEWordRenderer:
             name_text = str(block.get("name") or "")
             lines = [str(x) for x in (block.get("lines") or []) if str(x).strip()]
 
-            p_name = cell.paragraphs[0]
-            p_name.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            # IEEE template expects one Author-style paragraph per author block,
+            # with line breaks inside (not multiple paragraphs), otherwise spacing gets too loose.
+            p_block = cell.paragraphs[0]
+            p_block.alignment = WD_ALIGN_PARAGRAPH.CENTER
             if author_style:
                 try:
-                    p_name.style = author_style
+                    p_block.style = author_style
                 except Exception:
                     pass
 
+            block_lines: List[str] = []
             if name_text:
-                self._add_rich_runs(p_name, name_text)
-                if not self._using_uploaded_template:
-                    for run in p_name.runs:
-                        run.font.name = "Times New Roman"
-                        run.font.size = Pt(10)
-                        run.bold = False
-                        run.italic = False
+                block_lines.append(name_text)
+            block_lines.extend(lines)
 
-            for line in lines:
-                p_aff = cell.add_paragraph(line)
-                p_aff.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                if author_style:
-                    try:
-                        p_aff.style = author_style
-                    except Exception:
-                        pass
-                if not self._using_uploaded_template:
-                    for run in p_aff.runs:
-                        run.font.name = "Times New Roman"
-                        run.font.size = Pt(8)
-                        run.italic = False
+            for i, line in enumerate(block_lines):
+                run = p_block.add_run(line)
+                if self._using_uploaded_template:
+                    # Keep template's base font sizing; only keep affiliation lines italic like sample.
+                    run.italic = i in (1, 2)
+                else:
+                    run.font.name = "Times New Roman"
+                    run.font.size = Pt(10 if i == 0 else 8)
+                    run.italic = i in (1, 2)
+                if i < len(block_lines) - 1:
+                    run.add_break(WD_BREAK.LINE)
 
         # Hide borders
         try:
@@ -889,6 +883,21 @@ class IEEEWordRenderer:
                 return c
 
         return ""
+
+    def _split_org_city_from_affiliation(self, affiliation: str) -> Tuple[str, str]:
+        """Split affiliation into organization and city-country segments for IEEE author lines."""
+        text = (affiliation or "").strip()
+        if not text:
+            return "", ""
+
+        parts = [p.strip() for p in text.split(",") if p.strip()]
+        if len(parts) >= 3:
+            org = parts[0]
+            city_country = ", ".join(parts[1:])
+            return org, city_country
+        if len(parts) == 2:
+            return parts[0], parts[1]
+        return text, ""
 
     def _clean_author_name(self, raw_name: str) -> str:
         text = (raw_name or "").strip()
@@ -1906,8 +1915,16 @@ class IEEEWordRenderer:
         if cols <= 3:
             return "column"
 
-        # Prefer full-width for genuinely wider multi-column tables.
-        if cols >= 4:
+        # 4-column tables: try hard to keep in one column first, avoid oversized look.
+        if cols == 4:
+            if required_width <= single_col_width * 1.35:
+                return "column"
+            if required_width <= full_width * 1.08:
+                return "full"
+            return "landscape"
+
+        # 5+ columns: prefer full-width for genuinely wider tables.
+        if cols >= 5:
             if required_width <= full_width * 1.20:
                 return "full"
             return "landscape"

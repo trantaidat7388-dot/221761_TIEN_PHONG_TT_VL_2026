@@ -337,19 +337,44 @@ class WordASTParser:
         """Bắt caption thật của bảng từ paragraph ngay phía TRÊN (idx - 1).
         Ported from ChuyenDoiWordSangLatex.bat_caption_bang()."""
         try:
-            idx_truoc = idx - 1
-            if idx_truoc < 0 or idx_truoc >= len(elements):
+            idx_prev = idx - 1
+            if idx_prev < 0 or idx_prev >= len(elements):
                 return None
-            loai, phan_tu = elements[idx_truoc]
-            if loai != 'paragraph':
+
+            loai_prev, para_prev = elements[idx_prev]
+            if loai_prev != 'paragraph':
                 return None
-            text = phan_tu.text.strip()
-            if not text:
+
+            text_prev = para_prev.text.strip()
+            if not text_prev:
                 return None
-            if re.match(r'^(BẢNG|BANG|TABLE)\b', text, re.IGNORECASE):
-                used_nodes.add(idx_truoc)
-                caption_text = self._chuan_hoa_ten_caption(text, kind='table')
+
+            # Two-line IEEE table caption support:
+            #   TABLE II
+            #   AVERAGE OF ...
+            # Prefer the descriptive line and consume the label line.
+            idx_prev2 = idx - 2
+            text_prev2 = ""
+            if idx_prev2 >= 0:
+                loai_prev2, para_prev2 = elements[idx_prev2]
+                if loai_prev2 == 'paragraph':
+                    text_prev2 = para_prev2.text.strip()
+
+            is_prev_table_line = bool(re.match(r'^(BẢNG|BANG|TABLE)\b', text_prev, re.IGNORECASE))
+            is_prev2_table_label = bool(re.match(r'^(BẢNG|BANG|TABLE)\s*[IVXLCDM\d]+\s*$', text_prev2, re.IGNORECASE))
+
+            if is_prev_table_line:
+                used_nodes.add(idx_prev)
+                if is_prev2_table_label:
+                    used_nodes.add(idx_prev2)
+                caption_text = self._chuan_hoa_ten_caption(text_prev, kind='table')
                 return caption_text
+
+            # Fallback: previous line is plain caption title and line before is TABLE label.
+            if text_prev and is_prev2_table_label:
+                used_nodes.add(idx_prev)
+                used_nodes.add(idx_prev2)
+                return self._chuan_hoa_ten_caption(text_prev, kind='table')
         except Exception as e:
             print(f"[Cảnh báo] _bat_caption_bang: {e}")
         return None
@@ -491,6 +516,14 @@ class WordASTParser:
         """State machine to classify elements into Metadata vs Body nodes."""
         print(f"[*] _build_semantic_tree: Processing {len(elements)} elements")
         state = "pre_title"
+
+        def _la_style_heading(style_name: str) -> bool:
+            s = (style_name or "").strip().lower()
+            if not s:
+                return False
+            if s.startswith("heading") or s.startswith("head"):
+                return True
+            return s in {"heading1", "heading2", "heading3", "heading4", "headings", "referencehead"}
         
         # Temp buffers for metadata
         title_buf = []
@@ -512,6 +545,18 @@ class WordASTParser:
                         text = prev_el.text.strip()
                         if text and re.match(r'^(BẢNG|BANG|TABLE)\b', text, re.IGNORECASE):
                             used_nodes.add(idx - 1)
+                        else:
+                            # Two-line table caption pattern:
+                            # line N-2: "TABLE I"
+                            # line N-1: "DATASET FEATURES ..."
+                            if idx > 1:
+                                prev2_type, prev2_el = elements[idx - 2]
+                                if prev2_type == 'paragraph':
+                                    text2 = prev2_el.text.strip()
+                                    if text2 and re.match(r'^(BẢNG|BANG|TABLE)\s+[IVXLCDM\d]+\s*[:.\-]?\s*$', text2, re.IGNORECASE):
+                                        used_nodes.add(idx - 2)
+                                        if text:
+                                            used_nodes.add(idx - 1)
             if etype == 'paragraph':
                 # Check if this paragraph has images (look for drawings/blips or vml/imagedata)
                 has_img = bool(element._p.findall(f'.//{{{A_NAMESPACE}}}blip')) or bool(element._p.findall(r'.//{urn:schemas-microsoft-com:vml}imagedata'))
@@ -578,7 +623,7 @@ class WordASTParser:
                         or style_name.lower() in ("authors", "author", "authorsblock")
                     ):
                         state = "authors"
-                    elif self._is_body_label(text) or prediction == "HEADING" or style_name.startswith("Heading"):
+                    elif self._is_body_label(text) or prediction == "HEADING" or _la_style_heading(style_name):
                         state = "body"
                 
                 # State-specific transition checks (to exit current state)
@@ -587,7 +632,7 @@ class WordASTParser:
                         state = "title"
                     elif self._is_abstract_label(text) or prediction == "ABSTRACT" or style_name == "Abstract":
                         state = "abstract"
-                    elif self._is_body_label(text) or prediction == "HEADING" or style_name.startswith("Heading"):
+                    elif self._is_body_label(text) or prediction == "HEADING" or _la_style_heading(style_name):
                         state = "body"
                     elif (len(text) > 250 or prediction == "AUTHOR" or style_name in ("Authors", "AuthorsBlock", "Author") or self._is_authors_label(text)):
                         state = "authors"
@@ -595,7 +640,7 @@ class WordASTParser:
                 elif state == "authors":
                     if (self._is_abstract_label(text) or prediction == "ABSTRACT" or style_name == "Abstract" or
                         self._is_keywords_label(text) or prediction == "KEYWORDS" or style_name in ("KeyWords", "Keywords", "CCSCONCEPTS") or
-                        self._is_body_label(text) or prediction == "HEADING" or style_name.startswith("Heading") or
+                        self._is_body_label(text) or prediction == "HEADING" or _la_style_heading(style_name) or
                         (style_name in ("BodyText", "Body Text", "Normal") and len(text) > 100)):
                         
                         if self._is_abstract_label(text) or prediction == "ABSTRACT" or style_name == "Abstract":
@@ -607,7 +652,7 @@ class WordASTParser:
 
                 elif state == "abstract":
                     if (self._is_keywords_label(text) or prediction == "KEYWORDS" or style_name in ("KeyWords", "Keywords", "CCSCONCEPTS") or
-                        self._is_body_label(text) or prediction == "HEADING" or style_name.startswith("Heading")):
+                        self._is_body_label(text) or prediction == "HEADING" or _la_style_heading(style_name)):
                         
                         if self._is_keywords_label(text) or prediction == "KEYWORDS" or style_name in ("KeyWords", "Keywords", "CCSCONCEPTS"):
                             state = "keywords"
@@ -615,7 +660,20 @@ class WordASTParser:
                             state = "body"
 
                 elif state == "keywords":
-                    if (self._is_body_label(text) or prediction == "HEADING" or style_name.startswith("Heading")):
+                    keyword_overflow = (
+                        len(text) > 140 and
+                        (len(text.split()) > 20 or '.' in text)
+                    )
+
+                    if keyword_overflow:
+                        # Some IEEE docs merge the first body paragraph into keywords line.
+                        # Stop metadata capture and keep this paragraph as body content.
+                        state = "body"
+                        node = self._parse_paragraph(element)
+                        self.ir["body"].append(node)
+                        continue
+
+                    if (self._is_body_label(text) or prediction == "HEADING" or _la_style_heading(style_name)):
                         state = "body"
 
                 # From body (or any state): detect references section
@@ -669,6 +727,10 @@ class WordASTParser:
                     if clean_text:
                         keywords_buf.append(loc_ky_tu(clean_text))
                 elif state == "body" or (has_img_para and state != "references"):
+                    # Suppress orphan table labels that are part of captions and should not become body text.
+                    if re.match(r'^\s*(?:BẢNG|BANG|TABLE)\s+[IVXLCDM\d]+\s*[:.\-]?\s*$', text, re.IGNORECASE):
+                        continue
+
                     node = self._parse_paragraph(element)
                     node_text = node.get('text', '')
                     # Post-process: nếu paragraph chứa standalone figure, tìm caption phía dưới
@@ -785,7 +847,26 @@ class WordASTParser:
         self.ir["metadata"]["authors"] = parsed_authors
         self.ir["metadata"]["author_block"] = ""  # Will be generated by renderer based on template class
         self.ir["metadata"]["abstract"] = "\n\n".join(abstract_buf).strip()
-        kw_list = [k.strip() for k in " ".join(keywords_buf).replace(";", ",").split(",") if k.strip()]
+        kw_candidates = [k.strip() for k in " ".join(keywords_buf).replace(";", ",").split(",") if k.strip()]
+        kw_list = []
+        for kw in kw_candidates:
+            clean_kw = re.sub(r"^(Additional Keywords and Phrases:|Keywords?\s*[:\-–]|Index Terms:|Từ khóa:)\s*", "", kw, flags=re.IGNORECASE).strip()
+            clean_kw = re.sub(r"^[\-–—,;:.\s]+", "", clean_kw)
+            clean_kw = re.sub(r"[\-–—,;:.\s]+$", "", clean_kw)
+            clean_kw = clean_kw.strip("\"'`“”‘’")
+            if not clean_kw:
+                continue
+            if re.search(r"\b(first\s+section|a\s+subsection|references?|acknowledg|table\s+\d|fig\.?\s*\d)\b", clean_kw, re.IGNORECASE):
+                continue
+            if len(clean_kw) > 80:
+                continue
+            if len(clean_kw.split()) > 7:
+                continue
+            kw_list.append(clean_kw)
+
+        # De-duplicate while preserving order.
+        seen_kw = set()
+        kw_list = [k for k in kw_list if not (k.lower() in seen_kw or seen_kw.add(k.lower()))]
         self.ir["metadata"]["keywords"] = kw_list
         self.ir["metadata"]["keywords_str"] = ", ".join(kw_list)
         self.ir["metadata"]["total_formulas"] = self.total_formulas
@@ -907,9 +988,16 @@ class WordASTParser:
             affil_keywords = [
                 '@', 'university', 'institute', 'dept', 'faculty', 'ltd',
                 'department', 'school', 'lab', 'center', 'organization',
-                'city', 'country', 'affiliation', 'vietnam', 'viet nam', 'việt nam'
+                'city', 'country', 'affiliation', 'vietnam', 'viet nam', 'việt nam',
+                'princeton', 'heidelberg', 'germany', 'usa', 'tiergartenstr', 'street', 'road'
             ]
-            return any(kw in t for kw in affil_keywords)
+            if any(kw in t for kw in affil_keywords):
+                return True
+            if re.search(r'\b\d{3,}\b', t):
+                return True
+            if re.search(r'\b(nj|ca|tx|ny|uk|us)\b', t):
+                return True
+            return False
 
         def _looks_like_ieee_membership_suffix(text: str) -> bool:
             t = (text or '').lower()
@@ -1325,7 +1413,7 @@ class WordASTParser:
                     
         if level:
             # We strip numbering (e.g., "1. Introduction" -> "Introduction")
-            clean_text = re.sub(r'^[A-Z0-9IVX]+\.\s+', '', text)
+            clean_text = re.sub(r'^\s*(?:[A-Z0-9IVX]+(?:\.\d+)*\.?|\d+(?:\.\d+)*)\s+', '', text)
             return {"type": "section", "level": level, "text": clean_text}
             
         # Standard paragraph

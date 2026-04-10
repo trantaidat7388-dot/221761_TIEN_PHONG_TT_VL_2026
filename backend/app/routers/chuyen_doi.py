@@ -57,7 +57,7 @@ DEFAULT_SPRINGER_WORD_TEMPLATE = (
 
 def _la_file_word_hop_le(ten_file: str) -> bool:
     ten = (ten_file or "").lower()
-    return ten.endswith('.doc') or ten.endswith('.docx') or ten.endswith('.docm')
+    return ten.endswith('.docx') or ten.endswith('.docm')
 
 
 def _ghi_lich_su_chuyen_doi(
@@ -103,7 +103,7 @@ async def chuyen_doi_file(
     
     ten_file = file.filename.lower()
     if not _la_file_word_hop_le(ten_file):
-        raise HTTPException(status_code=400, detail="Chi chap nhan file .doc, .docx hoac .docm")
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .docx hoac .docm")
     
     current_user = None
     auth_header = request.headers.get("Authorization", "")
@@ -411,7 +411,7 @@ async def chuyen_doi_springer_word_sang_ieee_word(
 
     ten_file = (file.filename or "").lower()
     if not _la_file_word_hop_le(ten_file):
-        raise HTTPException(status_code=400, detail="Chi chap nhan file .doc, .docx hoac .docm")
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .docx hoac .docm")
 
     contents = await file.read()
     if len(contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
@@ -423,7 +423,7 @@ async def chuyen_doi_springer_word_sang_ieee_word(
     if template_file is not None:
         ten_template = (template_file.filename or "").lower()
         if not _la_file_word_hop_le(ten_template):
-            raise HTTPException(status_code=400, detail="Template IEEE phai la file .doc, .docx hoac .docm")
+            raise HTTPException(status_code=400, detail="Template IEEE phai la file .docx hoac .docm")
         template_contents = await template_file.read()
         if len(template_contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
             raise HTTPException(status_code=400, detail=f"Template quá lớn. Kích thước tối đa {MAX_DOC_UPLOAD_MB}MB")
@@ -512,7 +512,7 @@ async def chuyen_doi_ieee_word_sang_springer_word(
 
     ten_file = (file.filename or "").lower()
     if not _la_file_word_hop_le(ten_file):
-        raise HTTPException(status_code=400, detail="Chi chap nhan file .doc, .docx hoac .docm")
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .docx hoac .docm")
 
     contents = await file.read()
     if len(contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
@@ -523,7 +523,7 @@ async def chuyen_doi_ieee_word_sang_springer_word(
     if template_file is not None:
         ten_template = (template_file.filename or "").lower()
         if not _la_file_word_hop_le(ten_template):
-            raise HTTPException(status_code=400, detail="Template Springer phai la file .doc, .docx hoac .docm")
+            raise HTTPException(status_code=400, detail="Template Springer phai la file .docx hoac .docm")
         template_contents = await template_file.read()
         if len(template_contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
             raise HTTPException(status_code=400, detail=f"Template quá lớn. Kích thước tối đa {MAX_DOC_UPLOAD_MB}MB")
@@ -620,7 +620,7 @@ async def chuyen_doi_file_stream(
 
     ten_file = file.filename.lower()
     if not _la_file_word_hop_le(ten_file):
-        raise HTTPException(status_code=400, detail="Chi chap nhan file .doc, .docx hoac .docm")
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .docx hoac .docm")
 
     contents = await file.read()
     if len(contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:

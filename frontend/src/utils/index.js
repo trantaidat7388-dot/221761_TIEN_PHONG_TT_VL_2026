@@ -99,18 +99,17 @@ export const debounce = (func, wait = 300) => {
 }
 
 /**
- * Kiem tra file co phai Word hop le (.doc/.docx/.docm) khong
+ * Kiem tra file co phai Word hop le (.docx/.docm) khong
  */
 export const laFileDocx = (file) => {
   // Kiểm tra MIME type và extension của file
   if (!file) return false
   
   const validTypes = [
-    'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-word.document.macroEnabled.12'
   ]
-  const validExtensions = ['.doc', '.docx', '.docm']
+  const validExtensions = ['.docx', '.docm']
   
   const hasValidType = validTypes.includes(file.type)
   const hasValidExtension = validExtensions.some(ext => 

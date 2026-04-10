@@ -144,7 +144,7 @@ const TrangChuyenDoiWordIEEE = () => {
         >
           <div className="flex items-center gap-2 text-white/80">
             <Sparkles className="w-4 h-4 text-primary-300" />
-            <span className="text-sm">Hỗ trợ 2 chế độ: template mặc định hoặc template IEEE riêng (.doc/.docx/.docm)</span>
+            <span className="text-sm">Hỗ trợ 2 chế độ: template mặc định hoặc template IEEE riêng (.docx/.docm)</span>
           </div>
 
           <div className="space-y-3">
