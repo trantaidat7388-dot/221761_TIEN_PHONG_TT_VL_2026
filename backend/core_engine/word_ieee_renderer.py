@@ -1844,15 +1844,18 @@ class IEEEWordRenderer:
         full_width = self._current_table_target_width_inch(doc, force_full_width=True)
 
         cols = int(node.get("cols", 1) or 1)
-        # Prefer full-width earlier so multi-column tables are easier to read.
-        if cols >= 3:
+        # Keep 3-column tables in single-column flow by default.
+        # Only 4+ columns are considered for spanning full width.
+        if cols <= 3:
+            return "column"
+
+        # Prefer full-width for genuinely wider multi-column tables.
+        if cols >= 4:
             if required_width <= full_width * 1.20:
                 return "full"
             return "landscape"
 
         # Keep very small tables in-column.
-        if cols <= 3 and required_width <= single_col_width * 1.35:
-            return "column"
         if required_width <= single_col_width * 1.18:
             return "column"
 
