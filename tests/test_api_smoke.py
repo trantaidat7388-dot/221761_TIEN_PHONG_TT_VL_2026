@@ -90,3 +90,79 @@ def test_smoke_chuyen_doi_stream(tmp_path, monkeypatch, client) -> None:
     noi_dung = response.text
     assert "\"done\": true" in noi_dung
     assert "Ho\u00e0n t\u1ea5t" in noi_dung or "Hoàn tất" in noi_dung
+
+
+class GiaLapWordASTParser:
+    def __init__(self, doc_path: str, thu_muc_anh: str = "images"):
+        self.doc_path = doc_path
+        self.thu_muc_anh = thu_muc_anh
+
+    def parse(self):
+        return {
+            "metadata": {
+                "title": "Smoke IEEE Word",
+                "authors": [{"name": "A", "affiliations": ["B"]}],
+                "abstract": "C",
+                "keywords": ["k1", "k2"],
+            },
+            "body": [{"type": "paragraph", "text": "Body text"}],
+            "references": [{"type": "paragraph", "text": "Ref 1"}],
+        }
+
+
+class GiaLapIEEEWordRenderer:
+    def render(self, ir_data, output_path: str, image_root_dir: str | None = None, ieee_template_path: str | None = None):
+        from docx import Document
+
+        doc = Document()
+        doc.add_paragraph(ir_data.get("metadata", {}).get("title", ""))
+        doc.save(output_path)
+        return output_path
+
+
+def test_smoke_chuyen_doi_word_ieee(monkeypatch, client) -> None:
+    monkeypatch.setattr(router_chuyen_doi, "WordASTParser", GiaLapWordASTParser)
+    monkeypatch.setattr(router_chuyen_doi, "IEEEWordRenderer", GiaLapIEEEWordRenderer)
+    monkeypatch.setattr(router_chuyen_doi, "don_dep_sau_15_phut", _cleanup_noop)
+
+    tep_word = b"gia lap noi dung word"
+    template_word = b"gia lap template ieee"
+    response = client.post(
+        "/api/chuyen-doi-word-ieee",
+        files={
+            "file": ("mau.docx", tep_word, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            "template_file": ("ieee_template.docx", template_word, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["thanh_cong"] is True
+    assert data["job_id"]
+    assert data["ten_file_word"].endswith("_ieee.docx")
+    assert data["word_url"].startswith("/api/tai-ve-word/")
+
+
+def test_smoke_chuyen_doi_word_ieee_khong_can_upload_template(tmp_path, monkeypatch, client) -> None:
+    monkeypatch.setattr(router_chuyen_doi, "WordASTParser", GiaLapWordASTParser)
+    monkeypatch.setattr(router_chuyen_doi, "IEEEWordRenderer", GiaLapIEEEWordRenderer)
+    monkeypatch.setattr(router_chuyen_doi, "don_dep_sau_15_phut", _cleanup_noop)
+
+    default_template = tmp_path / "default_ieee.docx"
+    default_template.write_bytes(b"fake template bytes")
+    monkeypatch.setattr(router_chuyen_doi, "DEFAULT_IEEE_WORD_TEMPLATE", default_template)
+
+    tep_word = b"gia lap noi dung word"
+    response = client.post(
+        "/api/chuyen-doi-word-ieee",
+        files={
+            "file": ("mau.docx", tep_word, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["thanh_cong"] is True
+    assert data["job_id"]
+    assert data["ten_file_word"].endswith("_ieee.docx")
+    assert data["word_url"].startswith("/api/tai-ve-word/")

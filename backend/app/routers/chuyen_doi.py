@@ -26,6 +26,9 @@ from ..services import token_service
 
 # Nhập các module lõi từ core_engine
 from backend.core_engine.chuyen_doi import ChuyenDoiWordSangLatex
+from backend.core_engine.ast_parser import WordASTParser
+from backend.core_engine.word_ieee_renderer import IEEEWordRenderer
+from backend.core_engine.word_springer_renderer import SpringerWordRenderer
 from backend.core_engine.utils import (
     don_dep_file_rac, bien_dich_latex, tim_file_tex_chinh,
     giai_nen_mau_zip, dong_goi_thu_muc_dau_ra
@@ -36,6 +39,20 @@ logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api", tags=["Chuyển Đổi"])
+
+DEFAULT_IEEE_WORD_TEMPLATE = (
+    Path(__file__).resolve().parents[3]
+    / "input_data"
+    / "Template_word"
+    / "conference-template-a4 (ieee).docx"
+)
+
+DEFAULT_SPRINGER_WORD_TEMPLATE = (
+    Path(__file__).resolve().parents[3]
+    / "input_data"
+    / "Template_word"
+    / "splnproc2510.docm"
+)
 
 
 def _la_file_word_hop_le(ten_file: str) -> bool:
@@ -384,6 +401,204 @@ async def chuyen_doi_file(
         if not da_thanh_cong: xoa_thu_muc_an_toan(job_folder)
 
 
+@router.post("/chuyen-doi-word-ieee")
+async def chuyen_doi_springer_word_sang_ieee_word(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    template_file: UploadFile | None = File(None),
+) -> JSONResponse:
+    """Convert Springer Word content into IEEE Word using uploaded or default template."""
+
+    ten_file = (file.filename or "").lower()
+    if not _la_file_word_hop_le(ten_file):
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .doc, .docx hoac .docm")
+
+    contents = await file.read()
+    if len(contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File quá lớn. Kích thước tối đa {MAX_DOC_UPLOAD_MB}MB")
+
+    template_contents = None
+    template_filename = None
+    template_ext = ".docx"
+    if template_file is not None:
+        ten_template = (template_file.filename or "").lower()
+        if not _la_file_word_hop_le(ten_template):
+            raise HTTPException(status_code=400, detail="Template IEEE phai la file .doc, .docx hoac .docm")
+        template_contents = await template_file.read()
+        if len(template_contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
+            raise HTTPException(status_code=400, detail=f"Template quá lớn. Kích thước tối đa {MAX_DOC_UPLOAD_MB}MB")
+        template_filename = template_file.filename
+        template_ext = Path(template_filename or "template.docx").suffix.lower() or ".docx"
+    elif not DEFAULT_IEEE_WORD_TEMPLATE.exists():
+        raise HTTPException(status_code=500, detail="Không tìm thấy template IEEE mặc định trên server")
+
+    job_id = str(uuid.uuid4())
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    original_name = Path(file.filename or "document").stem
+    safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in original_name).lstrip(" -_") or "document"
+
+    job_folder = TEMP_FOLDER / f"job_{job_id}"
+    job_folder.mkdir(parents=True, exist_ok=True)
+
+    file_ext = Path(file.filename or "document.docx").suffix.lower() or ".docx"
+    input_path = job_folder / f"{safe_name}_{timestamp}{file_ext}"
+    images_folder = job_folder / "images"
+    images_folder.mkdir(parents=True, exist_ok=True)
+    template_path = job_folder / f"ieee_template_{timestamp}{template_ext}"
+    output_docx_name = f"{safe_name}_{timestamp}_ieee.docx"
+    output_docx_path = job_folder / output_docx_name
+
+    with open(input_path, "wb") as f:
+        f.write(contents)
+
+    if template_contents is not None:
+        with open(template_path, "wb") as f:
+            f.write(template_contents)
+    else:
+        shutil.copy2(DEFAULT_IEEE_WORD_TEMPLATE, template_path)
+
+    da_thanh_cong = False
+    try:
+        parser = WordASTParser(str(input_path), thu_muc_anh=str(images_folder))
+        ir = await run_in_threadpool(parser.parse)
+
+        renderer = IEEEWordRenderer()
+        await run_in_threadpool(renderer.render, ir, str(output_docx_path), str(job_folder), str(template_path))
+
+        if not output_docx_path.exists():
+            raise Exception("Không tạo được file Word IEEE đầu ra")
+
+        try:
+            shutil.copy2(output_docx_path, OUTPUTS_FOLDER / output_docx_name)
+        except Exception as e:
+            logger.warning("Không thể copy DOCX IEEE sang outputs", exc_info=e)
+
+        da_thanh_cong = True
+        background_tasks.add_task(don_dep_sau_15_phut, job_folder)
+
+        body_nodes = ir.get("body", []) if isinstance(ir, dict) else []
+        quality_report = getattr(renderer, "last_render_metrics", {}) if renderer is not None else {}
+        return JSONResponse(
+            status_code=200,
+            content={
+                "thanh_cong": True,
+                "job_id": job_id,
+                "ten_file_word": output_docx_name,
+                "word_url": f"/api/tai-ve-word/{job_id}",
+                "metadata": {
+                    "so_section": len([n for n in body_nodes if n.get("type") == "section"]),
+                    "so_paragraph": len([n for n in body_nodes if n.get("type") == "paragraph"]),
+                    "so_bang": len([n for n in body_nodes if n.get("type") == "table"]),
+                    "so_tai_lieu_tham_khao": len(ir.get("references", []) if isinstance(ir, dict) else []),
+                    "bao_cao_dinh_dang_ieee": quality_report,
+                },
+            },
+        )
+    except Exception as loi:
+        logger.exception("Springer Word -> IEEE Word failed")
+        return JSONResponse(status_code=400, content={"error": f"Lỗi: {str(loi) or 'không xác định'}"})
+    finally:
+        if not da_thanh_cong:
+            xoa_thu_muc_an_toan(job_folder)
+
+
+@router.post("/chuyen-doi-word-springer")
+async def chuyen_doi_ieee_word_sang_springer_word(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    template_file: UploadFile | None = File(None),
+) -> JSONResponse:
+    """Convert IEEE Word content into Springer Word using uploaded or default template."""
+
+    ten_file = (file.filename or "").lower()
+    if not _la_file_word_hop_le(ten_file):
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .doc, .docx hoac .docm")
+
+    contents = await file.read()
+    if len(contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File quá lớn. Kích thước tối đa {MAX_DOC_UPLOAD_MB}MB")
+
+    template_contents = None
+    template_ext = ".docx"
+    if template_file is not None:
+        ten_template = (template_file.filename or "").lower()
+        if not _la_file_word_hop_le(ten_template):
+            raise HTTPException(status_code=400, detail="Template Springer phai la file .doc, .docx hoac .docm")
+        template_contents = await template_file.read()
+        if len(template_contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
+            raise HTTPException(status_code=400, detail=f"Template quá lớn. Kích thước tối đa {MAX_DOC_UPLOAD_MB}MB")
+        template_ext = Path(template_file.filename or "template.docx").suffix.lower() or ".docx"
+    elif not DEFAULT_SPRINGER_WORD_TEMPLATE.exists():
+        raise HTTPException(status_code=500, detail="Không tìm thấy template Springer mặc định trên server")
+
+    job_id = str(uuid.uuid4())
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    original_name = Path(file.filename or "document").stem
+    safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in original_name).lstrip(" -_") or "document"
+
+    job_folder = TEMP_FOLDER / f"job_{job_id}"
+    job_folder.mkdir(parents=True, exist_ok=True)
+
+    file_ext = Path(file.filename or "document.docx").suffix.lower() or ".docx"
+    input_path = job_folder / f"{safe_name}_{timestamp}{file_ext}"
+    images_folder = job_folder / "images"
+    images_folder.mkdir(parents=True, exist_ok=True)
+    template_path = job_folder / f"springer_template_{timestamp}{template_ext}"
+    output_docx_name = f"{safe_name}_{timestamp}_springer.docx"
+    output_docx_path = job_folder / output_docx_name
+
+    with open(input_path, "wb") as f:
+        f.write(contents)
+
+    if template_contents is not None:
+        with open(template_path, "wb") as f:
+            f.write(template_contents)
+    else:
+        shutil.copy2(DEFAULT_SPRINGER_WORD_TEMPLATE, template_path)
+
+    da_thanh_cong = False
+    try:
+        parser = WordASTParser(str(input_path), thu_muc_anh=str(images_folder))
+        ir = await run_in_threadpool(parser.parse)
+
+        renderer = SpringerWordRenderer()
+        await run_in_threadpool(renderer.render, ir, str(output_docx_path), str(job_folder), str(template_path))
+
+        if not output_docx_path.exists():
+            raise Exception("Không tạo được file Word Springer đầu ra")
+
+        try:
+            shutil.copy2(output_docx_path, OUTPUTS_FOLDER / output_docx_name)
+        except Exception as e:
+            logger.warning("Không thể copy DOCX Springer sang outputs", exc_info=e)
+
+        da_thanh_cong = True
+        background_tasks.add_task(don_dep_sau_15_phut, job_folder)
+
+        body_nodes = ir.get("body", []) if isinstance(ir, dict) else []
+        return JSONResponse(
+            status_code=200,
+            content={
+                "thanh_cong": True,
+                "job_id": job_id,
+                "ten_file_word": output_docx_name,
+                "word_url": f"/api/tai-ve-word/{job_id}",
+                "metadata": {
+                    "so_section": len([n for n in body_nodes if n.get("type") == "section"]),
+                    "so_paragraph": len([n for n in body_nodes if n.get("type") == "paragraph"]),
+                    "so_bang": len([n for n in body_nodes if n.get("type") == "table"]),
+                    "so_tai_lieu_tham_khao": len(ir.get("references", []) if isinstance(ir, dict) else []),
+                },
+            },
+        )
+    except Exception as loi:
+        logger.exception("IEEE Word -> Springer Word failed")
+        return JSONResponse(status_code=400, content={"error": f"Lỗi: {str(loi) or 'không xác định'}"})
+    finally:
+        if not da_thanh_cong:
+            xoa_thu_muc_an_toan(job_folder)
+
+
 @router.post("/chuyen-doi-stream")
 async def chuyen_doi_file_stream(
     background_tasks: BackgroundTasks,
@@ -648,6 +863,27 @@ def tai_ve_zip_theo_job(job_id: str) -> FileResponse:
     return FileResponse(
         path=str(zip_path), filename=zip_path.name, media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename={zip_path.name}", "Access-Control-Expose-Headers": "Content-Disposition"}
+    )
+
+
+@router.api_route("/tai-ve-word/{job_id}", methods=["GET", "HEAD"])
+def tai_ve_word_theo_job(job_id: str) -> FileResponse:
+    job_folder = TEMP_FOLDER / f"job_{job_id}"
+    if not job_folder.exists() or not job_folder.is_dir():
+        raise HTTPException(status_code=404, detail="Job không tồn tại hoặc đã bị dọn")
+
+    ds_docx = sorted(job_folder.glob("*_ieee.docx"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not ds_docx:
+        ds_docx = sorted(job_folder.glob("*.docx"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not ds_docx:
+        raise HTTPException(status_code=404, detail="Không tìm thấy file .docx trong job")
+
+    docx_path = ds_docx[0]
+    return FileResponse(
+        path=str(docx_path),
+        filename=docx_path.name,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={docx_path.name}", "Access-Control-Expose-Headers": "Content-Disposition"},
     )
 
 

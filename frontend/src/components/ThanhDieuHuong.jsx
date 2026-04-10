@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   FileText,
   Upload,
+  ArrowRightLeft,
   History,
   Crown,
   Settings,
@@ -30,6 +31,8 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
 
   const danhSachMenuCoBan = [
     { duongDan: '/chuyen-doi', nhan: 'Chuyển đổi', icon: Upload },
+    { duongDan: '/chuyen-doi-word-ieee', nhan: 'Springer -> IEEE Word', icon: ArrowRightLeft },
+    { duongDan: '/chuyen-doi-word-springer', nhan: 'IEEE -> Springer Word', icon: ArrowRightLeft },
     { duongDan: '/lich-su', nhan: 'Lịch sử', icon: History },
     { duongDan: '/premium', nhan: 'Premium', icon: Crown },
     { duongDan: '/tai-khoan', nhan: 'Tài khoản', icon: Settings },

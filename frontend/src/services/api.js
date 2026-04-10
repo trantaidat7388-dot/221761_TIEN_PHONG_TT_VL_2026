@@ -157,6 +157,108 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
   })
 }
 
+export const chuyenDoiWordIEEE = async (file, templateFile = null) => {
+  try {
+    if (!file) throw new Error('Vui lòng chọn file Word')
+
+    const formData = new FormData()
+    formData.append('file', file)
+    if (templateFile) {
+      formData.append('template_file', templateFile)
+    }
+
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/chuyen-doi-word-ieee`, {
+      method: 'POST',
+      headers: taoHeaderXacThuc(),
+      body: formData,
+    })
+
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || !data?.thanh_cong) {
+      return {
+        thanhCong: false,
+        loiMessage: data?.error || data?.detail || 'Chuyển đổi Word sang IEEE Word thất bại',
+      }
+    }
+
+    return {
+      thanhCong: true,
+      data: {
+        jobId: data.job_id || '',
+        tenFileWord: data.ten_file_word || '',
+        wordUrl: data.word_url || '',
+        metadata: data.metadata || {},
+      }
+    }
+  } catch (loi) {
+    return { thanhCong: false, loiMessage: loi.message || 'Không thể kết nối đến server' }
+  }
+}
+
+export const chuyenDoiWordSpringer = async (file, templateFile = null) => {
+  try {
+    if (!file) throw new Error('Vui lòng chọn file Word')
+
+    const formData = new FormData()
+    formData.append('file', file)
+    if (templateFile) {
+      formData.append('template_file', templateFile)
+    }
+
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/chuyen-doi-word-springer`, {
+      method: 'POST',
+      headers: taoHeaderXacThuc(),
+      body: formData,
+    })
+
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || !data?.thanh_cong) {
+      return {
+        thanhCong: false,
+        loiMessage: data?.error || data?.detail || 'Chuyển đổi Word sang Springer Word thất bại',
+      }
+    }
+
+    return {
+      thanhCong: true,
+      data: {
+        jobId: data.job_id || '',
+        tenFileWord: data.ten_file_word || '',
+        wordUrl: data.word_url || '',
+        metadata: data.metadata || {},
+      }
+    }
+  } catch (loi) {
+    return { thanhCong: false, loiMessage: loi.message || 'Không thể kết nối đến server' }
+  }
+}
+
+export const taiFileWordTheoJob = async (jobId, tenFileWordFallback = '') => {
+  try {
+    if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
+
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-word/${jobId}`, {
+      method: 'GET',
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const message = await docLoiJsonTuResponse(response)
+      throw new Error(message)
+    }
+
+    const blob = await response.blob()
+    const contentDisposition = response.headers.get('content-disposition') || ''
+    const match = contentDisposition.match(/filename=([^;]+)/i)
+    const tenFileTuHeader = match?.[1]?.replace(/"/g, '') || ''
+    const tenFileWord = tenFileTuHeader || tenFileWordFallback || `${jobId}_ieee.docx`
+    luuBlobThanhFile(blob, tenFileWord)
+    return { thanhCong: true }
+  } catch (loi) {
+    return { thanhCong: false, loiMessage: loi.message || 'Không thể tải file Word' }
+  }
+}
+
 export const taiFile = async (duongDan, tenFile) => {
   try {
     const response = await fetch(duongDan, { headers: taoHeaderXacThuc() })

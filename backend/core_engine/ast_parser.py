@@ -1,13 +1,15 @@
 import os
 import re
 import hashlib
+import base64
 from typing import Dict, Any, List, Optional
+from lxml import etree
 
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
-from .config import MAP_STYLE, HEADING_PATTERNS, A_NAMESPACE, REL_NAMESPACE
+from .config import MAP_STYLE, HEADING_PATTERNS, A_NAMESPACE, REL_NAMESPACE, W_NAMESPACE
 from docx.oxml.ns import qn
 from .utils import loc_ky_tu
 from .xu_ly_toan import BoXuLyToan
@@ -686,7 +688,12 @@ class WordASTParser:
                 elif state == "references":
                     # Skip the header label itself (e.g., "Tài Liệu Tham Khảo", "References")
                     if (not self._is_references_label(text)) and self._looks_like_reference_entry(text):
-                        self.ir["references"].append(self._parse_paragraph(element))
+                        node = self._parse_paragraph(element)
+                        node_text = node.get("text", "")
+                        if node_text.startswith("\\url{") and len(self.ir["references"]) > 0:
+                            self.ir["references"][-1]["text"] += " " + node_text
+                        else:
+                            self.ir["references"].append(node)
                 
             elif etype == "table":
                 # Bypass: Nếu bảng đứng trước abstract, có thể đây là Author Table đặc thù của IEEE
@@ -808,13 +815,14 @@ class WordASTParser:
             if len(cells) < 2 or len(cells) > 3:
                 return None
             
-            # Check if last cell is equation number like (1), (2), etc.
+            # Check if last cell is equation number like (1), (2), (1a), (A1), etc.
             last_text = cells[-1].text.strip()
-            if not re.match(r'^\(\d+\)$', last_text):
+            if not re.match(r'^\(([A-Za-z0-9\.\-\*]+)\)$', last_text):
                 return None
             
-            # The formula is in the first cell(s)
-            formula_text = cells[0].text.strip()
+            # The formula usually occupies all cells except the rightmost equation number.
+            formula_parts = [c.text.strip() for c in cells[:-1] if c.text.strip()]
+            formula_text = " ".join(formula_parts)
             
             # Check if first cell(s) contain math-like content (=, ½, fractions, symbols)
             math_indicators = ['=', '½', '∑', '∏', '∫', '+', '−', '×', '÷', 'frac', '\\', 
@@ -827,11 +835,19 @@ class WordASTParser:
             # Try to extract OMML math if present
             ns_m = "http://schemas.openxmlformats.org/officeDocument/2006/math"
             tbl_xml = t._tbl
-            omath = tbl_xml.find(f".//{{{ns_m}}}oMath")
+            omml_math = tbl_xml.find(f".//{{{ns_m}}}oMathPara")
+            if omml_math is None:
+                omml_math = tbl_xml.find(f".//{{{ns_m}}}oMath")
             
-            if omath is not None:
-                latex_math = self.bo_toan.omml_element_to_latex(omath)
-                eq_text = f"\\begin{{equation}}\n{latex_math}\n\\tag{{{last_text.strip('()')}}}\n\\end{{equation}}"
+            if omml_math is not None:
+                latex_math = self.bo_toan.omml_element_to_latex(omml_math)
+                # Capture raw OMML XML
+                try:
+                    omml_str = etree.tostring(omml_math, encoding='unicode')
+                    omml_b64 = base64.b64encode(omml_str.encode('utf-8')).decode('utf-8')
+                    eq_text = f"\\begin{{equation}}\n«OMML:{omml_b64}»\n\\tag{{{last_text.strip('()')}}}\n\\end{{equation}}"
+                except Exception:
+                    eq_text = f"\\begin{{equation}}\n{latex_math}\n\\tag{{{last_text.strip('()')}}}\n\\end{{equation}}"
             else:
                 # No OMML, use the plain text and try to make it look like an equation
                 # Replace ½ with \\frac{1}{2}, etc.
@@ -1166,13 +1182,30 @@ class WordASTParser:
             nonlocal text, has_math
             if not hasattr(node, "tag") or not isinstance(node.tag, str):
                 return
+
+            if node.tag == f"{{{ns_m}}}oMathPara":
+                has_math = True
+                self.total_formulas += 1
+                latex_math = self.bo_toan.omml_element_to_latex(node)
+                try:
+                    omml_str = etree.tostring(node, encoding='unicode')
+                    omml_b64 = base64.b64encode(omml_str.encode('utf-8')).decode('utf-8')
+                    text += f" «OMML:{omml_b64}» "
+                except Exception:
+                    text += f" ${latex_math}$ "
+                return
             
             if node.tag == f"{{{ns_m}}}oMath":
                 has_math = True
                 self.total_formulas += 1
                 latex_math = self.bo_toan.omml_element_to_latex(node)
-                text += f" ${latex_math}$ "
-                # Don't traverse inside oMath, the math parser handles it
+                # Capture raw OMML XML for high-fidelity rendering
+                try:
+                    omml_str = etree.tostring(node, encoding='unicode')
+                    omml_b64 = base64.b64encode(omml_str.encode('utf-8')).decode('utf-8')
+                    text += f" «OMML:{omml_b64}» "
+                except Exception:
+                    text += f" ${latex_math}$ "
                 return
             elif node.tag == f"{{{ns_w}}}r":
                 # Convert run to text
@@ -1494,6 +1527,8 @@ class WordASTParser:
         if len(parsed_rows) > 0 and len(tr_list) > 1:
             is_header = any(cell["text"] != "" for cell in parsed_rows[0])
             
+        is_floating_word_table = t._tbl.find(f".//{{{W_NAMESPACE}}}tblpPr") is not None
+
         return {
             "type": "table",
             "rows": len(tr_list), 
@@ -1501,4 +1536,5 @@ class WordASTParser:
             "has_header": is_header,
             "data": parsed_rows,
             "width_ratio": width_ratio,
+            "is_floating_word_table": bool(is_floating_word_table),
         }

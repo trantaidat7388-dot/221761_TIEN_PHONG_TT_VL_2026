@@ -506,6 +506,7 @@ class TemplatePreprocessor:
             "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
             "\\@ifpackageloaded{graphicx}{}{\\usepackage{graphicx}}\n"
             "\\@ifpackageloaded{float}{}{\\usepackage{float}}\n"
+            "\\@ifpackageloaded{wrapfig}{}{\\usepackage{wrapfig}}\n"
             "\\@ifpackageloaded{placeins}{}{\\usepackage{placeins}}\n"
             "\\makeatother\n"
         )

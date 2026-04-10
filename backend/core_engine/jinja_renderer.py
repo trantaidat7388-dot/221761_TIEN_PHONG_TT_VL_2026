@@ -67,6 +67,11 @@ class JinjaLaTeXRenderer:
                 para_text = re.sub(r'[\u200b\u200c\u200d\ufeff\xa0]+', ' ', para_text)
                 para_text = re.sub(r'\s*\n+\s*', ' ', para_text)
                 para_text = re.sub(r'[ \t]{2,}', ' ', para_text).strip()
+                if doc_class == "springer":
+                    promoted_eq = self._promote_inline_equation_paragraph(para_text)
+                    if promoted_eq:
+                        out.append(promoted_eq)
+                        continue
                 if para_text:
                     out.append(f"{para_text}\n\n")
             elif t == "table":
@@ -104,9 +109,13 @@ class JinjaLaTeXRenderer:
                     table_width_expr = f"{min(0.95, max(0.2, float(table_width_ratio))):.3f}\\columnwidth"
                 else:
                     table_width_expr = "\\columnwidth"
+                is_floating_word_table = bool(node.get("is_floating_word_table"))
                 # Keep IEEE tables anchored to preserve Word-like ordering.
                 if doc_class == "springer":
                     table_pos = "[htbp]"
+                elif is_floating_word_table:
+                    # Strongly prefer current insertion point for Word floating tables.
+                    table_pos = "[!h]"
                 else:
                     table_pos = "[H]"
                 out.append(f"\\begin{{table}}{table_pos}\n\\centering\n")
@@ -390,11 +399,10 @@ class JinjaLaTeXRenderer:
         then add ``\\FloatBarrier`` only when a section starts shortly after a float.
         """
         body_tex = re.sub(r"\\begin\{figure\}\[[^\]]*\]", r"\\begin{figure}[!ht]", body_tex)
-        # Tables are anchored for Springer to preserve document flow from Word source.
         body_tex = re.sub(r"\\begin\{table\}\[[^\]]*\]", r"\\begin{table}[H]", body_tex)
 
         float_end_pattern = re.compile(r"\\end\{(?:figure|table)\}")
-        section_pattern = re.compile(r"\\(?:section|subsection)\{")
+        section_pattern = re.compile(r"\\(?:section|subsection|subsubsection)\{")
 
         float_ends = [m.end() for m in float_end_pattern.finditer(body_tex)]
         if not float_ends:
@@ -421,6 +429,38 @@ class JinjaLaTeXRenderer:
 
         chunks.append(body_tex[cursor:])
         return "".join(chunks)
+
+    def _promote_inline_equation_paragraph(self, para_text: str) -> str | None:
+        """Convert short inline equation paragraphs ending with (n) into equation blocks."""
+        text = (para_text or "").strip()
+        if not text or "\\begin{equation}" in text:
+            return None
+
+        m = re.match(r"^(?P<expr>.+?)\s*\((?P<num>\d+)\)\s*$", text)
+        if m is None:
+            return None
+
+        expr = (m.group("expr") or "").strip()
+        if not expr:
+            return None
+        if len(expr) > 180:
+            return None
+        if "=" not in expr:
+            return None
+        if re.search(r"\\(?:cite|ref|section|subsection)\b", expr):
+            return None
+        if not re.search(r"\\[A-Za-z]+|[+\-*/=^_]", expr):
+            return None
+
+        # Word text formatting wrappers are not needed inside display math.
+        expr = re.sub(r"\\textit\{([^{}]+)\}", r"\1", expr)
+        expr = re.sub(r"\\textbf\{([^{}]+)\}", r"\1", expr)
+        expr = re.sub(r"\s+", " ", expr).strip()
+        if not expr:
+            return None
+
+        num = m.group("num")
+        return f"\\begin{{equation}}\n{expr}\n\\tag{{{num}}}\n\\end{{equation}}\n\n"
 
     def _remove_float_barriers(self, body_tex: str) -> str:
         """Remove legacy FloatBarrier markers that can force awkward page breaks."""

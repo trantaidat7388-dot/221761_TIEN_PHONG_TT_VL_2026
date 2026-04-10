@@ -98,8 +98,8 @@ def loc_ky_tu(text: str) -> str:
     if not text:
         return ""
 
-    def _normalize_private_use_symbol_chars(raw: str) -> str:
-        """Convert common Symbol-font private-use chars (U+F0xx) to safe text/LaTeX."""
+    def _normalize_private_use_symbol_chars(raw: str) -> tuple[str, dict]:
+        """Convert Symbol-font private-use chars (U+F0xx) and preserve math commands."""
         greek_map = {
             'a': r'\ensuremath{\alpha}',
             'b': r'\ensuremath{\beta}',
@@ -123,6 +123,7 @@ def loc_ky_tu(text: str) -> str:
         }
 
         out = []
+        replacements = {}
         for ch in raw:
             cp = ord(ch)
             if 0xF000 <= cp <= 0xF0FF:
@@ -132,14 +133,16 @@ def loc_ky_tu(text: str) -> str:
                     continue
                 ascii_ch = chr(base)
                 if ascii_ch in greek_map:
-                    out.append(greek_map[ascii_ch])
+                    placeholder = f"UNIPHxPUA{ascii_ch}x"
+                    replacements[placeholder] = greek_map[ascii_ch]
+                    out.append(placeholder)
                 elif 0x20 <= base <= 0x7E:
                     out.append(ascii_ch)
                 else:
                     out.append(' ')
             else:
                 out.append(ch)
-        return ''.join(out)
+        return ''.join(out), replacements
     
     # BƯỚC 1: Thay Unicode bằng PLACEHOLDER trước khi escape ký tự đặc biệt
     # Placeholder dùng ASCII thuần túy, không chứa ký tự LaTeX đặc biệt
@@ -170,7 +173,7 @@ def loc_ky_tu(text: str) -> str:
         ('\u2026', '...'),   # ellipsis
     ]
     
-    ket_qua = _normalize_private_use_symbol_chars(text)
+    ket_qua, pua_placeholders = _normalize_private_use_symbol_chars(text)
 
     # Remove directional control chars and uncommon script noise that can break
     # pdfLaTeX in otherwise Latin-based documents (e.g., stray Hebrew tokens).
@@ -210,6 +213,9 @@ def loc_ky_tu(text: str) -> str:
     
     # BƯỚC 3: Thay placeholder lại thành LaTeX command thật
     for _, placeholder, latex_cmd in unicode_placeholders:
+        ket_qua = ket_qua.replace(placeholder, latex_cmd)
+
+    for placeholder, latex_cmd in pua_placeholders.items():
         ket_qua = ket_qua.replace(placeholder, latex_cmd)
         
     # Tự động bọc URL vào thẻ \url{} để tránh lỗi tràn lề (overflow) trong PDF
