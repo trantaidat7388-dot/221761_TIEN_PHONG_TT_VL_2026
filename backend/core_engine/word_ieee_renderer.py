@@ -405,7 +405,7 @@ class IEEEWordRenderer:
             temp_table = doc.add_table(rows=1, cols=2, width=Inches(3.3))
 
         col_width = self._get_current_column_width_inch(doc)
-        number_width = 0.28
+        number_width = 0.22
         equation_width = max(2.8, col_width - number_width)
         temp_table.columns[0].width = Inches(equation_width)
         temp_table.columns[1].width = Inches(number_width)
@@ -427,6 +427,7 @@ class IEEEWordRenderer:
 
         # First cell: equation
         cell_eq = temp_table.cell(0, 0)
+        self._set_cell_no_wrap(cell_eq)
         p_eq = cell_eq.paragraphs[0]
         p_eq.alignment = WD_ALIGN_PARAGRAPH.CENTER
         if omml_match:
@@ -1147,7 +1148,7 @@ class IEEEWordRenderer:
         if eq_num:
             temp_table = doc.add_table(rows=1, cols=2)
             col_width = self._get_current_column_width_inch(doc)
-            number_width = 0.28
+            number_width = 0.22
             equation_width = max(2.8, col_width - number_width)
             temp_table.columns[0].width = Inches(equation_width)
             temp_table.columns[1].width = Inches(number_width)
@@ -1166,6 +1167,7 @@ class IEEEWordRenderer:
                 pass
 
             p_eq = temp_table.cell(0, 0).paragraphs[0]
+            self._set_cell_no_wrap(temp_table.cell(0, 0))
             p_eq.alignment = WD_ALIGN_PARAGRAPH.CENTER
             if omml_match:
                 try:
@@ -1716,13 +1718,9 @@ class IEEEWordRenderer:
     def _force_table_borders(self, table: Table) -> None:
         """Apply IEEE-standard table borders.
 
-        IEEE tables have:
-        - Top border: single, thin
-        - Bottom border: single, thin
-        - InsideH (horizontal): single, thin
-        - NO left border
-        - NO right border
-        - NO insideV (vertical between columns)
+        Readability-first profile for conversion output:
+        - Top/bottom/left/right: single, thin
+        - InsideH/insideV: single, thin
         """
         tbl_pr = table._tbl.tblPr
         borders = tbl_pr.find(qn("w:tblBorders"))
@@ -1731,7 +1729,7 @@ class IEEEWordRenderer:
             tbl_pr.append(borders)
 
         # Borders to SHOW (thin lines)
-        for name in ["top", "bottom", "insideH"]:
+        for name in ["top", "bottom", "left", "right", "insideH", "insideV"]:
             edge = borders.find(qn(f"w:{name}"))
             if edge is None:
                 edge = OxmlElement(f"w:{name}")
@@ -1740,18 +1738,6 @@ class IEEEWordRenderer:
             edge.set(qn("w:sz"), "4")  # thin (0.5pt) — IEEE uses very thin lines
             edge.set(qn("w:space"), "0")
             edge.set(qn("w:color"), "000000")
-
-        # Borders to HIDE
-        for name in ["left", "right", "insideV"]:
-            edge = borders.find(qn(f"w:{name}"))
-            if edge is None:
-                edge = OxmlElement(f"w:{name}")
-                borders.append(edge)
-            edge.set(qn("w:val"), "nil")
-            # Remove size/color attrs that may have been left over
-            for attr in [qn("w:sz"), qn("w:space"), qn("w:color")]:
-                if edge.get(attr) is not None:
-                    del edge.attrib[attr]
 
     def _add_table_caption(self, doc: Document, label: str, caption: str) -> None:
         """IEEE conference table caption: two lines (label + uppercase title)."""
@@ -1828,7 +1814,15 @@ class IEEEWordRenderer:
         full_width = self._current_table_target_width_inch(doc, force_full_width=True)
 
         cols = int(node.get("cols", 1) or 1)
-        # Prefer keeping tables in the normal two-column flow whenever reasonably possible.
+        # Prefer full-width earlier so multi-column tables are easier to read.
+        if cols >= 4:
+            if required_width <= full_width * 1.20:
+                return "full"
+            return "landscape"
+        if cols == 3 and required_width > single_col_width * 0.92:
+            return "full"
+
+        # Keep very small tables in-column.
         if cols <= 3 and required_width <= single_col_width * 1.35:
             return "column"
         if required_width <= single_col_width * 1.18:
@@ -1842,6 +1836,19 @@ class IEEEWordRenderer:
         if cols <= 5 and required_width <= full_width * 1.35:
             return "full"
         return "landscape"
+
+    def _set_cell_no_wrap(self, cell) -> None:
+        """Prevent Word from wrapping equation text inside a narrow table cell."""
+        try:
+            tc = cell._tc
+            tc_pr = tc.get_or_add_tcPr()
+            no_wrap = tc_pr.find(qn("w:noWrap"))
+            if no_wrap is None:
+                no_wrap = OxmlElement("w:noWrap")
+                tc_pr.append(no_wrap)
+            no_wrap.set(qn("w:val"), "1")
+        except Exception:
+            pass
 
     def _estimate_table_required_width_inch(self, node: Dict[str, Any]) -> float:
         cols = int(node.get("cols", 1) or 1)
