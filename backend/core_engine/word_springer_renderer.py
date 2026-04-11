@@ -283,6 +283,8 @@ class SpringerWordRenderer(IEEEWordRenderer):
     def _insert_springer_body_before(self, doc: Document, anchor_p, body_nodes: List[Dict[str, Any]]) -> None:
         self._section_index = 0
         self._subsection_counters = {}
+        prev_rendered_type = None
+        
         for idx, node in enumerate(body_nodes):
             node_type = node.get("type", "")
 
@@ -291,15 +293,18 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 text = self._latex_to_plain(node.get("text") or "")
                 if text:
                     self._insert_springer_heading_before(anchor_p, text, level)
+                prev_rendered_type = "section"
                 continue
 
             if node_type == "table":
                 self._insert_springer_table_before(doc, anchor_p, node)
+                prev_rendered_type = "table"
                 continue
 
             if node_type == "list":
                 list_text = self._latex_to_plain(node.get("text") or "")
                 self._insert_rich_paragraph_before(anchor_p, list_text)
+                prev_rendered_type = "list"
                 continue
 
             if node_type == "paragraph":
@@ -311,10 +316,12 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
                 if self._is_equation_like_paragraph(raw_text):
                     self._insert_springer_equation_before(doc, anchor_p, raw_text)
+                    prev_rendered_type = "equation"
                     continue
 
                 if "\\begin{figure" in raw_text or "\\includegraphics" in raw_text:
                     self._insert_springer_figure_before(doc, anchor_p, raw_text)
+                    prev_rendered_type = "figure"
                     continue
 
                 if re.match(r"^Fig\.?\s*\d+\.?", plain, re.IGNORECASE):
@@ -329,18 +336,25 @@ class SpringerWordRenderer(IEEEWordRenderer):
                         except: pass
                     p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     p_cap.add_run(f"Fig. {self._figure_index}. {cap_clean}" if cap_clean else f"Fig. {self._figure_index}.")
+                    prev_rendered_type = "figure"
                     continue
 
                 p = anchor_p.insert_paragraph_before()
-                is_first_para = (idx == 0) or (body_nodes[idx - 1].get("type") in ("section", "table", "figure"))
+                is_first_para = (idx == 0) or (prev_rendered_type in ("section", "table", "figure", "list", "equation"))
                 style_candidates = ["p1a", "Normal"] if is_first_para else ["Normal", "p1a"]
                 
                 body_style = self._pick_style_name(style_candidates)
                 if body_style:
                     try: p.style = body_style
                     except: pass
+                
+                # Fix spacing: Add space before if following a table, figure, or equation to prevent "stuck" look
+                if prev_rendered_type in ("table", "figure", "equation"):
+                    p.paragraph_format.space_before = Pt(12)
+                
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 p.add_run(plain)
+                prev_rendered_type = "paragraph"
 
     def _insert_springer_heading_before(self, anchor_p, text: str, level: int) -> None:
         clean = self._latex_to_plain(text)
