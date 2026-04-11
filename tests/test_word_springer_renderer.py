@@ -32,7 +32,7 @@ def test_springer_heading_deduplicates_existing_numbers(tmp_path):
     doc = Document(str(out))
     text = _collect_text(doc)
     assert "3 3 EXPERIMENT" not in text
-    assert "1 EXPERIMENT AND DISCUSSION" in text
+    assert "1 Experiment And Discussion" in text
 
 
 def test_springer_table_caption_and_reference_number_cleanup(tmp_path):
@@ -79,7 +79,7 @@ def test_springer_syncs_header_short_title():
         header.add_paragraph("")
     header.paragraphs[0].text = "Contribution Title (shortened if too long)\t7"
 
-    renderer._sync_template_header_title(doc, "Customer Churn Prediction in Vietnam")
+    renderer._sync_template_header_title(doc, {"title": "Customer Churn Prediction in Vietnam"})
 
     assert "Contribution Title" not in header.paragraphs[0].text
     assert "Customer Churn Prediction in Vietnam" in header.paragraphs[0].text

@@ -100,6 +100,9 @@ HEADING_PATTERNS = [
     (r'^(\d+)\.\s+([A-ZÀ-Ỹ][a-zA-ZÀ-ỹ\s]{10,})$', r'\section*'), # 1. Tiêu đề dài >10 ký tự
     # --- Heading tiếng Anh (ALL CAPS, thường gặp trong ACM/IEEE) ---
     (r'^(INTRODUCTION|ABSTRACT|CONCLUSION|CONCLUSIONS|REFERENCES|ACKNOWLEDGMENTS|ACKNOWLEDGEMENTS|RELATED WORK|METHODOLOGY|RESULTS|DISCUSSION|BACKGROUND|EVALUATION|APPENDIX|APPENDICES)$', r'\section*'),
+    # --- IEEE Roman numeral headings ---
+    (r'^[IVXLCDM]+\.\s+[A-Z][A-Z\s]+$', r'\section'),     # I. INTRODUCTION
+    (r'^[A-Z]\.\s+[A-Z]', r'\subsection'),                 # A. Related Work
 ]
 
 # OMML → LaTeX: Bảng ký tự Unicode → LaTeX command

@@ -669,6 +669,9 @@ class IEEEWordRenderer:
 
     def _add_abstract_and_keywords(self, doc: Document, metadata: Dict[str, Any]) -> None:
         abstract = self._latex_to_plain(metadata.get("abstract") or "")
+        # Strip any existing label prefix to avoid double labeling (e.g. "Abstract—Abstract. ...")
+        # Requires separator (dot, dash, colon, em-dash) after label word to avoid false positives
+        abstract = re.sub(r"^\s*(?:abstract|t[oó]m\s+t[aắ]t)\s*[:.\u2013\u2014\-]+\s*", "", abstract, flags=re.IGNORECASE).strip()
         if abstract:
             abs_style = self._pick_style_name(["Abstract", "abstract"])
             if abs_style and self._using_uploaded_template:

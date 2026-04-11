@@ -80,7 +80,7 @@ def run_pipeline(
 
     output_path = output_dir / output_name
 
-    parser = WordASTParser(str(input_word), thu_muc_anh=str(images_dir))
+    parser = WordASTParser(str(input_word), thu_muc_anh=str(images_dir), mode="word2word")
     ir_data = parser.parse()
 
     if direction == "springer-to-ieee":

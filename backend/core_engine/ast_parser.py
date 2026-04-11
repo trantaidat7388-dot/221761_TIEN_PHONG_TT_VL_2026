@@ -23,9 +23,10 @@ class WordASTParser:
     The IR is a JSON-serializable dictionary capturing the semantic meaning of the document
     (Metadata + Body Nodes) independently of LaTeX layout.
     """
-    def __init__(self, doc_path: str, thu_muc_anh: str = "images"):
+    def __init__(self, doc_path: str, thu_muc_anh: str = "images", mode: str = "latex"):
         self.doc_path = doc_path
         self.thu_muc_anh = thu_muc_anh
+        self.mode = mode  # "latex" or "word2word"
         self.doc = None
         self._temp_word_files: List[str] = []
         self.bo_toan = BoXuLyToan()
@@ -52,7 +53,10 @@ class WordASTParser:
 
             elements = self._extract_elements_in_order()
             self._build_semantic_tree(elements)
-            self._post_process_citations()
+            # Skip citation post-processing in word2word mode to avoid
+            # re-indexing [1] -> \cite{ref1} -> [1] round-trip corruption.
+            if self.mode != "word2word":
+                self._post_process_citations()
 
             return self.ir
         finally:
@@ -103,12 +107,8 @@ class WordASTParser:
         return norm.startswith("ABSTRACT") or norm.startswith("TÓM TẮT") or norm.startswith("TOM TAT")
         
     def _is_keywords_label(self, text: str) -> bool:
-        norm = text.strip().upper()
         # ACM style often uses "Additional Keywords and Phrases:"
-        for kw in ["KEYWORDS", "TỪ KHÓA", "TU KHOA", "INDEX TERMS"]:
-            if kw in norm:
-                return True
-        return False
+        return bool(re.match(r'^(?:(?:ADDITIONAL\s+)?KEYWORDS?|TỪ KHÓA|TU KHOA|INDEX TERMS)\b', text.strip(), re.IGNORECASE))
 
     def _image_ext_from_content_type(self, content_type: str) -> str:
         ct = (content_type or '').lower()
@@ -705,7 +705,7 @@ class WordASTParser:
                 elif state == "abstract":
                     # FIX 3: Smart split — paragraph may contain BOTH "Abstract." and "Keywords:"
                     combined_match = re.search(
-                        r'(?:abstract\.?\s*)(.+?)\s*(?:keywords?|index\s+terms?)[^\w]*(.+)',
+                        r'(?:abstract|t[oó]m\s+t[aắ]t)[\.\u2014\u2013\-:]*\s*(.+?)\s*\b(?:keywords?|index\s+terms?|t[uừ]\s+kh[oó]a)\b\s*[:\.\-–—]+\s*(.+)',
                         text, re.IGNORECASE | re.DOTALL
                     )
                     if combined_match:
@@ -718,12 +718,13 @@ class WordASTParser:
                         # Jump state forward so subsequent parsing picks up body correctly
                         state = "keywords"
                     else:
-                        clean_text = re.sub(r"^(abstract\.?)[:\s]*", "", text, flags=re.IGNORECASE).strip()
+                        # Handle Springer "Abstract.", IEEE "Abstract—" (em-dash), and Vietnamese "Tóm Tắt."
+                        clean_text = re.sub(r"^(?:abstract|t[oó]m\s+t[aắ]t)\s*[\.\u2013\u2014\-:]*\s*", "", text, flags=re.IGNORECASE).strip()
                         if clean_text:
                             abstract_buf.append(loc_ky_tu(clean_text))
                 elif state == "keywords":
-                    # Remove label
-                    clean_text = re.sub(r"^(Additional Keywords and Phrases:|Keywords?\s*[:\-–]|Index Terms:|Từ khóa:)\s*", "", text, flags=re.IGNORECASE).strip()
+                    # Remove label — handle both en-dash (–) and em-dash (—) separators
+                    clean_text = re.sub(r"^(Additional Keywords and Phrases\s*[:\-–—]|Keywords?\s*[:\-–—]|Index Terms\s*[:\-–—]|Từ khóa\s*[:\-–—])\s*", "", text, flags=re.IGNORECASE).strip()
                     if clean_text:
                         keywords_buf.append(loc_ky_tu(clean_text))
                 elif state == "body" or (has_img_para and state != "references"):
@@ -802,7 +803,7 @@ class WordASTParser:
                                 continue
                             cap = caption_chinh if i == 0 else ""
                             fig_tex = "\\begin{figure}[htbp]\n\\centering\n"
-                            fig_tex += f"  \\includegraphics[width=0.9\\columnwidth]{{{img_path}}}\n"
+                            fig_tex += f"  \\includegraphics[width=0.9\\textwidth]{{{img_path}}}\n"
                             fig_tex += f"  \\caption{{{cap}}}\n"
                             fig_tex += f"  \\label{{fig:img_{self.dem_anh}}}\n"
                             fig_tex += "\\end{figure}\n\n"
@@ -850,7 +851,7 @@ class WordASTParser:
         kw_candidates = [k.strip() for k in " ".join(keywords_buf).replace(";", ",").split(",") if k.strip()]
         kw_list = []
         for kw in kw_candidates:
-            clean_kw = re.sub(r"^(Additional Keywords and Phrases:|Keywords?\s*[:\-–]|Index Terms:|Từ khóa:)\s*", "", kw, flags=re.IGNORECASE).strip()
+            clean_kw = re.sub(r"^(Additional Keywords and Phrases\s*[:\-–—]|Keywords?\s*[:\-–—]|Index Terms\s*[:\-–—]|Từ khóa\s*[:\-–—])\s*", "", kw, flags=re.IGNORECASE).strip()
             clean_kw = re.sub(r"^[\-–—,;:.\s]+", "", clean_kw)
             clean_kw = re.sub(r"[\-–—,;:.\s]+$", "", clean_kw)
             clean_kw = clean_kw.strip("\"'`“”‘’")
@@ -1344,7 +1345,7 @@ class WordASTParser:
                                 latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                             else:
                                 self.dem_anh += 1
-                                img_opts = self._includegraphics_options("0.9\\columnwidth")
+                                img_opts = self._includegraphics_options("0.9\\textwidth")
                                 latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                             text += latex_img
                         except Exception:
@@ -1367,9 +1368,9 @@ class WordASTParser:
                                 self.dem_anh += 1
                                 width_ratio = _ty_le_rong_hinh_tu_drawing(node)
                                 if width_ratio:
-                                    width_expr = f"{width_ratio:.3f}\\columnwidth"
+                                    width_expr = f"{max(width_ratio, 0.75):.3f}\\textwidth"
                                 else:
-                                    width_expr = "0.9\\columnwidth"
+                                    width_expr = "0.9\\textwidth"
                                 img_opts = self._includegraphics_options(width_expr)
                                 latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                             text += latex_img
@@ -1389,7 +1390,7 @@ class WordASTParser:
                             latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                         else:
                             self.dem_anh += 1
-                            img_opts = self._includegraphics_options("0.9\\columnwidth")
+                            img_opts = self._includegraphics_options("0.9\\textwidth")
                             latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                         text += latex_img
                     except Exception:
@@ -1410,6 +1411,16 @@ class WordASTParser:
                     elif latex_cmd == r"\subsection": level = 2
                     elif latex_cmd == r"\subsubsection": level = 3
                     break
+
+        # IEEE-style heading detection fallback (Roman numerals, letter subsections)
+        if not level:
+            stripped = text.strip()
+            # "I. INTRODUCTION", "II. RELATED WORK", "III. METHODOLOGY", etc.
+            if re.match(r'^[IVXLCDM]+\.\s+[A-Z]', stripped) and len(stripped) < 120:
+                level = 1
+            # "A. Dataset Description", "B. Evaluation Metrics", etc.
+            elif re.match(r'^[A-Z]\.\s+\S', stripped) and len(stripped) < 120:
+                level = 2
                     
         if level:
             # We strip numbering (e.g., "1. Introduction" -> "Introduction")

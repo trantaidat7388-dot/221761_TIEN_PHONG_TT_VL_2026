@@ -35,14 +35,16 @@ class TemplatePreprocessor:
         # ── Hỗ trợ Tiếng Việt (fontspec cho XeLaTeX - chỉ fallback nếu chưa có font) ──
         if doc_class != 'ieee' and r'\setmainfont' not in tex and r'\usepackage{fontspec}' not in tex:
             # Strict regex: skip commented-out \documentclass lines (starting with %)
-            # Inject \usepackage{fontspec} ONCE, after the first active \documentclass
             active_dc_pattern = re.compile(r'^(?!\s*%).*?\\documentclass(\[.*?\])?\{.*?\}', re.MULTILINE)
             lines = tex.split('\n')
             injected = False
             for i, line in enumerate(lines):
                 if not injected and active_dc_pattern.match(line):
-                    lines.insert(i + 1, r"\usepackage{fontspec}")
-                    lines.insert(i + 2, r"% \setmainfont{Times New Roman} % Bỏ comment nếu muốn ép dùng font này")
+                    lines.insert(i + 1, r"\usepackage{iftex}")
+                    lines.insert(i + 2, r"\ifXeTeX")
+                    lines.insert(i + 3, r"  \usepackage{fontspec}")
+                    lines.insert(i + 4, r"  % \setmainfont{Times New Roman} % Bỏ comment nếu muốn ép dùng font này")
+                    lines.insert(i + 5, r"\fi")
                     injected = True
                     break
             if injected:
@@ -476,13 +478,13 @@ class TemplatePreprocessor:
                 if old_enc in tex:
                     tex = tex.replace(
                         old_enc,
-                        '\\usepackage{fontspec}  % XeLaTeX: Unicode font support',
+                        '\\usepackage{iftex}\n\\ifXeTeX\n  \\usepackage{fontspec}\n\\else\n  ' + old_enc + '\n\\fi'
                     )
                     break
 
             tex = re.sub(
                 r'^([ \t]*)(\\usepackage\[[^\]]*\]\{inputenc\})',
-                r'\1% \2  % Removed: XeLaTeX handles UTF-8 natively',
+                r'\1\\ifXeTeX\n\1  % \2\n\1\\else\n\1  \2\n\1\\fi',
                 tex,
                 flags=re.MULTILINE,
             )

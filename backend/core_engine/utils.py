@@ -89,9 +89,15 @@ def sua_docx_co_macro(doc_path: str):
 
         os.remove(doc_path)
         os.rename(new_zip_path, doc_path)
-        print(f"[INFO] Tẩy rửa macro thành công cho {doc_path}")
+        try:
+            print(f"[INFO] Macro cleaned successfully: {doc_path}")
+        except UnicodeEncodeError:
+            pass
     except Exception as e:
-        print(f"[WARN] Lỗi khi tẩy rửa macro cho {doc_path}: {e}")
+        try:
+            print(f"[WARN] Macro cleanup error for {doc_path}: {e}")
+        except UnicodeEncodeError:
+            pass
 
 def loc_ky_tu(text: str) -> str:
     # Escape các ký tự đặc biệt LaTeX (\, %, $, _, &, #, {, }, ~, ^)
@@ -190,6 +196,16 @@ def loc_ky_tu(text: str) -> str:
     
     # BƯỚC 2: Escape ký tự đặc biệt LaTeX (Dùng Regex an toàn, tránh double-escape)
     
+    # FIX: Trước tiên, loại bỏ mọi LaTeX escape sequences đã tồn tại trong text
+    # để tránh double-escape khi text đã đi qua một vòng loc_ky_tu trước đó
+    # (xảy ra trong pipeline Word → Word → LaTeX).
+    ket_qua = ket_qua.replace(r'\textbackslash{}', '\\')
+    ket_qua = ket_qua.replace(r'\textasciitilde{}', '~')
+    ket_qua = ket_qua.replace(r'\textasciicircum{}', '^')
+    # Reverse simple escapes: \% → %, \$ → $, \_ → _, \& → &, \# → #, \{ → {, \} → }
+    for ch in ['%', '$', '_', '&', '#', '{', '}']:
+        ket_qua = ket_qua.replace('\\' + ch, ch)
+
     def replacer(match):
         char = match.group(0)
         mapping = {
@@ -206,9 +222,8 @@ def loc_ky_tu(text: str) -> str:
         }
         return mapping.get(char, char)
 
-    # Dùng Negative Lookbehind (?<!\\) để bỏ qua các ký tự đã được escape bằng dấu \
-    # Pattern bao quát cả 10 ký tự đặc biệt: \ % $ _ & # { } ~ ^
-    pattern = r'(?<!\\)[\\%$_&#{}~^]'
+    # Escape tất cả ký tự đặc biệt LaTeX từ plain text sạch
+    pattern = r'[\\%$_&#{}~^]'
     ket_qua = re.sub(pattern, replacer, ket_qua)
     
     # BƯỚC 3: Thay placeholder lại thành LaTeX command thật

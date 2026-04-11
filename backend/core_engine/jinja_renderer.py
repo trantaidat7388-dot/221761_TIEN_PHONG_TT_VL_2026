@@ -50,6 +50,10 @@ class JinjaLaTeXRenderer:
             if t == "section":
                 lvl = node.get("level", 1)
                 text = node.get("text", "")
+                
+                if doc_class == "springer" and text.isupper() and len(text) > 3:
+                    text = text.title()
+                    
                 if lvl == 1: out.append(f"\\section{{{text}}}\n")
                 elif lvl == 2: out.append(f"\\subsection{{{text}}}\n")
                 else: out.append(f"\\subsubsection{{{text}}}\n")
@@ -104,11 +108,8 @@ class JinjaLaTeXRenderer:
                 
                 # IEEE standard: caption ABOVE table
                 table_caption = node.get("caption", "Table")
-                table_width_ratio = node.get("width_ratio")
-                if isinstance(table_width_ratio, (int, float)) and table_width_ratio > 0:
-                    table_width_expr = f"{min(0.95, max(0.2, float(table_width_ratio))):.3f}\\columnwidth"
-                else:
-                    table_width_expr = "\\columnwidth"
+                # Width logic is handled by proportional p{} col_def below.
+                # Do not use geometric \\resizebox to prevent shrinking normal font sizes.
                 is_floating_word_table = bool(node.get("is_floating_word_table"))
                 # Keep IEEE tables anchored to preserve Word-like ordering.
                 if doc_class == "springer":
@@ -121,7 +122,6 @@ class JinjaLaTeXRenderer:
                 out.append(f"\\begin{{table}}{table_pos}\n\\centering\n")
                 out.append(f"\\caption{{{table_caption}}}\\label{{tab{table_counter}}}\n")
                 out.append("\\begingroup\\small\\setlength{\\tabcolsep}{3pt}\\renewcommand{\\arraystretch}{0.95}\n")
-                out.append(f"\\resizebox{{{table_width_expr}}}{{!}}{{%\n")
                 out.append(f"\\begin{{tabular}}{{{col_def}}}\n\\hline\n")
                 
                 # Track active multirow spans: col_index -> remaining rows
@@ -229,12 +229,29 @@ class JinjaLaTeXRenderer:
 
                     out.append(" & ".join(dong_filtered) + " \\\\\n" + hline_str + "\n")
                     
-                out.append("\\end{tabular}%\n}\n")
+                out.append("\\end{tabular}\n")
                 out.append("\\endgroup\n")
                 out.append("\\end{table}\n\n")
         
         # Ensure everything in `out` is strings
-        return "".join([str(x) for x in out])
+        result = "".join([str(x) for x in out])
+
+        # Post-process: strip text-mode wrappers (\textit, \textbf) inside equation
+        # environments — they cause "Missing $ inserted" errors in LaTeX.
+        def _clean_equation_block(m):
+            block = m.group(0)
+            block = re.sub(r'\\textit\{([^{}]*)\}', r'\1', block)
+            block = re.sub(r'\\textbf\{([^{}]*)\}', r'\1', block)
+            return block
+
+        result = re.sub(
+            r'\\begin\{equation\}.*?\\end\{equation\}',
+            _clean_equation_block,
+            result,
+            flags=re.DOTALL,
+        )
+
+        return result
 
     def render(self, template_name: str, ir_data: dict, output_path: str, **kwargs):
         """
@@ -506,8 +523,8 @@ class JinjaLaTeXRenderer:
         if not has_iftex:
             inject_lines.append("\\usepackage{iftex}")
         if not has_fontenc:
-            inject_lines.append("\\ifPDFTeX")
-            inject_lines.append("\\usepackage[T5]{fontenc}")
+            inject_lines.append("\\ifXeTeX\\else")
+            inject_lines.append("\\usepackage[T5,T1]{fontenc}")
             inject_lines.append("\\usepackage[utf8]{inputenc}")
             inject_lines.append("\\fi")
         if not has_multirow:
