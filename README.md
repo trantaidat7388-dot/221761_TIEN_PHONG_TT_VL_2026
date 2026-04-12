@@ -501,6 +501,27 @@ python run_conversion_pipeline.py `
     --compile-pdf
 ```
 
+**Ví dụ thực tế (Chạy thử ngay):**
+
+Nếu bạn muốn chuyển đổi file Word cụ thể tại `input_data/Template_word/` sang mẫu IEEE, hãy mở PowerShell và chạy:
+
+1. **Kích hoạt môi trường (Bắt buộc):**
+   ```powershell
+   .venv\Scripts\activate
+   ```
+
+2. **Chạy lệnh chuyển đổi:**
+   ```powershell
+   python run_conversion_pipeline.py `
+       --word "C:\221761_TIEN_PHONG_TT_VL_2026\input_data\Template_word\-TUAN_Magazine_01-12- Customer Churn Prediction in Vietnam's Enterprise Market Using Machine Learning Methods in a Streaming Data (1).docx" `
+       --template-zip "C:\221761_TIEN_PHONG_TT_VL_2026\input_data\IEEE_Conference_Template.zip" `
+       --output-dir "C:\221761_TIEN_PHONG_TT_VL_2026\outputs\ieee_conversion_result" `
+       --compile-pdf
+   ```
+
+3. **Kết quả:**
+   Bạn sẽ nhận được file `.tex`, các file ảnh trích xuất và một file `.zip` (sẵn sàng cho Overleaf) cùng file `.pdf` tại thư mục `outputs/ieee_conversion_result`.
+
 ### 2. Word sang Word Pipeline
 
 Script `run_word_to_word_pipeline.py` cho phép chuyển đổi bố cục và định dạng của một tệp Word đang có sang định dạng chuẩn của nhà xuất bản khác (IEEE hoặc Springer).

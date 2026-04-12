@@ -78,6 +78,10 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
+.font-heading {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
 code, pre, .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }

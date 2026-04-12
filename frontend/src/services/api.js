@@ -870,6 +870,45 @@ export const xoaTemplateAdmin = async (templateId) => {
   }
 }
 
+export const layCauHinhHeThongAdmin = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/system-config`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const capNhatCauHinhHeThongAdmin = async (payload) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/system-config`, {
+      method: 'PATCH',
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
 // ── ADMIN PAYMENT APIs ────────────────────────────────────────────────────────
 
 export const layDanhSachPaymentsAdmin = async (limit = 200) => {
@@ -994,6 +1033,8 @@ export default {
   layDanhSachTemplateAdmin,
   layAuditLogsAdmin,
   xoaTemplateAdmin,
+  layCauHinhHeThongAdmin,
+  capNhatCauHinhHeThongAdmin,
   layDanhSachPaymentsAdmin,
   xacNhanPaymentThuCongAdmin,
   dangNhapVoiEmail,

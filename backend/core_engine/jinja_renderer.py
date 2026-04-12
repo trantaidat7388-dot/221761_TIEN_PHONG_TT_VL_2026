@@ -106,21 +106,25 @@ class JinjaLaTeXRenderer:
 
                 col_def = "|" + "|".join([f"p{{{w:.3f}\\linewidth}}" for w in col_widths]) + "|"
                 
+                # Detect if table should be wide (spanning two columns)
+                is_wide = cols > 4 or node.get("is_wide", False)
+                env_name = "table*" if (is_wide and doc_class in ("ieee", "acm")) else "table"
+                scale_width = "\\textwidth" if env_name == "table*" else "\\columnwidth"
+
                 # IEEE standard: caption ABOVE table
                 table_caption = node.get("caption", "Table")
                 # Width logic is handled by proportional p{} col_def below.
-                # Do not use geometric \\resizebox to prevent shrinking normal font sizes.
+                # Use \resizebox as a safety measure for wide tables even in single column.
                 is_floating_word_table = bool(node.get("is_floating_word_table"))
                 # Keep IEEE tables anchored to preserve Word-like ordering.
                 if doc_class == "springer":
                     table_pos = "[htbp]"
-                elif is_floating_word_table:
-                    # Strongly prefer current insertion point for Word floating tables.
-                    table_pos = "[!h]"
                 else:
                     table_pos = "[H]"
-                out.append(f"\\begin{{table}}{table_pos}\n\\centering\n")
+                
+                out.append(f"\\begin{{{env_name}}}{table_pos}\n\\centering\n")
                 out.append(f"\\caption{{{table_caption}}}\\label{{tab{table_counter}}}\n")
+                out.append(f"\\resizebox{{{scale_width}}}{{!}}{{%.\n")
                 out.append("\\begingroup\\small\\setlength{\\tabcolsep}{3pt}\\renewcommand{\\arraystretch}{0.95}\n")
                 out.append(f"\\begin{{tabular}}{{{col_def}}}\n\\hline\n")
                 
@@ -231,7 +235,8 @@ class JinjaLaTeXRenderer:
                     
                 out.append("\\end{tabular}\n")
                 out.append("\\endgroup\n")
-                out.append("\\end{table}\n\n")
+                out.append("}\n") # End of \resizebox
+                out.append(f"\\end{{{env_name}}}\n\n")
         
         # Ensure everything in `out` is strings
         result = "".join([str(x) for x in out])
@@ -317,8 +322,8 @@ class JinjaLaTeXRenderer:
         close to the next section heading, convert them into inline non-float blocks
         so they remain anchored to the local narrative flow.
         """
-        body_tex = re.sub(r"\\begin\{figure\}\[[^\]]*\]", r"\\begin{figure}[htbp]", body_tex)
-        figure_pattern = re.compile(r"\\begin\{figure\}\[htbp\].*?\\end\{figure\}", re.DOTALL)
+        body_tex = re.sub(r"\\begin\{figure\}\[[^\]]*\]", r"\\begin{figure}[H]", body_tex)
+        figure_pattern = re.compile(r"\\begin\{figure\}\[H\].*?\\end\{figure\}", re.DOTALL)
         section_pattern = re.compile(r"\\section\{")
 
         chunks = []
@@ -415,7 +420,7 @@ class JinjaLaTeXRenderer:
         Use ``[!ht]`` to avoid float-only pages caused by the ``p`` placement mode,
         then add ``\\FloatBarrier`` only when a section starts shortly after a float.
         """
-        body_tex = re.sub(r"\\begin\{figure\}\[[^\]]*\]", r"\\begin{figure}[!ht]", body_tex)
+        body_tex = re.sub(r"\\begin\{figure\}\[[^\]]*\]", r"\\begin{figure}[H]", body_tex)
         body_tex = re.sub(r"\\begin\{table\}\[[^\]]*\]", r"\\begin{table}[H]", body_tex)
 
         float_end_pattern = re.compile(r"\\end\{(?:figure|table)\}")
@@ -529,6 +534,11 @@ class JinjaLaTeXRenderer:
             inject_lines.append("\\fi")
         if not has_multirow:
             inject_lines.append("\\usepackage{multirow}")
+        if "IEEEtran" in tex_content:
+            inject_lines.append("\\raggedbottom")
+            inject_lines.append("\\setlength{\\textfloatsep}{10pt plus 2pt minus 2pt}")
+            inject_lines.append("\\setlength{\\intextsep}{10pt plus 2pt minus 2pt}")
+
         if not inject_lines:
             return tex_content
         inject_block = "\n".join(inject_lines) + "\n"

@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, ShieldCheck, Sparkles, Workflow, CreditCard, LayoutDashboard,
   FileText, Cpu, Zap, Globe, Lock, Users, CheckCircle2, QrCode,
   Upload, Settings, Download, Crown, Star, ChevronRight, Code2,
-  BookOpen, Layers, Shield, BrainCircuit, Timer, ChevronDown, ArrowUpRight
+  BookOpen, Layers, Shield, BrainCircuit, Timer, ChevronDown, ArrowUpRight,
+  Building2, BadgeCheck, HelpCircle
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { dungXacThuc } from '../../context/AuthContext'
@@ -16,12 +17,12 @@ const stagger = { visible: { transition: { staggerChildren: 0.08 } } }
 
 /* ─── data ─── */
 const TINH_NANG = [
-  { icon: FileText, title: 'Chuyển đổi thông minh', desc: 'Phân tích cấu trúc AST + Heuristics, tự động nhận dạng tiêu đề, tác giả, công thức, bảng biểu từ file Word.' },
-  { icon: BrainCircuit, title: 'Công thức toán học', desc: 'Hỗ trợ OMML, OLE Equation Editor 3.0 sang LaTeX qua 3 tầng xử lý độc lập.' },
+  { icon: FileText, title: 'Chuyển đổi thông minh', desc: 'Tự động nhận dạng bố cục tài liệu, tiêu đề, tác giả, công thức và bảng biểu từ file Word.' },
+  { icon: BrainCircuit, title: 'Công thức toán học', desc: 'Giữ công thức rõ ràng, dễ biên dịch và đúng ngữ cảnh trong tài liệu LaTeX.' },
   { icon: Layers, title: '6+ mẫu nhà xuất bản', desc: 'IEEE, Springer LNCS, ACM, Elsevier, MDPI, Rho Class — sẵn sàng nộp bài ngay.' },
   { icon: Zap, title: 'Xử lý thời gian thực', desc: 'Tiến trình SSE 6 bước, cập nhật trạng thái trực tiếp đến trình duyệt.' },
-  { icon: Lock, title: 'Bảo mật JWT + OAuth', desc: 'Xác thực local hoặc Google. Token HS256, rotation key, audit log.' },
-  { icon: CreditCard, title: 'SePay tự động', desc: 'Nạp token qua chuyển khoản, đối soát polling tự động, không cần webhook.' },
+  { icon: Lock, title: 'Bảo mật tài khoản', desc: 'Đăng nhập an toàn, phân quyền rõ ràng và bảo vệ dữ liệu người dùng.' },
+  { icon: CreditCard, title: 'Thanh toán tiện lợi', desc: 'Nạp token nhanh bằng chuyển khoản và nhận cập nhật trạng thái gần như tức thời.' },
 ]
 
 const BUOC_SU_DUNG = [
@@ -45,15 +46,32 @@ const GOI_PREMIUM = [
   { name: 'Gói Năm', days: 365, price: '500.000', badge: 'Tiết kiệm' },
 ]
 
-const CONG_NGHE = [
-  'Python 3.10+', 'FastAPI', 'React 18', 'Vite 5',
-  'TailwindCSS', 'SQLAlchemy', 'Jinja2', 'JWT HS256',
+const DOI_TAC = [
+  'IEEE-style drafts', 'Springer LNCS papers', 'ACM preprint flow', 'Elsevier manuscript',
+  'Graduate thesis', 'Lab report automation', 'Conference submission pack', 'Internal R&D docs',
+]
+
+const FAQ_ITEMS = [
+  {
+    q: 'Ket qua xuat ra gom nhung gi?',
+    a: 'He thong xuat file .zip san sang overleaf: .tex, hinh anh, tai nguyen template va file PDF neu moi truong co LaTeX.',
+  },
+  {
+    q: 'Tai sao can SePay trong nen tang nay?',
+    a: 'SePay giup nap token nhanh qua chuyen khoan va thong bao ket qua thanh toan ro rang cho nguoi dung.',
+  },
+  {
+    q: 'Trang thai pending thanh toan bao lau?',
+    a: 'Thong thuong he thong cap nhat trong vai giay den vai chuc giay tuy thoi diem giao dich ngan hang.',
+  },
 ]
 
 const TrangLanding = () => {
   const { nguoiDung } = dungXacThuc()
+  const [faqMo, setFaqMo] = useState(0)
   const ctaPath = nguoiDung ? '/chuyen-doi' : '/dang-nhap'
   const ctaLabel = nguoiDung ? 'Vào hệ thống' : 'Bắt đầu miễn phí'
+  const doiTacLap = useMemo(() => [...DOI_TAC, ...DOI_TAC], [])
 
   return (
     <div className="min-h-screen bg-gradient-animated text-white overflow-x-hidden">
@@ -97,7 +115,7 @@ const TrangLanding = () => {
 
               <motion.h1
                 initial="hidden" animate="visible" variants={fadeUp} transition={{ duration: 0.6, delay: 0.1 }}
-                className="mt-5 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-[3.5rem]"
+                className="mt-5 font-heading text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-[3.5rem]"
               >
                 Biến file Word thành{' '}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-300 via-primary-400 to-purple-400">
@@ -132,7 +150,7 @@ const TrangLanding = () => {
                   { val: '6+', sub: 'Template' },
                   { val: '3', sub: 'Tầng toán học' },
                   { val: 'SSE', sub: 'Realtime' },
-                  { val: 'JWT', sub: 'Bảo mật' },
+                  { val: '24/7', sub: 'Hoạt động' },
                 ].map((s, i) => (
                   <div key={i}>
                     <p className="text-2xl font-extrabold text-primary-300">{s.val}</p>
@@ -171,6 +189,45 @@ const TrangLanding = () => {
                 <CheckCircle2 className="inline h-3.5 w-3.5 mr-1.5" /> Biên dịch thành công — 0 lỗi
               </div>
             </motion.div>
+          </div>
+        </section>
+
+        {/* ═══════════════ SECTION 1.5: SOCIAL PROOF ═══════════════ */}
+        <section className="pb-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-8">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="inline-flex items-center gap-2 text-sm font-semibold text-cyan-200">
+                  <Building2 className="h-4 w-4" /> Được dùng cho nhiều workflow học thuật
+                </p>
+                <p className="inline-flex items-center gap-2 text-xs text-emerald-300/90">
+                  <BadgeCheck className="h-3.5 w-3.5" /> Pipeline ổn định với tài liệu dài và nhiều công thức
+                </p>
+              </div>
+
+              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-slate-950/40 py-3">
+                <motion.div
+                  className="flex gap-2"
+                  animate={{ x: ['0%', '-50%'] }}
+                  transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}
+                >
+                  {doiTacLap.map((label, idx) => (
+                    <span
+                      key={`${label}-${idx}`}
+                      className="shrink-0 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-100"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </motion.div>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                <InfoChip icon={Zap} title="Realtime" value="SSE 6 bước xử lý" />
+                <InfoChip icon={ShieldCheck} title="An toàn" value="Bảo vệ tài khoản người dùng" />
+                <InfoChip icon={CreditCard} title="Thanh toán" value="Nạp token nhanh, dễ dùng" />
+              </div>
+            </div>
           </div>
         </section>
 
@@ -300,10 +357,10 @@ const TrangLanding = () => {
           </div>
         </section>
 
-        {/* ═══════════════ SECTION 6: SEPAY PAYMENT ═══════════════ */}
+        {/* ═══════════════ SECTION 6: THANH TOAN ═══════════════ */}
         <section className="py-24 border-t border-white/5">
           <div className="mx-auto max-w-7xl px-4 sm:px-8">
-            <SectionHeader badge="Thanh toán" title="Hệ thống nạp tiền SePay" desc="Tự động đối soát qua chuyển khoản ngân hàng — hoạt động trên mọi môi trường kể cả localhost." />
+            <SectionHeader badge="Thanh toán" title="Nạp token đơn giản" desc="Thanh toan nhanh bang chuyen khoan voi giao dien ro rang, de theo doi." />
 
             <div className="mt-14 grid gap-6 lg:grid-cols-2">
               {/* Flow */}
@@ -311,16 +368,16 @@ const TrangLanding = () => {
                 className="glass-card p-6"
               >
                 <h3 className="mb-5 font-bold flex items-center gap-2">
-                  <Workflow className="h-5 w-5 text-primary-400" /> Luồng xử lý
+                  <Workflow className="h-5 w-5 text-primary-400" /> Quy trinh nguoi dung
                 </h3>
                 <div className="space-y-3">
                   {[
-                    { n: '1', t: 'Frontend gọi POST /api/payment/create' },
-                    { n: '2', t: 'Backend tạo record (status: pending), trả về HEX_ID' },
-                    { n: '3', t: 'Hiển thị QR Code với nội dung: W2LNAPTOKEN{HEX_ID}' },
-                    { n: '4', t: 'Polling GET /api/payment/status/{id} mỗi 5 giây' },
-                    { n: '5', t: 'Backend gọi SePay API → regex match → kiểm tra số tiền' },
-                    { n: '6', t: 'Thành công: cập nhật completed, nạp token cho user' },
+                    { n: '1', t: 'Chon goi hoac nhap so tien can nap' },
+                    { n: '2', t: 'Nhan ma QR va thong tin chuyen khoan' },
+                    { n: '3', t: 'Thuc hien chuyen khoan tu app ngan hang' },
+                    { n: '4', t: 'He thong tu dong cap nhat trang thai giao dich' },
+                    { n: '5', t: 'Token duoc cong vao tai khoan sau khi xac nhan' },
+                    { n: '6', t: 'Tiep tuc su dung workspace chuyen doi ngay lap tuc' },
                   ].map((step, idx) => (
                     <div key={idx} className="flex items-start gap-3">
                       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-500/15 text-xs font-bold text-primary-300">{step.n}</div>
@@ -330,31 +387,19 @@ const TrangLanding = () => {
                 </div>
               </motion.div>
 
-              {/* Code */}
+              {/* Benefit */}
               <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} transition={{ duration: 0.6, delay: 0.1 }}
                 className="glass-card p-6"
               >
                 <h3 className="mb-5 font-bold flex items-center gap-2">
-                  <Code2 className="h-5 w-5 text-primary-400" /> Logic đối soát
+                  <ShieldCheck className="h-5 w-5 text-primary-400" /> Vi sao nguoi dung de su dung
                 </h3>
-                <div className="rounded-xl bg-black/40 p-4 font-mono text-xs text-white/70 overflow-x-auto border border-white/5">
-                  <p className="text-white/30"># backend/app/services/sepay_sync.py</p>
-                  <p className="mt-2"><span className="text-purple-400">def</span> <span className="text-primary-300">encode_payment_id</span>(p_id):</p>
-                  <p className="pl-4"><span className="text-purple-400">return</span> hex(p_id ^ SECRET_XOR_KEY)[<span className="text-amber-300">2</span>:].upper()</p>
-                  <p className="mt-2"><span className="text-purple-400">def</span> <span className="text-primary-300">check_payment_status</span>(payment_id, amount):</p>
-                  <p className="pl-4">target_hex = encode_payment_id(payment_id)</p>
-                  <p className="pl-4">transactions = get_sepay_transactions()</p>
-                  <p className="pl-4"><span className="text-purple-400">for</span> tx <span className="text-purple-400">in</span> transactions:</p>
-                  <p className="pl-8">match = re.search(pattern, content)</p>
-                  <p className="pl-8"><span className="text-purple-400">if</span> match <span className="text-purple-400">and</span> amount_ok:</p>
-                  <p className="pl-12"><span className="text-purple-400">return</span> <span className="text-amber-300">True</span>, tx_id</p>
-                </div>
-
-                <div className="mt-5 space-y-2.5">
+                <div className="mt-1 space-y-2.5">
                   {[
-                    { icon: ShieldCheck, text: 'XOR obfuscation bảo vệ payment ID', color: 'text-emerald-400' },
-                    { icon: Timer, text: 'State machine: pending → completed / failed', color: 'text-amber-400' },
-                    { icon: Globe, text: 'Hoạt động trên localhost (không cần NAT/SSL)', color: 'text-primary-400' },
+                    { icon: CheckCircle2, text: 'Giao dien don gian, tao QR nhanh', color: 'text-emerald-400' },
+                    { icon: Timer, text: 'Trang thai giao dich cap nhat tu dong', color: 'text-amber-400' },
+                    { icon: Globe, text: 'Phu hop ca local va production', color: 'text-primary-400' },
+                    { icon: CreditCard, text: 'Lich su thanh toan ro rang trong tai khoan', color: 'text-cyan-400' },
                   ].map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2.5 text-sm">
                       <item.icon className={`h-4 w-4 shrink-0 ${item.color}`} />
@@ -367,23 +412,73 @@ const TrangLanding = () => {
           </div>
         </section>
 
-
-
-        {/* ═══════════════ SECTION 8: TECH ═══════════════ */}
-        <section className="py-16 border-t border-white/5">
+        {/* ═══════════════ SECTION 7: BEFORE/AFTER ═══════════════ */}
+        <section className="py-24 border-t border-white/5">
           <div className="mx-auto max-w-7xl px-4 sm:px-8">
-            <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="mb-8 text-center text-xl font-bold">
-              Công nghệ sử dụng
-            </motion.h2>
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="flex flex-wrap items-center justify-center gap-2.5">
-              {CONG_NGHE.map((tech, i) => (
-                <motion.div key={i} variants={fadeIn}
-                  className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/60 hover:bg-white/10 hover:text-white/80 transition"
-                >
-                  {tech}
-                </motion.div>
-              ))}
-            </motion.div>
+            <SectionHeader badge="So sánh" title="Từ thao tác thủ công đến pipeline tự động" desc="Một góc nhìn trực quan về khác biệt trước và sau khi dùng Word2LaTeX." />
+
+            <div className="mt-14 grid gap-6 lg:grid-cols-2">
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeUp}
+                className="rounded-2xl border border-rose-400/20 bg-rose-500/5 p-6"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wider text-rose-300">Trước khi dùng</p>
+                <h3 className="mt-2 font-heading text-2xl font-bold text-white">Thủ công, rời rạc, dễ sai</h3>
+                <ul className="mt-4 space-y-3 text-sm text-white/70">
+                  <li className="flex items-start gap-2"><span className="mt-1 h-1.5 w-1.5 rounded-full bg-rose-300" /> Copy/paste công thức và format nhiều lần</li>
+                  <li className="flex items-start gap-2"><span className="mt-1 h-1.5 w-1.5 rounded-full bg-rose-300" /> Dễ lệch chuẩn template nhà xuất bản</li>
+                  <li className="flex items-start gap-2"><span className="mt-1 h-1.5 w-1.5 rounded-full bg-rose-300" /> Mất thời gian sửa lỗi biên dịch</li>
+                </ul>
+              </motion.div>
+
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeUp}
+                transition={{ delay: 0.1 }}
+                className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-6"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wider text-emerald-300">Sau khi dùng</p>
+                <h3 className="mt-2 font-heading text-2xl font-bold text-white">Tự động, nhất quán, sẵn nộp</h3>
+                <ul className="mt-4 space-y-3 text-sm text-white/80">
+                  <li className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" /> Chuẩn hóa heading, tác giả, hình, bảng</li>
+                  <li className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" /> Mapping công thức đa tầng OMML/OLE sang LaTeX</li>
+                  <li className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" /> Xuất gói .zip sẵn upload Overleaf</li>
+                </ul>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════ SECTION 9: FAQ ═══════════════ */}
+        <section className="py-20 border-t border-white/5">
+          <div className="mx-auto max-w-4xl px-4 sm:px-8">
+            <SectionHeader badge="FAQ" title="Câu hỏi thường gặp" desc="Các điểm quan trọng trước khi bạn triển khai hoặc dùng production." />
+
+            <div className="mt-10 space-y-3">
+              {FAQ_ITEMS.map((item, idx) => {
+                const isOpen = faqMo === idx
+                return (
+                  <button
+                    key={item.q}
+                    onClick={() => setFaqMo(isOpen ? -1 : idx)}
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:border-cyan-400/30"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="inline-flex items-center gap-2 font-semibold text-white">
+                        <HelpCircle className="h-4 w-4 text-cyan-300" /> {item.q}
+                      </span>
+                      <ChevronDown className={`h-4 w-4 shrink-0 text-white/50 transition ${isOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                    {isOpen && <p className="mt-3 text-sm leading-relaxed text-white/65">{item.a}</p>}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </section>
 
@@ -429,9 +524,18 @@ const TrangLanding = () => {
 const SectionHeader = ({ badge, title, desc }) => (
   <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} transition={{ duration: 0.5 }} className="text-center">
     <span className="mb-3 inline-block rounded-full bg-primary-500/10 border border-primary-500/20 px-3 py-1 text-xs font-semibold text-primary-300">{badge}</span>
-    <h2 className="text-3xl font-extrabold sm:text-4xl">{title}</h2>
+    <h2 className="font-heading text-3xl font-extrabold sm:text-4xl">{title}</h2>
     <p className="mx-auto mt-3 max-w-2xl text-white/50">{desc}</p>
   </motion.div>
+)
+
+const InfoChip = ({ icon: Icon, title, value }) => (
+  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <p className="inline-flex items-center gap-2 text-xs uppercase tracking-wider text-white/45">
+      <Icon className="h-3.5 w-3.5 text-primary-300" /> {title}
+    </p>
+    <p className="mt-1 text-sm font-semibold text-white">{value}</p>
+  </div>
 )
 
 export default TrangLanding

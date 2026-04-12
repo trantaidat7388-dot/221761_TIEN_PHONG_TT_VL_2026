@@ -44,7 +44,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
     try {
     dangXuat()
       toast.success('Đã đăng xuất')
-      navigate('/dang-nhap')
+      navigate('/', { replace: true })
     } catch {
       toast.error('Không thể đăng xuất')
     }

@@ -45,6 +45,7 @@ from .word_loader import mo_tai_lieu_word_co_fallback
 _FIG_PATH_RE = re.compile(r"\\includegraphics(?:\[[^\]]*\])?{([^}]+)}")
 _CAPTION_RE = re.compile(r"\\caption{([^}]*)}")
 _LABEL_RE = re.compile(r"\\label{[^}]*}")
+_FIG_ENV_RE = re.compile(r"\\begin{(figure\*?)}", re.IGNORECASE)
 
 # LaTeX rich-text token patterns — used to convert IR text to Word runs
 _RICH_TEXT_TOKENS = re.compile(
@@ -638,9 +639,10 @@ class IEEEWordRenderer:
                             yield p
 
     def _extract_figures_from_text(self, text: str) -> Tuple[str, List[Dict[str, str]]]:
-        """Extracts figure references from text."""
+        """Extracts figure references from text. Supports both \begin{figure} and \begin{figure*}."""
         figures = []
-        pattern = r'\\begin\{figure\}.*?\\includegraphics(?:\[.*?\])?\{(.*?)\}.*?\\caption\{(.*?)\}.*?\\end\{figure\}'
+        # Updated pattern: allow figure or figure*
+        pattern = r'\\begin\{figure\*?\}.*?\\includegraphics(?:\[.*?\])?\{(.*?)\}.*?\\caption\{(.*?)\}.*?\\end\{figure\*?\}'
         for match in re.finditer(pattern, text, re.DOTALL):
             figures.append({
                 "path": match.group(1),
@@ -956,7 +958,7 @@ class IEEEWordRenderer:
                     text_without_fig, figures = self._extract_figures_from_text(raw_text)
                     for fig in figures:
                         fig_tex = (
-                            "\\begin{figure}[htbp]"
+                            "\\begin{figure}[H]"
                             f"\\includegraphics{{{fig.get('path', '')}}}"
                             f"\\caption{{{fig.get('caption', '')}}}"
                             "\\end{figure}"

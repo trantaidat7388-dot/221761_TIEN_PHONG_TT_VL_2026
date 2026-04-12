@@ -697,12 +697,12 @@ class ChuyenDoiWordSangLatex:
             latex += rf"  \includegraphics[width=\linewidth]{{{ten_thu_muc}/{ten_anh}}}" + "\n"
             latex += r"\end{center}" + "\n\n"
             return latex
-        # Ảnh độc lập: dùng figure với [!ht] (thân thiện IEEE/Springer)
+        # Ảnh độc lập: dùng figure với [H] (thân thiện IEEE/Springer)
         label = f"fig:hinh{self.dem_anh}"
-        vi_tri = "[!ht]"
+        vi_tri = "[H]"
         latex = rf"\begin{{figure}}{vi_tri}" + "\n"
         latex += r"  \centering" + "\n"
-        latex += rf"  \includegraphics[width=0.6\linewidth]{{{ten_thu_muc}/{ten_anh}}}" + "\n"
+        latex += rf"  \includegraphics[width=\columnwidth,height=0.4\textheight,keepaspectratio]{{{ten_thu_muc}/{ten_anh}}}" + "\n"
         caption_final = caption or ""
         caption_final = re.sub(
             r'^(Hình|Figure|Fig\.?)\s*\d+\s*[:\.\-–—]?\s*',
@@ -730,8 +730,8 @@ class ChuyenDoiWordSangLatex:
             latex += r"\end{center}" + "\n\n"
             return latex
 
-        # Ảnh độc lập: dùng figure với [!ht]
-        vi_tri = "[!ht]"
+        # Ảnh độc lập: dùng figure với [H]
+        vi_tri = "[H]"
         co_caption_con = danh_sach_caption and len(danh_sach_caption) > 0
 
         latex = rf"\begin{{figure}}{vi_tri}" + "\n"
@@ -743,7 +743,7 @@ class ChuyenDoiWordSangLatex:
                 if i < len(danh_sach_caption):
                     mo_ta = re.sub(r'^\([a-z]\)\s*', '', danh_sach_caption[i]).strip()
                 nhan = chr(ord('a') + i)
-                latex += rf"  \begin{{subfigure}}[b]{{{do_rong}\textwidth}}" + "\n"
+                latex += rf"  \begin{{subfigure}}[b]{{{do_rong}\columnwidth}}" + "\n"
                 latex += r"    \centering" + "\n"
                 latex += rf"    \includegraphics[width=\linewidth]{{{ten_thu_muc}/{ten_anh}}}" + "\n"
                 latex += rf"    \caption{{{mo_ta}}}" + "\n"

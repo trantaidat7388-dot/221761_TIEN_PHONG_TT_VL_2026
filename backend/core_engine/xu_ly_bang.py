@@ -643,9 +643,20 @@ class BoXuLyBang:
         cot = '|' + '|'.join([f"p{{{width_frac:.3f}\\linewidth}}" for _ in range(so_cot)]) + '|'
         vi_tri = "[!ht]"
 
-        latex = rf"\begin{{table}}{vi_tri}" + "\n"
+        # Nếu số cột > 4, khả năng cao cần chiếm 2 cột trong IEEE/ACM
+        is_wide = so_cot > 4
+        env_name = "table*" if is_wide else "table"
+        scale_width = "\\textwidth" if is_wide else "\\columnwidth"
+        
+        latex = rf"\begin{{{env_name}}}{vi_tri}" + "\n"
         latex += r"  \centering" + "\n"
-        latex += r"  \resizebox{\columnwidth}{!}{%" + "\n"
+        
+        # Caption above for tables (IEEE standard)
+        if caption:
+            caption_clean = re.sub(r'^(Bảng|Table)\s*\d+\s*[:\.\-–—]?\s*', '', caption, flags=re.IGNORECASE).strip()
+            latex += rf"  \caption{{{caption_clean}}}" + "\n"
+        
+        latex += rf"  \resizebox{{{scale_width}}}{{!}}{{%." + "\n"
         latex += rf"  \begin{{tabular}}{{{cot}}}" + "\n"
         
         # Dùng \hline thay vì \toprule
@@ -748,11 +759,8 @@ class BoXuLyBang:
                 latex += r"  \hline" + "\n"
         latex += r"  \end{tabular}%" + "\n"
         latex += r"  }" + "\n"
-        caption_bang = self.bo_chuyen.bat_caption_bang()
-        caption_final = caption_bang or ""
-        latex += rf"  \caption{{{caption_final}}}" + "\n"
         latex += rf"  \label{{tab:bang{self.bo_chuyen.dem_bang}}}" + "\n"
-        latex += r"\end{table}" + "\n\n"
+        latex += rf"\end{{{env_name}}}" + "\n\n"
 
         return latex
 

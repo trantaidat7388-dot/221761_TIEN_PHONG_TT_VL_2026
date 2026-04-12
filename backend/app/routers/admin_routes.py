@@ -15,6 +15,7 @@ from .. import auth
 from .. import models
 from ..config import CUSTOM_TEMPLATE_FOLDER
 from ..database import lay_db
+from ..services.admin_system_config import cap_nhat_cau_hinh_he_thong, lay_cau_hinh_he_thong
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -50,6 +51,13 @@ class YeuCauDieuChinhToken(BaseModel):
     reason: str | None = None
 
 
+class YeuCauCapNhatCauHinhHeThong(BaseModel):
+    token_min_cost_vnd: int | None = None
+    free_plan_max_pages: int | None = None
+    max_doc_upload_mb: int | None = None
+    rate_limit_admin_per_minute: int | None = None
+
+
 def _ghi_audit_admin(
     db: Session,
     actor_user_id: int,
@@ -70,6 +78,50 @@ def _ghi_audit_admin(
             ip_address=request.client.host if request.client else None,
         )
     )
+
+
+@router.get("/system-config")
+def lay_cau_hinh_he_thong_admin(
+    _: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    return lay_cau_hinh_he_thong()
+
+
+@router.patch("/system-config")
+def cap_nhat_cau_hinh_he_thong_admin(
+    req: YeuCauCapNhatCauHinhHeThong,
+    request: Request,
+    db: Session = Depends(lay_db),
+    current_admin: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    payload = req.model_dump(exclude_none=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Khong co gia tri cau hinh de cap nhat")
+
+    ranges = {
+        "token_min_cost_vnd": (1, 1_000_000),
+        "free_plan_max_pages": (1, 1_000_000),
+        "max_doc_upload_mb": (1, 1024),
+        "rate_limit_admin_per_minute": (10, 5000),
+    }
+
+    for key, value in payload.items():
+        min_val, max_val = ranges[key]
+        if not isinstance(value, int):
+            raise HTTPException(status_code=400, detail=f"{key} phai la so nguyen")
+        if value < min_val or value > max_val:
+            raise HTTPException(status_code=400, detail=f"{key} phai trong khoang [{min_val}, {max_val}]")
+
+    result = cap_nhat_cau_hinh_he_thong(payload)
+    _ghi_audit_admin(
+        db=db,
+        actor_user_id=current_admin.id,
+        action="admin.update_system_config",
+        request=request,
+        detail=";".join(f"{k}={v}" for k, v in payload.items()),
+    )
+    db.commit()
+    return result
 
 
 @router.get("/overview")

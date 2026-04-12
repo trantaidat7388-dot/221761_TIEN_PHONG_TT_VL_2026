@@ -170,7 +170,7 @@ class WordASTParser:
 
     def _includegraphics_options(self, width_expr: str) -> str:
         """Use bounded image sizing to preserve layout when source vector crop info is lossy."""
-        return f"width={width_expr},height=0.35\\textheight,keepaspectratio"
+        return f"width={width_expr},height=0.4\\textheight,keepaspectratio"
         
     def _is_body_label(self, text: str) -> bool:
         norm = re.sub(r"^[\d\.]+\s*", "", text.strip().upper())
@@ -802,8 +802,8 @@ class WordASTParser:
                             if img_path in seen_figure_paths:
                                 continue
                             cap = caption_chinh if i == 0 else ""
-                            fig_tex = "\\begin{figure}[htbp]\n\\centering\n"
-                            fig_tex += f"  \\includegraphics[width=0.9\\textwidth]{{{img_path}}}\n"
+                            fig_tex = "\\begin{figure}[H]\n\\centering\n"
+                            fig_tex += f"  \\includegraphics[width=\\columnwidth,height=0.4\\textheight,keepaspectratio]{{{img_path}}}\n"
                             fig_tex += f"  \\caption{{{cap}}}\n"
                             fig_tex += f"  \\label{{fig:img_{self.dem_anh}}}\n"
                             fig_tex += "\\end{figure}\n\n"
@@ -1345,8 +1345,8 @@ class WordASTParser:
                                 latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                             else:
                                 self.dem_anh += 1
-                                img_opts = self._includegraphics_options("0.9\\textwidth")
-                                latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                                img_opts = self._includegraphics_options("\\columnwidth")
+                                latex_img = f"\n\\begin{{figure}}[H]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                             text += latex_img
                         except Exception:
                             pass
@@ -1366,13 +1366,8 @@ class WordASTParser:
                                 latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                             else:
                                 self.dem_anh += 1
-                                width_ratio = _ty_le_rong_hinh_tu_drawing(node)
-                                if width_ratio:
-                                    width_expr = f"{max(width_ratio, 0.75):.3f}\\textwidth"
-                                else:
-                                    width_expr = "0.9\\textwidth"
-                                img_opts = self._includegraphics_options(width_expr)
-                                latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                                img_opts = self._includegraphics_options("\\columnwidth")
+                                latex_img = f"\n\\begin{{figure}}[H]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                             text += latex_img
                         except Exception:
                             pass
@@ -1390,8 +1385,8 @@ class WordASTParser:
                             latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                         else:
                             self.dem_anh += 1
-                            img_opts = self._includegraphics_options("0.9\\textwidth")
-                            latex_img = f"\n\\begin{{figure}}[htbp]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                            img_opts = self._includegraphics_options("\\columnwidth")
+                            latex_img = f"\n\\begin{{figure}}[H]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
                         text += latex_img
                     except Exception:
                         pass
