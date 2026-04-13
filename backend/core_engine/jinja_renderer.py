@@ -115,7 +115,6 @@ class JinjaLaTeXRenderer:
                 table_caption = node.get("caption", "Table")
                 # Width logic is handled by proportional p{} col_def below.
                 # Use \resizebox as a safety measure for wide tables even in single column.
-                is_floating_word_table = bool(node.get("is_floating_word_table"))
                 # Keep IEEE tables anchored to preserve Word-like ordering.
                 if doc_class == "springer":
                     table_pos = "[htbp]"

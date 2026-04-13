@@ -46,7 +46,7 @@ for input_file in candidates:
     refs1 = len(ir1["references"])
     sec1 = sum(1 for n in ir1["body"] if n.get("type") == "section")
 
-    print(f"  STEP 1 - Original:")
+    print("  STEP 1 - Original:")
     print(f"    Title:    {title1}")
     print(f"    Abstract: {abs1}...")
     print(f"    Keywords: {kw1}")
@@ -71,7 +71,7 @@ for input_file in candidates:
     refs2 = len(ir2["references"])
     sec2 = sum(1 for n in ir2["body"] if n.get("type") == "section")
 
-    print(f"  STEP 3 - From IEEE:")
+    print("  STEP 3 - From IEEE:")
     print(f"    Title:    {title2}")
     print(f"    Abstract: {abs2}...")
     print(f"    Keywords: {kw2}")
@@ -96,7 +96,7 @@ for input_file in candidates:
     refs3 = len(ir3["references"])
     sec3 = sum(1 for n in ir3["body"] if n.get("type") == "section")
 
-    print(f"  STEP 5 - Final Springer:")
+    print("  STEP 5 - Final Springer:")
     print(f"    Title:    {title3}")
     print(f"    Abstract: {abs3}...")
     print(f"    Keywords: {kw3}")
@@ -124,9 +124,9 @@ for input_file in candidates:
     if issues:
         print(f"  [FAIL] Issues: {', '.join(issues)}")
     else:
-        print(f"  [PASS] Round-trip OK!")
+        print("  [PASS] Round-trip OK!")
 
-    print(f"  Comparison:")
+    print("  Comparison:")
     print(f"    Title:    {'MATCH' if title1[:40] == title3[:40] else 'DIFF'}")
     print(f"    Keywords: {len(kw1)} -> {len(kw3)}")
     print(f"    Sections: {sec1} -> {sec3}")

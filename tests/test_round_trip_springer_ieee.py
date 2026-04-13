@@ -7,8 +7,6 @@ and references.
 
 from __future__ import annotations
 
-import json
-import re
 import sys
 import tempfile
 from pathlib import Path
@@ -201,7 +199,7 @@ class TestRoundTripSpringerIEEE:
         # Body not empty
         assert len(ir_final["body"]) > 0, "Body is empty after round-trip"
 
-        print(f"\n[OK] Round-trip test PASSED")
+        print("\n[OK] Round-trip test PASSED")
         print(f"   Title: '{(final_meta.get('title') or '')[:60]}'")
         print(f"   Sections: {orig_sections} -> {final_sections}")
         print(f"   Body nodes: {len(ir_original['body'])} -> {len(ir_final['body'])}")

@@ -23,7 +23,7 @@ import os
 import base64
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Iterable, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from lxml import etree
 
 from docx import Document
@@ -31,7 +31,7 @@ from docx.enum.section import WD_SECTION
 from docx.enum.section import WD_ORIENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_BREAK
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.shared import Inches, Pt, Cm, RGBColor
+from docx.shared import Inches, Pt, Cm
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.table import Table
@@ -539,7 +539,6 @@ class IEEEWordRenderer:
         # We cannot easily insert a table *before* a paragraph in standard python-docx API.
         # But we can access the parent element and insert the tbl element.
         parent = anchor_p._p.getparent()
-        rows, cols = node.get("rows", 0), node.get("cols", 0)
         table_data = node.get("data", [])
         if not table_data:
             return
@@ -2174,7 +2173,6 @@ class IEEEWordRenderer:
 
     def _add_list_node(self, doc: Document, node: Dict[str, Any]) -> None:
         """Render a list node (bullet or numbered) using IEEE styles."""
-        list_type = node.get("list_type", "bullet")
         items = node.get("items", [])
         bullet_style = self._pick_style_name(["bullet list", "List Bullet", "List Number"])
 

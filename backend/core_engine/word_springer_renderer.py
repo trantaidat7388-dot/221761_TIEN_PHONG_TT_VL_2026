@@ -163,7 +163,6 @@ class SpringerWordRenderer(IEEEWordRenderer):
                     if p_parent is not None:
                         p_parent.remove(p_el)
             
-            ref_anchor = all_paras[ref_idx] # We shouldn't use ref_idx+1 as anchor since we just deleted it!
             # So insert references after ref_anchor? No, insert BEFORE ref_anchor doesn't make sense since ref_anchor is the title.
             # But doc.add_paragraph() is totally fine here! Because References is at the END.
             ref_style = self._pick_style_name(["referenceitem", "referencelist", "ReferenceLine", "Normal"])
@@ -251,7 +250,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
                         p_name.add_run(" and " if len(valid_authors) == 2 else ", and ")
                     else:
                         p_name.add_run(", ")
-                run = p_name.add_run(name)
+                p_name.add_run(name)
 
                 indices = author_aff_map[i]
                 if len(unique_affs) > 1 and indices:
@@ -537,7 +536,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
             try: p.style = eq_style
             except: pass
 
-        r = p.add_run("\t")
+        p.add_run("\t")
         if omml_match:
             try: self._insert_omml_to_paragraph(p, omml_match.group(1))
             except:

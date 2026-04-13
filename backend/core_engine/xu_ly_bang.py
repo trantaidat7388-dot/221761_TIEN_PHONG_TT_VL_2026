@@ -652,6 +652,7 @@ class BoXuLyBang:
         latex += r"  \centering" + "\n"
         
         # Caption above for tables (IEEE standard)
+        caption = self.bo_chuyen.bat_caption_bang()
         if caption:
             caption_clean = re.sub(r'^(Bảng|Table)\s*\d+\s*[:\.\-–—]?\s*', '', caption, flags=re.IGNORECASE).strip()
             latex += rf"  \caption{{{caption_clean}}}" + "\n"

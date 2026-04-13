@@ -1,5 +1,4 @@
 import os, sys
-from docx import Document
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from backend.core_engine.ast_parser import WordASTParser
