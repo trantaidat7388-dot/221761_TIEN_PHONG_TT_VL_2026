@@ -1,6 +1,6 @@
 // ThanhDieuHuong.jsx - Thanh điều hướng chính của ứng dụng
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -22,12 +22,19 @@ import { dungXacThuc } from '../context/AuthContext'
 
 const ThanhDieuHuong = ({ nguoiDung }) => {
   // Component thanh điều hướng với menu responsive và dropdown user
-  const { dangXuat } = dungXacThuc()
+  const { dangXuat, token } = dungXacThuc()
   const location = useLocation()
   const navigate = useNavigate()
   const [menuMo, setMenuMo] = useState(false)
   const [dropdownMo, setDropdownMo] = useState(false)
   const [avatarLoi, setAvatarLoi] = useState(false)
+
+  // Effect để navigate về trang giới thiệu khi logout
+  useEffect(() => {
+    if (!token && location.pathname !== '/') {
+      navigate('/', { replace: true })
+    }
+  }, [token, location.pathname, navigate])
 
   const danhSachMenuCoBan = [
     { duongDan: '/chuyen-doi', nhan: 'Chuyển đổi', icon: Upload },
@@ -42,9 +49,9 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
   const xuLyDangXuat = () => {
     // Đăng xuất bằng JWT
     try {
-    dangXuat()
-      toast.success('Đã đăng xuất')
       navigate('/', { replace: true })
+      dangXuat()
+      toast.success('Đã đăng xuất')
     } catch {
       toast.error('Không thể đăng xuất')
     }

@@ -20,7 +20,7 @@ const TINH_NANG = [
   { icon: FileText, title: 'Chuyển đổi thông minh', desc: 'Tự động nhận dạng bố cục tài liệu, tiêu đề, tác giả, công thức và bảng biểu từ file Word.' },
   { icon: BrainCircuit, title: 'Công thức toán học', desc: 'Giữ công thức rõ ràng, dễ biên dịch và đúng ngữ cảnh trong tài liệu LaTeX.' },
   { icon: Layers, title: '6+ mẫu nhà xuất bản', desc: 'IEEE, Springer LNCS, ACM, Elsevier, MDPI, Rho Class — sẵn sàng nộp bài ngay.' },
-  { icon: Zap, title: 'Xử lý thời gian thực', desc: 'Tiến trình SSE 6 bước, cập nhật trạng thái trực tiếp đến trình duyệt.' },
+  { icon: Zap, title: 'Xử lý thời gian thực', desc: 'Theo dõi tiến trình trực tiếp trong khi hệ thống chuyển đổi tài liệu.' },
   { icon: Lock, title: 'Bảo mật tài khoản', desc: 'Đăng nhập an toàn, phân quyền rõ ràng và bảo vệ dữ liệu người dùng.' },
   { icon: CreditCard, title: 'Thanh toán tiện lợi', desc: 'Nạp token nhanh bằng chuyển khoản và nhận cập nhật trạng thái gần như tức thời.' },
 ]
@@ -47,22 +47,22 @@ const GOI_PREMIUM = [
 ]
 
 const DOI_TAC = [
-  'IEEE-style drafts', 'Springer LNCS papers', 'ACM preprint flow', 'Elsevier manuscript',
-  'Graduate thesis', 'Lab report automation', 'Conference submission pack', 'Internal R&D docs',
+  'Bai bao hoc thuat', 'Springer LNCS papers', 'ACM preprint', 'Elsevier manuscript',
+  'Graduate thesis', 'Lab report', 'Conference submission', 'Enterprise reports',
 ]
 
 const FAQ_ITEMS = [
   {
     q: 'Ket qua xuat ra gom nhung gi?',
-    a: 'He thong xuat file .zip san sang overleaf: .tex, hinh anh, tai nguyen template va file PDF neu moi truong co LaTeX.',
+    a: 'He thong xuat file .zip san sang su dung: .tex, hinh anh, tai nguyen template va file PDF neu moi truong co LaTeX.',
   },
   {
-    q: 'Tai sao can SePay trong nen tang nay?',
-    a: 'SePay giup nap token nhanh qua chuyen khoan va thong bao ket qua thanh toan ro rang cho nguoi dung.',
+    q: 'Thanh toan co an toan khong?',
+    a: 'He thong ho tro cac kenh thanh toan pho bien va luu vet giao dich ro rang trong tai khoan.',
   },
   {
-    q: 'Trang thai pending thanh toan bao lau?',
-    a: 'Thong thuong he thong cap nhat trong vai giay den vai chuc giay tuy thoi diem giao dich ngan hang.',
+    q: 'Sau khi thanh toan thi kich hoat khi nao?',
+    a: 'Tai khoan duoc kich hoat nhanh chong ngay sau khi giao dich duoc xac nhan.',
   },
 ]
 
@@ -198,7 +198,7 @@ const TrangLanding = () => {
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <p className="inline-flex items-center gap-2 text-sm font-semibold text-cyan-200">
-                  <Building2 className="h-4 w-4" /> Được dùng cho nhiều workflow học thuật
+                  <Building2 className="h-4 w-4" /> Phù hợp nhiều loại tài liệu
                 </p>
                 <p className="inline-flex items-center gap-2 text-xs text-emerald-300/90">
                   <BadgeCheck className="h-3.5 w-3.5" /> Pipeline ổn định với tài liệu dài và nhiều công thức
@@ -223,7 +223,7 @@ const TrangLanding = () => {
               </div>
 
               <div className="mt-5 grid gap-4 sm:grid-cols-3">
-                <InfoChip icon={Zap} title="Realtime" value="SSE 6 bước xử lý" />
+                <InfoChip icon={Zap} title="Realtime" value="Xu ly theo tien trinh" />
                 <InfoChip icon={ShieldCheck} title="An toàn" value="Bảo vệ tài khoản người dùng" />
                 <InfoChip icon={CreditCard} title="Thanh toán" value="Nạp token nhanh, dễ dùng" />
               </div>
@@ -360,7 +360,7 @@ const TrangLanding = () => {
         {/* ═══════════════ SECTION 6: THANH TOAN ═══════════════ */}
         <section className="py-24 border-t border-white/5">
           <div className="mx-auto max-w-7xl px-4 sm:px-8">
-            <SectionHeader badge="Thanh toán" title="Nạp token đơn giản" desc="Thanh toan nhanh bang chuyen khoan voi giao dien ro rang, de theo doi." />
+            <SectionHeader badge="Thanh toán" title="Thanh toan don gian" desc="Thanh toan nhanh, minh bach va an toan cho tai khoan cua ban." />
 
             <div className="mt-14 grid gap-6 lg:grid-cols-2">
               {/* Flow */}
@@ -372,12 +372,9 @@ const TrangLanding = () => {
                 </h3>
                 <div className="space-y-3">
                   {[
-                    { n: '1', t: 'Chon goi hoac nhap so tien can nap' },
-                    { n: '2', t: 'Nhan ma QR va thong tin chuyen khoan' },
-                    { n: '3', t: 'Thuc hien chuyen khoan tu app ngan hang' },
-                    { n: '4', t: 'He thong tu dong cap nhat trang thai giao dich' },
-                    { n: '5', t: 'Token duoc cong vao tai khoan sau khi xac nhan' },
-                    { n: '6', t: 'Tiep tuc su dung workspace chuyen doi ngay lap tuc' },
+                    { n: '1', t: 'Chon goi phu hop voi nhu cau' },
+                    { n: '2', t: 'Thanh toan qua kenh ho tro' },
+                    { n: '3', t: 'Tai khoan duoc kich hoat nhanh chong' },
                   ].map((step, idx) => (
                     <div key={idx} className="flex items-start gap-3">
                       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-500/15 text-xs font-bold text-primary-300">{step.n}</div>
@@ -396,10 +393,10 @@ const TrangLanding = () => {
                 </h3>
                 <div className="mt-1 space-y-2.5">
                   {[
-                    { icon: CheckCircle2, text: 'Giao dien don gian, tao QR nhanh', color: 'text-emerald-400' },
-                    { icon: Timer, text: 'Trang thai giao dich cap nhat tu dong', color: 'text-amber-400' },
-                    { icon: Globe, text: 'Phu hop ca local va production', color: 'text-primary-400' },
-                    { icon: CreditCard, text: 'Lich su thanh toan ro rang trong tai khoan', color: 'text-cyan-400' },
+                    { icon: CheckCircle2, text: 'Giao dien don gian, thao tac nhanh', color: 'text-emerald-400' },
+                    { icon: Timer, text: 'Xac nhan nhanh va ro rang', color: 'text-amber-400' },
+                    { icon: Globe, text: 'Ho tro nhieu kenh thanh toan', color: 'text-primary-400' },
+                    { icon: CreditCard, text: 'Lich su giao dich luu tru day du', color: 'text-cyan-400' },
                   ].map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2.5 text-sm">
                       <item.icon className={`h-4 w-4 shrink-0 ${item.color}`} />
@@ -511,7 +508,7 @@ const TrangLanding = () => {
                 <Link to="/dang-nhap" className="hover:text-white/80 transition">Dang nhap</Link>
                 <Link to="/premium" className="hover:text-white/80 transition">Premium</Link>
               </div>
-              <p className="text-xs text-white/25">© 2026 Word2LaTeX — Dự án nghiên cứu</p>
+              <p className="text-xs text-white/25">© 2026 Word2LaTeX — Nen tang thuong mai</p>
             </div>
           </div>
         </footer>

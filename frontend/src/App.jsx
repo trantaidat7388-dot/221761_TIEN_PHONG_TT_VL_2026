@@ -14,7 +14,7 @@ import { TrangLanding } from './features/landing'
 // Layout chung cho các trang có thanh điều hướng
 const BoCucChung = () => {
   const { nguoiDung } = dungXacThuc()
-  if (!nguoiDung) return <Navigate to="/dang-nhap" replace />
+  if (!nguoiDung) return <Navigate to="/" replace />
   return (
     <>
       <ThanhDieuHuong nguoiDung={nguoiDung} />
@@ -24,7 +24,7 @@ const BoCucChung = () => {
 }
 
 const CacTuyenUngDung = () => {
-  const { nguoiDung } = dungXacThuc()
+  const { token, nguoiDung } = dungXacThuc()
 
   return (
     <Routes>
@@ -74,7 +74,7 @@ const CacTuyenUngDung = () => {
       {/* Admin GUI tách riêng */}
       <Route
         path="/quan-tri"
-        element={nguoiDung?.role === 'admin' ? <TrangAdmin /> : <Navigate to={nguoiDung ? '/chuyen-doi' : '/quan-tri/dang-nhap'} replace />}
+        element={token && nguoiDung?.role === 'admin' ? <TrangAdmin /> : <Navigate to={token && nguoiDung ? '/chuyen-doi' : '/quan-tri/dang-nhap'} replace />}
       />
 
       {/* Redirect mặc định */}

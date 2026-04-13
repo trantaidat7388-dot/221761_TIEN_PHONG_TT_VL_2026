@@ -49,7 +49,7 @@ const TABS = [
 
 const TrangAdmin = () => {
   const navigate = useNavigate()
-  const { nguoiDung, dangXuat: xuLyDangXuat } = dungXacThuc()
+  const { token, nguoiDung, dangXuat: xuLyDangXuat } = dungXacThuc()
   const [activeTab, setActiveTab] = useState('tong-quan')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [dangTai, setDangTai] = useState(true)
@@ -112,6 +112,13 @@ const TrangAdmin = () => {
   }, [])
 
   useEffect(() => { taiDuLieu() }, [taiDuLieu])
+
+  // Redirect khi logout
+  useEffect(() => {
+    if (!token) {
+      navigate('/', { replace: true })
+    }
+  }, [token, navigate])
 
   // ─── USER ACTIONS ─────────────────────────────────────────
   const xuLyDoiVaiTro = async (userId, role) => {
@@ -346,11 +353,12 @@ const TrangAdmin = () => {
   }, [danhSachNguoiDung, danhSachPayments])
 
   const xuLyDangXuatAdmin = () => {
-    navigate('/', { replace: true })
+    xuLyDangXuat()
+    toast.success('Đã đăng xuất')
+    // Force redirect ngay
     setTimeout(() => {
-      xuLyDangXuat()
-      toast.success('Đã đăng xuất')
-    }, 50)
+      window.location.href = '/'
+    }, 300)
   }
 
   // ═══════════════════════════════════════════════════════════
