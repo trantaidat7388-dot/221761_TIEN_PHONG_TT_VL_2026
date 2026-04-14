@@ -489,14 +489,14 @@ python run_conversion_pipeline.py --word <đường_dẫn_file_word> --template-
 ```powershell
 # Chuyển đổi cơ bản và lấy tệp .zip, .tex kết quả
 python run_conversion_pipeline.py `
-    --word input_data/Template_word/sample_paper.docx `
-    --template-zip input_data/Templates/ieee_template.zip `
+    --word "input_data/Template_word/conference-template-a4 (ieee).docx" `
+    --template-zip "input_data/IEEE_Conference_Template.zip" `
     --output-dir outputs/latex_results
 
 # Chuyển đổi và tự động biên dịch PDF
 python run_conversion_pipeline.py `
-    --word input_data/Template_word/sample_paper.docx `
-    --template-zip input_data/Templates/ieee_template.zip `
+    --word "input_data/Template_word/conference-template-a4 (ieee).docx" `
+    --template-zip "input_data/IEEE_Conference_Template.zip" `
     --output-dir outputs/latex_results `
     --compile-pdf
 ```
@@ -512,11 +512,11 @@ Nếu bạn muốn chuyển đổi file Word cụ thể tại `input_data/Templa
 
 2. **Chạy lệnh chuyển đổi:**
    ```powershell
-   python run_conversion_pipeline.py `
-       --word "C:\221761_TIEN_PHONG_TT_VL_2026\input_data\Template_word\-TUAN_Magazine_01-12- Customer Churn Prediction in Vietnam's Enterprise Market Using Machine Learning Methods in a Streaming Data (1).docx" `
-       --template-zip "C:\221761_TIEN_PHONG_TT_VL_2026\input_data\IEEE_Conference_Template.zip" `
-       --output-dir "C:\221761_TIEN_PHONG_TT_VL_2026\outputs\ieee_conversion_result" `
-       --compile-pdf
+    python run_conversion_pipeline.py `
+        --word "input_data/Template_word/conference-template-a4 (ieee).docx" `
+        --template-zip "input_data/IEEE_Conference_Template.zip" `
+        --output-dir "outputs/ieee_conversion_result" `
+        --compile-pdf
    ```
 
 3. **Kết quả:**
@@ -541,13 +541,13 @@ python run_word_to_word_pipeline.py --input-word <đường_dẫn_file_word> --d
 ```powershell
 # Chuyển đổi IEEE sang Springer
 python run_word_to_word_pipeline.py `
-    --input-word input_data/Template_word/my_ieee_paper.docx `
+    --input-word "input_data/Template_word/conference-template-a4 (ieee).docx" `
     --direction ieee-to-springer `
     --output-dir outputs/word_results
 
 # Chuyển đổi Springer sang IEEE
 python run_word_to_word_pipeline.py `
-    --input-word outputs/word_results/my_ieee_paper_2026_springer.docx `
+    --input-word "input_data/Template_word/splnproc2510.docm" `
     --direction springer-to-ieee `
     --output-dir outputs/word_results_ieee
 ```
