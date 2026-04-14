@@ -213,7 +213,7 @@ const TrangPremium = () => {
             </div>
             <div className="flex gap-3">
               <span className="bg-primary-600/20 text-primary-300 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">3</span>
-              <p>Nếu chưa kết nối ngân hàng SePay, có thể xác nhận thủ công trong modal (môi trường development).</p>
+              <p>Hệ thống sẽ <strong className="text-white">tự động xác nhận</strong> và kích hoạt gói Premium của bạn trong vài giây.</p>
             </div>
           </div>
         </div>

@@ -170,7 +170,7 @@ class WordASTParser:
 
     def _includegraphics_options(self, width_expr: str) -> str:
         """Use bounded image sizing to preserve layout when source vector crop info is lossy."""
-        return f"width={width_expr},height=0.4\\textheight,keepaspectratio"
+        return f"width={width_expr},keepaspectratio"
         
     def _is_body_label(self, text: str) -> bool:
         norm = re.sub(r"^[\d\.]+\s*", "", text.strip().upper())
@@ -232,6 +232,24 @@ class WordASTParser:
             return True
 
         return False
+
+    def _get_para_text_with_br(self, p) -> str:
+        """Helper to reliably extract text from a paragraph, replacing w:br with \\n.
+        This handles cases where windows IO flush delay or docx cache fails to yield proper text 
+        with formatting from p.text natively."""
+        try:
+            parts = []
+            from docx.oxml.ns import qn
+            for child in p._element:
+                if child.tag == qn('w:r'):
+                    for r_child in child:
+                        if r_child.tag == qn('w:t'):
+                            parts.append(r_child.text or '')
+                        elif r_child.tag == qn('w:br'):
+                            parts.append('\n')
+            return ''.join(parts).strip()
+        except:
+            return p.text.strip()
 
     # ====== HEURISTIC: Table/Image detection (ported from legacy xu_ly_bang.py) ======
 
@@ -771,7 +789,7 @@ class WordASTParser:
                                 if cell_id in seen_cells:
                                     continue
                                 seen_cells.add(cell_id)
-                                cell_text = "\n".join([p.text.strip() for p in cell.paragraphs if p.text.strip()]).strip()
+                                cell_text = "\n".join([self._get_para_text_with_br(p) for p in cell.paragraphs if self._get_para_text_with_br(p)]).strip()
                                 if cell_text:
                                     table_lines.extend([line.strip() for line in cell_text.split('\n') if line.strip()])
                                         

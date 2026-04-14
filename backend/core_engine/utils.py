@@ -89,6 +89,9 @@ def sua_docx_co_macro(doc_path: str):
 
         os.remove(doc_path)
         os.rename(new_zip_path, doc_path)
+        # Fix Windows disk flush delay bug where Python could read the new zip file 
+        # before the OS fully committed it, causing missing XML elements (like w:br).
+        time.sleep(0.2)
         try:
             print(f"[INFO] Macro cleaned successfully: {doc_path}")
         except UnicodeEncodeError:

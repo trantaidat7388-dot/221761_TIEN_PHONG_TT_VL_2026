@@ -206,7 +206,7 @@ const TrangThanhToanPremium = () => {
                     disabled={dangXacNhanThuCong}
                     className="mt-6 w-full max-w-sm rounded-xl border border-amber-400/40 bg-amber-500/20 px-4 py-3 font-bold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
                   >
-                    {dangXacNhanThuCong ? 'Đang xác nhận...' : 'Xác nhận nạp thủ công (Developer Mode)'}
+                    {dangXacNhanThuCong ? 'Đang xác nhận...' : 'Xác nhận nạp thủ công'}
                   </button>
                 )}
               </div>
@@ -288,23 +288,23 @@ const TrangThanhToanPremium = () => {
             </div>
 
             <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-6">
-              <h3 className="text-3xl font-bold text-white mb-3">Thông minh & Mượt mà</h3>
+              <h3 className="text-3xl font-bold text-white mb-3">An toàn & Tiện lợi</h3>
               <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 p-4 text-white">
                 <div className="inline-flex items-center gap-2 font-bold mb-2">
                   <ShieldCheck className="w-5 h-5 text-emerald-300" />
-                  Được bảo vệ bởi Word2LaTeX
+                  Giao dịch được bảo vệ
                 </div>
                 <p className="text-white/80 text-sm leading-relaxed text-justify">
-                  Giao dịch an toàn tuyệt đối qua tính năng SePay Polling cục bộ. Code hoá hóa đơn bằng phương pháp XOR. Việc của bạn chỉ là bật app ngân hàng và quét mã bên cạnh, mọi thứ còn lại chạy tự động.
+                  Mọi giao dịch đều được mã hoá và xác minh tự động. Bạn chỉ cần mở app ngân hàng, quét mã QR bên cạnh — hệ thống sẽ tự động xác nhận và kích hoạt tài khoản trong vài giây.
                 </p>
               </div>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-white/70">
-              <p className="inline-flex items-center gap-2 text-white/90 font-bold mb-2 uppercase tracking-winder"><CheckCircle2 className="w-4 h-4 text-primary-400" /> Lưu ý quan trọng</p>
+              <p className="inline-flex items-center gap-2 text-white/90 font-bold mb-2 uppercase tracking-wider"><CheckCircle2 className="w-4 h-4 text-primary-400" /> Lưu ý quan trọng</p>
               <ul className="list-disc pl-5 space-y-2">
-                <li>Vui lòng giữ nguyên cửa sổ này cho đến khi nhận được thông báo nạp thành công (thường mất 5-10 giây).</li>
-                <li>Hệ thống phân biệt bằng mã <strong className="text-cyan-300">Nội dung CK</strong> chứ không dùng số tài khoản hay tên! Hãy chắc chắn mã CK không bị xóa.</li>
+                <li>Vui lòng giữ nguyên cửa sổ này cho đến khi nhận được thông báo nạp thành công (thường mất 5–10 giây).</li>
+                <li>Khi chuyển khoản, hãy giữ nguyên <strong className="text-cyan-300">nội dung chuyển khoản</strong> để hệ thống có thể xác nhận giao dịch của bạn.</li>
               </ul>
             </div>
           </section>

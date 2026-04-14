@@ -408,7 +408,7 @@ class JinjaLaTeXRenderer:
             "\\begingroup\n"
             "\\centering\n"
             f"{include_cmd}"
-            + (f"\\n{label_cmd}" if label_cmd else "")
+            + (f"\n{label_cmd}" if label_cmd else "")
             + "\n\\par\n"
             "\\endgroup\n"
         )

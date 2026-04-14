@@ -260,7 +260,7 @@ const NapTokenModal = ({ isOpen, onClose }) => {
 
                   {chuaCauHinhNganHang && (
                     <div className="w-full rounded-xl border border-amber-400/30 bg-amber-500/10 p-3">
-                      <p className="text-xs text-amber-200/90 mb-2">Chưa cấu hình tài khoản ngân hàng SePay. Bạn có thể dùng xác nhận thủ công ở môi trường development.</p>
+                      <p className="text-xs text-amber-200/90 mb-2">Hệ thống thanh toán đang chạy ở chế độ thử nghiệm. Bạn có thể xác nhận nạp tiền bằng nút bên dưới.</p>
                       <button
                         onClick={xuLyXacNhanThuCongDev}
                         disabled={dangXacNhanThuCong}

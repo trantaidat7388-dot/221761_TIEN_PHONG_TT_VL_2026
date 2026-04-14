@@ -471,7 +471,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
             animate={{ opacity: 1, scale: 1 }}
           >
             <Sparkles className="w-4 h-4" />
-            Hỗ trợ OMML &amp; OLE Equation &middot; Real-time SSE
+            Hỗ trợ công thức toán học &middot; Theo dõi trực tiếp
           </motion.div>
           <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
             Chuyển đổi Word sang LaTeX
@@ -929,7 +929,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                     </NutBam>
                     {laLoiKetNoiSSE && fileChon && (
                       <NutBam onClick={xuLyChuyenDoi} bienThe="secondary" icon={ChevronRight} className="flex-1">
-                        Kết nối lại SSE
+                        Thử kết nối lại
                       </NutBam>
                     )}
                   </div>

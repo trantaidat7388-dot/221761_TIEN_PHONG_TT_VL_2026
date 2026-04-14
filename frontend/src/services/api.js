@@ -143,8 +143,8 @@ export const chuyenDoiFileStream = (file, templateType = 'onecolumn', onProgress
       resolve({
         thanhCong: false,
         loiMessage: daNhanDuLieu
-          ? 'Kết nối SSE bị gián đoạn trong lúc xử lý. Vui lòng kiểm tra mạng và bấm Thử lại.'
-          : 'Không nhận được dữ liệu từ SSE. Vui lòng thử lại sau ít phút.'
+          ? 'Kết nối bị gián đoạn trong lúc xử lý. Vui lòng kiểm tra mạng và bấm Thử lại.'
+          : 'Không nhận được dữ liệu từ máy chủ. Vui lòng thử lại sau ít phút.'
       })
     }).catch((loi) => {
       clearTimeout(timeoutId)

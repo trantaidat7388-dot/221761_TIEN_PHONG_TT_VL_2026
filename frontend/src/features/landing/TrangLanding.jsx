@@ -5,7 +5,7 @@ import {
   FileText, Cpu, Zap, Globe, Lock, Users, CheckCircle2, QrCode,
   Upload, Settings, Download, Crown, Star, ChevronRight, Code2,
   BookOpen, Layers, Shield, BrainCircuit, Timer, ChevronDown, ArrowUpRight,
-  Building2, BadgeCheck, HelpCircle
+  HelpCircle
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { dungXacThuc } from '../../context/AuthContext'
@@ -46,10 +46,7 @@ const GOI_PREMIUM = [
   { name: 'Gói Năm', days: 365, price: '500.000', badge: 'Tiết kiệm' },
 ]
 
-const DOI_TAC = [
-  'Bai bao hoc thuat', 'Springer LNCS papers', 'ACM preprint', 'Elsevier manuscript',
-  'Graduate thesis', 'Lab report', 'Conference submission', 'Enterprise reports',
-]
+
 
 const FAQ_ITEMS = [
   {
@@ -71,7 +68,7 @@ const TrangLanding = () => {
   const [faqMo, setFaqMo] = useState(0)
   const ctaPath = nguoiDung ? '/chuyen-doi' : '/dang-nhap'
   const ctaLabel = nguoiDung ? 'Vào hệ thống' : 'Bắt đầu miễn phí'
-  const doiTacLap = useMemo(() => [...DOI_TAC, ...DOI_TAC], [])
+
 
   return (
     <div className="min-h-screen bg-gradient-animated text-white overflow-x-hidden">
@@ -149,7 +146,7 @@ const TrangLanding = () => {
                 {[
                   { val: '6+', sub: 'Template' },
                   { val: '3', sub: 'Tầng toán học' },
-                  { val: 'SSE', sub: 'Realtime' },
+                  { val: 'Live', sub: 'Realtime' },
                   { val: '24/7', sub: 'Hoạt động' },
                 ].map((s, i) => (
                   <div key={i}>
@@ -192,44 +189,7 @@ const TrangLanding = () => {
           </div>
         </section>
 
-        {/* ═══════════════ SECTION 1.5: SOCIAL PROOF ═══════════════ */}
-        <section className="pb-20">
-          <div className="mx-auto max-w-7xl px-4 sm:px-8">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="inline-flex items-center gap-2 text-sm font-semibold text-cyan-200">
-                  <Building2 className="h-4 w-4" /> Phù hợp nhiều loại tài liệu
-                </p>
-                <p className="inline-flex items-center gap-2 text-xs text-emerald-300/90">
-                  <BadgeCheck className="h-3.5 w-3.5" /> Pipeline ổn định với tài liệu dài và nhiều công thức
-                </p>
-              </div>
 
-              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-slate-950/40 py-3">
-                <motion.div
-                  className="flex gap-2"
-                  animate={{ x: ['0%', '-50%'] }}
-                  transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}
-                >
-                  {doiTacLap.map((label, idx) => (
-                    <span
-                      key={`${label}-${idx}`}
-                      className="shrink-0 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-100"
-                    >
-                      {label}
-                    </span>
-                  ))}
-                </motion.div>
-              </div>
-
-              <div className="mt-5 grid gap-4 sm:grid-cols-3">
-                <InfoChip icon={Zap} title="Realtime" value="Xu ly theo tien trinh" />
-                <InfoChip icon={ShieldCheck} title="An toàn" value="Bảo vệ tài khoản người dùng" />
-                <InfoChip icon={CreditCard} title="Thanh toán" value="Nạp token nhanh, dễ dùng" />
-              </div>
-            </div>
-          </div>
-        </section>
 
         {/* ═══════════════ SECTION 2: TINH NANG ═══════════════ */}
         <section id="tinh-nang" className="py-24">
@@ -412,7 +372,7 @@ const TrangLanding = () => {
         {/* ═══════════════ SECTION 7: BEFORE/AFTER ═══════════════ */}
         <section className="py-24 border-t border-white/5">
           <div className="mx-auto max-w-7xl px-4 sm:px-8">
-            <SectionHeader badge="So sánh" title="Từ thao tác thủ công đến pipeline tự động" desc="Một góc nhìn trực quan về khác biệt trước và sau khi dùng Word2LaTeX." />
+            <SectionHeader badge="So sánh" title="Từ thao tác thủ công đến quy trình tự động" desc="Một góc nhìn trực quan về khác biệt trước và sau khi dùng Word2LaTeX." />
 
             <div className="mt-14 grid gap-6 lg:grid-cols-2">
               <motion.div
@@ -454,7 +414,7 @@ const TrangLanding = () => {
         {/* ═══════════════ SECTION 9: FAQ ═══════════════ */}
         <section className="py-20 border-t border-white/5">
           <div className="mx-auto max-w-4xl px-4 sm:px-8">
-            <SectionHeader badge="FAQ" title="Câu hỏi thường gặp" desc="Các điểm quan trọng trước khi bạn triển khai hoặc dùng production." />
+            <SectionHeader badge="FAQ" title="Câu hỏi thường gặp" desc="Những câu hỏi phổ biến nhất từ người dùng của chúng tôi." />
 
             <div className="mt-10 space-y-3">
               {FAQ_ITEMS.map((item, idx) => {
@@ -526,13 +486,6 @@ const SectionHeader = ({ badge, title, desc }) => (
   </motion.div>
 )
 
-const InfoChip = ({ icon: Icon, title, value }) => (
-  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-    <p className="inline-flex items-center gap-2 text-xs uppercase tracking-wider text-white/45">
-      <Icon className="h-3.5 w-3.5 text-primary-300" /> {title}
-    </p>
-    <p className="mt-1 text-sm font-semibold text-white">{value}</p>
-  </div>
-)
+
 
 export default TrangLanding

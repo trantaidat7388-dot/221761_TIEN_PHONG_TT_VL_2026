@@ -702,7 +702,7 @@ class ChuyenDoiWordSangLatex:
         vi_tri = "[H]"
         latex = rf"\begin{{figure}}{vi_tri}" + "\n"
         latex += r"  \centering" + "\n"
-        latex += rf"  \includegraphics[width=\columnwidth,height=0.4\textheight,keepaspectratio]{{{ten_thu_muc}/{ten_anh}}}" + "\n"
+        latex += rf"  \includegraphics[width=\columnwidth,keepaspectratio]{{{ten_thu_muc}/{ten_anh}}}" + "\n"
         caption_final = caption or ""
         caption_final = re.sub(
             r'^(Hình|Figure|Fig\.?)\s*\d+\s*[:\.\-–—]?\s*',

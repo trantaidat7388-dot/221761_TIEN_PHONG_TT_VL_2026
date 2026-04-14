@@ -48,6 +48,7 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+~$*
 
 # Output files (generated)
 output/
