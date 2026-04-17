@@ -20,6 +20,8 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dungXacThuc } from '../context/AuthContext'
+import { NapTokenModal } from '../features/premium'
+
 
 const ThanhDieuHuong = ({ nguoiDung }) => {
   // Component thanh điều hướng với menu responsive và dropdown user
@@ -29,6 +31,8 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
   const [menuMo, setMenuMo] = useState(false)
   const [dropdownMo, setDropdownMo] = useState(false)
   const [avatarLoi, setAvatarLoi] = useState(false)
+  const [modalNapTokenMo, setModalNapTokenMo] = useState(false)
+
 
   // Effect để navigate về trang giới thiệu khi logout
   useEffect(() => {
@@ -128,8 +132,8 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
             {/* User Menu Desktop */}
             <div className="hidden md:flex items-center gap-4">
               {/* Token Balance Badge */}
-              <Link
-                to="/premium"
+              <button
+                onClick={() => setModalNapTokenMo(true)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/10 transition-all group"
               >
                 <div className="p-1 bg-amber-500 rounded-full group-hover:scale-110 transition-transform shadow-sm">
@@ -139,7 +143,8 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                   {new Intl.NumberFormat('vi-VN').format(nguoiDung?.token_balance || 0)}
                   <span className="ml-1 text-[10px] opacity-70 font-medium">TKN</span>
                 </span>
-              </Link>
+              </button>
+
 
               <div className="relative">
                 <button
@@ -254,10 +259,12 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                 })}
 
                 {/* Token Balance Badge Mobile */}
-                <Link
-                  to="/premium"
-                  onClick={() => setMenuMo(false)}
-                  className="flex items-center justify-between px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20"
+                <button
+                  onClick={() => {
+                    setMenuMo(false)
+                    setModalNapTokenMo(true)
+                  }}
+                  className="flex items-center justify-between px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 w-full"
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400">
@@ -268,7 +275,8 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                   <span className="text-amber-400 font-bold text-lg">
                     {new Intl.NumberFormat('vi-VN').format(nguoiDung?.token_balance || 0)}
                   </span>
-                </Link>
+                </button>
+
 
                 <div className="border-t border-white/10 pt-2 mt-2">
                   {nguoiDung?.role === 'admin' && (
@@ -326,7 +334,14 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
           onClick={() => setDropdownMo(false)}
         />
       )}
+
+      {/* Modal Nạp Token */}
+      <NapTokenModal 
+        isOpen={modalNapTokenMo} 
+        onClose={() => setModalNapTokenMo(false)} 
+      />
     </nav>
+
   )
 }
 

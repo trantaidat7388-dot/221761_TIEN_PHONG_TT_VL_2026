@@ -30,6 +30,8 @@ import toast from 'react-hot-toast'
 import KhuVucKeoTha from './KhuVucKeoTha'
 import { NutBam } from '../../components'
 import { chuyenDoiFileStream, taiFileZip, bienDichPDF, taiFilePDF, layDanhSachTemplate, taiLenTemplate, xoaTemplate } from '../../services/api'
+import { NapTokenModal } from '../premium'
+
 
 // --- Sub-components ---
 
@@ -129,7 +131,9 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   const [danhSachTemplate, setDanhSachTemplate] = useState([])
   const [hienThiQuanLyTemplate, setHienThiQuanLyTemplate] = useState(false)
   const [dangTaiTemplate, setDangTaiTemplate] = useState(false)
+  const [modalNapTokenMo, setModalNapTokenMo] = useState(false)
   const templateInputRef = useRef(null)
+
   // PDF compilation (step 2)
   const [dangBienDichPDF, setDangBienDichPDF] = useState(false)
   const [pdfKetQua, setPdfKetQua] = useState(null)   // { soTrang, pdfUrl, tenFilePDF }
@@ -487,6 +491,14 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
           
           <div className="flex items-center gap-3">
             <NutBam
+              onClick={() => setModalNapTokenMo(true)}
+              bienThe="primary"
+              icon={Coins}
+              className="!py-2 !px-4 !text-sm shadow-lg shadow-amber-500/20"
+            >
+              Nạp Thêm
+            </NutBam>
+            <NutBam
               onClick={() => navigate('/premium')}
               bienThe="secondary"
               icon={Crown}
@@ -505,6 +517,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
              </NutBam>
             )}
           </div>
+
         </motion.div>
 
         <motion.div
@@ -1027,6 +1040,11 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
         </motion.div>
       </motion.div>
       </div>
+
+      <NapTokenModal 
+        isOpen={modalNapTokenMo} 
+        onClose={() => setModalNapTokenMo(false)} 
+      />
     </div>
   )
 }

@@ -525,27 +525,42 @@ def google_callback_flutter(
     else:
         logger.warning("[Cloud-Sync] Session not found (expired?): %s", session_id)
 
-    # Trả HTML thông báo thành công
+    # ── Redirect về app scheme để Chrome Custom Tab tự đóng ──
+    # FlutterWebAuth2 sẽ bắt URL word2latex://callback và tự đóng CCT.
+    # Frontend WebView vẫn polling để nhận token từ login_sessions.
+    callback_url = "word2latex://callback?status=success"
+
+    # Trả HTML với auto-redirect + fallback nút đóng
     return HTMLResponse(
-        content="""
+        content=f"""
         <html>
-        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                   display: flex; align-items: center; justify-content: center;
-                   min-height: 100vh; margin: 0; background: #f8f9fa; color: #333; }
-            .card { text-align: center; padding: 48px 32px; background: white;
-                    border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 400px; }
-            .icon { font-size: 64px; margin-bottom: 16px; }
-            h2 { color: #2e7d32; margin-bottom: 8px; }
-            p { color: #666; line-height: 1.6; }
-        </style></head>
-        <body><div class="card">
-            <div class="icon">✅</div>
-            <h2>Đăng nhập thành công!</h2>
-            <p>Bạn có thể <strong>đóng tab này</strong> và quay lại ứng dụng.<br>
-            Hệ thống sẽ tự động đăng nhập cho bạn.</p>
-        </div></body>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <meta http-equiv="refresh" content="0;url={callback_url}">
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                       display: flex; align-items: center; justify-content: center;
+                       min-height: 100vh; margin: 0; background: #f8f9fa; color: #333; }}
+                .card {{ text-align: center; padding: 48px 32px; background: white;
+                        border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 400px; }}
+                .icon {{ font-size: 64px; margin-bottom: 16px; }}
+                h2 {{ color: #2e7d32; margin-bottom: 8px; }}
+                p {{ color: #666; line-height: 1.6; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="icon">✅</div>
+                <h2>Đăng nhập thành công!</h2>
+                <p>Đang quay lại ứng dụng...<br>
+                Nếu không tự chuyển, hãy <strong>đóng tab này</strong>.</p>
+            </div>
+            <script>
+                // Auto-redirect để đóng Chrome Custom Tab
+                window.location.href = "{callback_url}";
+            </script>
+        </body>
         </html>
         """,
         status_code=200,

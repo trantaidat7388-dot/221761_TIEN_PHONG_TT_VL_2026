@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Loader2, QrCode, Copy, CheckCircle2, CreditCard, Wallet } from 'lucide-react'
+import { X, Loader2, QrCode, Copy, CheckCircle2, CreditCard, Wallet, Coins } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { taoHoaDonNapTien, kiemTraTrangThaiHoaDon, xacNhanHoaDonThuCongDev } from '../../services/api'
 import { dungXacThuc } from '../../context/AuthContext'

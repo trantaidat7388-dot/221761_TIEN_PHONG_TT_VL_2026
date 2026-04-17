@@ -113,11 +113,11 @@ const TrangPremium = () => {
             </div>
 
             <div className="flex flex-col items-center md:items-end gap-2">
-              <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 text-sm backdrop-blur-sm">
-                Đổi được khoảng <span className="text-white font-bold">{(tokenHienTai).toLocaleString()}</span> trang LaTeX tiêu chuẩn
+              <div className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white font-bold text-sm backdrop-blur-sm">
+                Sẵn sàng sử dụng cho mọi dự án của bạn
               </div>
-              <p className="text-white/30 text-[10px] italic">1.000 từ quy đổi thành 1 trang chuẩn IEEE.</p>
             </div>
+
           </div>
         </motion.div>
 
@@ -206,7 +206,8 @@ const TrangPremium = () => {
                           disabled={dangDangKy !== '' && dangDangKy !== key}
                           className={`w-full !py-3.5 !rounded-xl !font-bold !text-base ${isPopular ? '!bg-primary-600 hover:!bg-primary-500' : '!bg-white/10 hover:!bg-white/20'}`}
                         >
-                          {premiumDangHieuLuc ? 'Gia hạn gói này' : 'Mua gói này'}
+                          {premiumDangHieuLuc ? 'Gia hạn' : 'Mua ngay'}
+
                         </NutBam>
                       ) : (
                         <button 
@@ -217,7 +218,8 @@ const TrangPremium = () => {
                               : 'bg-white/5 border border-dashed border-white/20 text-white/50 hover:text-white hover:border-white/40'}`}
                         >
                           <CreditCard className="w-4 h-4" />
-                          {premiumDangHieuLuc ? 'Nạp & Gia hạn' : 'Mua Gói'} ({dinhDangToken(plan.token_cost)})
+                          {premiumDangHieuLuc ? 'Gia hạn' : 'Mua ngay'} ({dinhDangToken(plan.token_cost)})
+
                         </button>
                       )}
                     </div>
