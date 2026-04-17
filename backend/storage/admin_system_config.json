@@ -1,0 +1,7 @@
+{
+  "token_min_cost_vnd": 1,
+  "free_plan_max_pages": 60,
+  "max_doc_upload_mb": 10,
+  "rate_limit_admin_per_minute": 120,
+  "active_theme": "midnight-cyan"
+}

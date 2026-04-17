@@ -1,0 +1,10 @@
+export { default as TabTongQuan } from './TabTongQuan';
+export { default as TabNguoiDung } from './TabNguoiDung';
+export { default as TabXepHang } from './TabXepHang';
+export { default as TabThanhToan } from './TabThanhToan';
+export { default as TabTemplate } from './TabTemplate';
+export { default as TabLichSu } from './TabLichSu';
+export { default as TabAuditLog } from './TabAuditLog';
+export { default as TabCauHinh } from './TabCauHinh';
+export { default as TabGiaoDien } from './TabGiaoDien';
+export { default as TabLandingEditor } from './TabLandingEditor';

@@ -4,12 +4,13 @@ auth_routes.py
 """
 
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 from urllib import parse, request as urlrequest
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -21,8 +22,14 @@ from ..config import (
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI,
+    GOOGLE_REDIRECT_URI_FLUTTER,
     FREE_PLAN_MAX_PAGES,
 )
+
+logger = logging.getLogger(__name__)
+
+# ── Cloud-Sync Polling Constants ─────────────────────────────────────────────
+_LOGIN_SESSION_TTL_MINUTES = 10
 
 router = APIRouter(prefix="/api", tags=["Auth & History"])
 
@@ -304,6 +311,228 @@ def google_callback(code: str, request: Request, db: Session = Depends(lay_db)) 
     payload = _tao_auth_payload(user)
     token = payload["access_token"]
     return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/?token={parse.quote(token)}")
+
+
+# ── CLOUD-SYNC POLLING: Flutter Hybrid WebView Login ─────────────────────────
+
+def _don_dep_session_cu(db: Session) -> None:
+    """Xóa tất cả login_sessions quá hạn (> TTL phút)."""
+    cutoff = datetime.utcnow() - timedelta(minutes=_LOGIN_SESSION_TTL_MINUTES)
+    db.query(models.LoginSession).filter(models.LoginSession.created_at < cutoff).delete()
+    db.commit()
+
+
+@router.post("/auth/login-session")
+def tao_phien_dang_nhap(
+    session_id: str = Form(...),
+    db: Session = Depends(lay_db),
+) -> dict:
+    """Tạo phiên đăng nhập chờ (pending) cho Cloud-Sync Polling."""
+    # Dọn dẹp session cũ trước
+    _don_dep_session_cu(db)
+
+    # Kiểm tra trùng lặp
+    existing = db.query(models.LoginSession).filter(
+        models.LoginSession.session_id == session_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Session ID đã tồn tại")
+
+    session = models.LoginSession(session_id=session_id, status="pending")
+    db.add(session)
+    db.commit()
+    logger.info("[Cloud-Sync] Created login session: %s", session_id)
+    return {"session_id": session_id, "status": "pending"}
+
+
+@router.get("/auth/login-session/{session_id}")
+def kiem_tra_phien_dang_nhap(
+    session_id: str,
+    db: Session = Depends(lay_db),
+) -> dict:
+    """Polling: kiểm tra trạng thái phiên đăng nhập. One-time use khi completed."""
+    session = db.query(models.LoginSession).filter(
+        models.LoginSession.session_id == session_id
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Phiên đăng nhập không tồn tại hoặc đã hết hạn")
+
+    # Kiểm tra TTL
+    if datetime.utcnow() - session.created_at > timedelta(minutes=_LOGIN_SESSION_TTL_MINUTES):
+        db.delete(session)
+        db.commit()
+        raise HTTPException(status_code=410, detail="Phiên đăng nhập đã hết hạn")
+
+    if session.status == "completed" and session.token:
+        token_value = session.token
+
+        # One-time use: Xóa ngay sau khi trả về
+        db.delete(session)
+        db.commit()
+        logger.info("[Cloud-Sync] Session completed & consumed: %s", session_id)
+
+        # Giải mã JWT để lấy user info trả về cho Frontend
+        try:
+            from ..auth import _giai_ma_voi_nhieu_khoa
+            payload = _giai_ma_voi_nhieu_khoa(token_value)
+            user_id = payload.get("sub")
+            user = db.query(models.User).filter(models.User.id == int(user_id)).first() if user_id else None
+            user_data = _serialize_user(user) if user else None
+        except Exception:
+            user_data = None
+
+        return {
+            "status": "completed",
+            "token": token_value,
+            "user": user_data,
+        }
+
+    return {"status": "pending"}
+
+
+@router.get("/auth/google/login/flutter")
+def dang_nhap_google_flutter_redirect(session_id: str) -> RedirectResponse:
+    """Redirect đến Google OAuth dành cho Flutter (session_id truyền qua state)."""
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Thiếu cấu hình GOOGLE_CLIENT_ID")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Thiếu session_id")
+
+    redirect_uri = GOOGLE_REDIRECT_URI_FLUTTER or GOOGLE_REDIRECT_URI
+    query = parse.urlencode(
+        {
+            "client_id": GOOGLE_CLIENT_ID,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": "openid email profile",
+            "access_type": "online",
+            "prompt": "select_account",
+            "state": session_id,
+        }
+    )
+    logger.info("[Cloud-Sync] Flutter OAuth redirect, session: %s", session_id)
+    return RedirectResponse(url=f"https://accounts.google.com/o/oauth2/v2/auth?{query}")
+
+
+def _lay_google_user_info_flutter(code: str) -> dict:
+    """Đổi authorization code lấy user info, dùng redirect URI riêng cho Flutter."""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(status_code=500, detail="Thiếu GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET")
+
+    redirect_uri = GOOGLE_REDIRECT_URI_FLUTTER or GOOGLE_REDIRECT_URI
+    token_payload = parse.urlencode(
+        {
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        }
+    ).encode("utf-8")
+
+    try:
+        token_req = urlrequest.Request(
+            "https://oauth2.googleapis.com/token",
+            data=token_payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        with urlrequest.urlopen(token_req, timeout=10) as resp:
+            token_data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Không thể đổi authorization code từ Google")
+
+    access_token = (token_data.get("access_token") or "").strip()
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Google không trả về access_token")
+
+    try:
+        userinfo_req = urlrequest.Request(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            method="GET",
+        )
+        with urlrequest.urlopen(userinfo_req, timeout=10) as resp:
+            info = json.loads(resp.read().decode("utf-8", errors="ignore"))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Không thể lấy thông tin user từ Google")
+
+    google_email = (info.get("email") or "").strip().lower()
+    google_sub = (info.get("sub") or "").strip()
+    email_verified = bool(info.get("email_verified"))
+    google_name = (info.get("name") or "").strip()
+
+    if not google_sub or not google_email:
+        raise HTTPException(status_code=401, detail="Google userinfo thiếu thông tin định danh")
+    if not email_verified:
+        raise HTTPException(status_code=401, detail="Email Google chưa được xác minh")
+
+    return {"sub": google_sub, "email": google_email, "name": google_name}
+
+
+@router.get("/auth/google/callback/flutter")
+def google_callback_flutter(
+    code: str,
+    state: str = "",
+    db: Session = Depends(lay_db),
+) -> HTMLResponse:
+    """Callback từ Google OAuth cho Flutter. Lưu JWT token vào login_sessions."""
+    session_id = state.strip()
+    if not session_id:
+        return HTMLResponse(
+            content="<html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
+                    "<h2 style='color:#c00'>❌ Lỗi: Thiếu session ID</h2>"
+                    "<p>Vui lòng thử đăng nhập lại từ ứng dụng.</p></body></html>",
+            status_code=400,
+        )
+
+    # Đổi code lấy user info
+    google_info = _lay_google_user_info_flutter(code)
+    user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"])
+
+    # Tạo JWT token
+    jwt_token = auth.tao_access_token({"sub": str(user.id)})
+
+    # Cập nhật vào login_sessions
+    login_session = db.query(models.LoginSession).filter(
+        models.LoginSession.session_id == session_id
+    ).first()
+
+    if login_session:
+        login_session.token = jwt_token
+        login_session.status = "completed"
+        db.commit()
+        logger.info("[Cloud-Sync] Token saved for session: %s, user: %s", session_id, user.email)
+    else:
+        logger.warning("[Cloud-Sync] Session not found (expired?): %s", session_id)
+
+    # Trả HTML thông báo thành công
+    return HTMLResponse(
+        content="""
+        <html>
+        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                   display: flex; align-items: center; justify-content: center;
+                   min-height: 100vh; margin: 0; background: #f8f9fa; color: #333; }
+            .card { text-align: center; padding: 48px 32px; background: white;
+                    border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 400px; }
+            .icon { font-size: 64px; margin-bottom: 16px; }
+            h2 { color: #2e7d32; margin-bottom: 8px; }
+            p { color: #666; line-height: 1.6; }
+        </style></head>
+        <body><div class="card">
+            <div class="icon">✅</div>
+            <h2>Đăng nhập thành công!</h2>
+            <p>Bạn có thể <strong>đóng tab này</strong> và quay lại ứng dụng.<br>
+            Hệ thống sẽ tự động đăng nhập cho bạn.</p>
+        </div></body>
+        </html>
+        """,
+        status_code=200,
+    )
+
 
 @router.get("/auth/me")
 def lay_thong_tin_ban_than(current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> dict:

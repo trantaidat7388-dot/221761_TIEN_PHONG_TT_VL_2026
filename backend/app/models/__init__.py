@@ -104,3 +104,14 @@ class Payment(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     owner = relationship("User")
+
+
+class LoginSession(Base):
+    """Temporary login session for Cloud-Sync Polling (Hybrid WebView OAuth)."""
+
+    __tablename__ = "login_sessions"
+
+    session_id = Column(String, primary_key=True, index=True)
+    token = Column(String, nullable=True)
+    status = Column(String, default="pending", nullable=False)  # pending, completed
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -213,6 +213,10 @@ export const BoBaoBocXacThuc = ({ children }) => {
         return data.user
     }
 
+    const dangNhapQuaPolling = (accessToken, duLieuNguoiDung) => {
+        luuPhien(accessToken, duLieuNguoiDung)
+    }
+
     if (dangTai) {
         return (
             <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -223,7 +227,7 @@ export const BoBaoBocXacThuc = ({ children }) => {
 
     return (
         <NguCanhXacThuc.Provider
-            value={{ nguoiDung, token, dangTai, dangNhap, dangKy, dangNhapGoogle, dangXuat, capNhatTaiKhoan, lamMoiThongTinNguoiDung }}
+            value={{ nguoiDung, token, dangTai, dangNhap, dangKy, dangNhapGoogle, dangNhapQuaPolling, dangXuat, capNhatTaiKhoan, lamMoiThongTinNguoiDung }}
         >
             {children}
         </NguCanhXacThuc.Provider>

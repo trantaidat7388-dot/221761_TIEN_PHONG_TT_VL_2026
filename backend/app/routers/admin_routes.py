@@ -16,6 +16,11 @@ from .. import models
 from ..config import CUSTOM_TEMPLATE_FOLDER
 from ..database import lay_db
 from ..services.admin_system_config import cap_nhat_cau_hinh_he_thong, lay_cau_hinh_he_thong
+from ..services.landing_content import (
+    lay_noi_dung_landing,
+    cap_nhat_noi_dung_landing,
+    reset_noi_dung_landing,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -56,6 +61,7 @@ class YeuCauCapNhatCauHinhHeThong(BaseModel):
     free_plan_max_pages: int | None = None
     max_doc_upload_mb: int | None = None
     rate_limit_admin_per_minute: int | None = None
+    active_theme: str | None = None
 
 
 def _ghi_audit_admin(
@@ -105,7 +111,13 @@ def cap_nhat_cau_hinh_he_thong_admin(
         "rate_limit_admin_per_minute": (10, 5000),
     }
 
+    valid_themes = {"dark-indigo", "midnight-cyan", "warm-slate", "light-pro"}
+
     for key, value in payload.items():
+        if key == "active_theme":
+            if value not in valid_themes:
+                raise HTTPException(status_code=400, detail=f"Theme khong hop le. Chon: {', '.join(valid_themes)}")
+            continue
         min_val, max_val = ranges[key]
         if not isinstance(value, int):
             raise HTTPException(status_code=400, detail=f"{key} phai la so nguyen")
@@ -139,6 +151,57 @@ def lay_tong_quan(
         "tong_premium": tong_premium,
         "tong_ban_ghi_lich_su": tong_ban_ghi,
     }
+
+
+# ── LANDING CONTENT MANAGEMENT ────────────────────────────────────────────────
+
+
+class YeuCauCapNhatNoiDungLanding(BaseModel):
+    content: dict
+
+
+@router.get("/landing-content")
+def lay_noi_dung_landing_admin(
+    _: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    return {"content": lay_noi_dung_landing()}
+
+
+@router.patch("/landing-content")
+def cap_nhat_noi_dung_landing_admin(
+    req: YeuCauCapNhatNoiDungLanding,
+    request: Request,
+    db: Session = Depends(lay_db),
+    current_admin: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    updated = cap_nhat_noi_dung_landing(req.content)
+    _ghi_audit_admin(
+        db=db,
+        actor_user_id=current_admin.id,
+        action="admin.update_landing_content",
+        request=request,
+        detail="Landing page content updated",
+    )
+    db.commit()
+    return {"content": updated}
+
+
+@router.delete("/landing-content")
+def reset_noi_dung_landing_admin(
+    request: Request,
+    db: Session = Depends(lay_db),
+    current_admin: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    default_content = reset_noi_dung_landing()
+    _ghi_audit_admin(
+        db=db,
+        actor_user_id=current_admin.id,
+        action="admin.reset_landing_content",
+        request=request,
+        detail="Landing page content reset to default",
+    )
+    db.commit()
+    return {"content": default_content}
 
 
 @router.get("/users")

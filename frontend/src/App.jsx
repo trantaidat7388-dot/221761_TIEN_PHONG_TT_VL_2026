@@ -6,10 +6,11 @@ import { ThanhDieuHuong } from './components'
 import { TrangDangNhap } from './features/xac_thuc'
 import { TrangChuyenDoi, TrangChuyenDoiWordIEEE, TrangChuyenDoiWordSpringer } from './features/chuyen_doi'
 import { TrangLichSu } from './features/lich_su'
-import { TrangAdmin, TrangAdminDangNhap } from './features/admin'
+import { TrangAdmin } from './features/admin'
 import { TrangTaiKhoan } from './features/tai_khoan'
 import { TrangPremium, TrangThanhToanPremium } from './features/premium'
 import { TrangLanding } from './features/landing'
+import { ThemeProvider } from './features/admin/context/AdminThemeContext'
 
 // Layout chung cho các trang có thanh điều hướng
 const BoCucChung = () => {
@@ -34,10 +35,7 @@ const CacTuyenUngDung = () => {
         path="/dang-nhap"
         element={nguoiDung ? <Navigate to="/chuyen-doi" replace /> : <TrangDangNhap />}
       />
-      <Route
-        path="/quan-tri/dang-nhap"
-        element={nguoiDung?.role === 'admin' ? <Navigate to="/quan-tri" replace /> : <TrangAdminDangNhap />}
-      />
+
 
       {/* Routes yêu cầu đăng nhập */}
       <Route element={<BoCucChung />}>
@@ -74,7 +72,7 @@ const CacTuyenUngDung = () => {
       {/* Admin GUI tách riêng */}
       <Route
         path="/quan-tri"
-        element={token && nguoiDung?.role === 'admin' ? <TrangAdmin /> : <Navigate to={token && nguoiDung ? '/chuyen-doi' : '/quan-tri/dang-nhap'} replace />}
+        element={token && nguoiDung?.role === 'admin' ? <TrangAdmin /> : <Navigate to={token && nguoiDung ? '/chuyen-doi' : '/dang-nhap'} replace />}
       />
 
       {/* Redirect mặc định */}
@@ -87,9 +85,11 @@ const CacTuyenUngDung = () => {
 }
 
 const UngDung = () => (
-  <BoBaoBocXacThuc>
-    <CacTuyenUngDung />
-  </BoBaoBocXacThuc>
+  <ThemeProvider>
+    <BoBaoBocXacThuc>
+      <CacTuyenUngDung />
+    </BoBaoBocXacThuc>
+  </ThemeProvider>
 )
 
 export default UngDung

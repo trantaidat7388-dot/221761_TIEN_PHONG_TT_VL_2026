@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  FileText, Mail, Lock, Eye, EyeOff, ArrowRight, User, Loader2, Info, CheckCircle2, Crown, Zap
+  FileText, Mail, Lock, Eye, EyeOff, ArrowRight, User, Loader2, Info, CheckCircle2, Crown, Zap, Download
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dungXacThuc } from '../../context/AuthContext'
@@ -38,16 +38,20 @@ const PasswordStrengthMeter = ({ password }) => {
 
 const TrangDangNhap = () => {
   const navigate = useNavigate()
-  const { nguoiDung, dangNhap, dangKy } = dungXacThuc()
+  const { nguoiDung, dangNhap, dangKy, dangNhapQuaPolling } = dungXacThuc()
   const [cheDoForm, setCheDoForm] = useState('dangNhap')
   const [hienMatKhau, setHienMatKhau] = useState(false)
   const [dangXuLy, setDangXuLy] = useState(false)
+  const [dangLoginGoogle, setDangLoginGoogle] = useState(false)
   const [formData, setFormData] = useState({
     username: '',
     email: '',
     matKhau: '',
     xacNhanMatKhau: ''
   })
+
+  // Phát hiện WebView qua cookie "viewappmobie"
+  const dangChayTrongApp = document.cookie.split(';').some(c => c.trim().startsWith('viewappmobie='))
 
   const xuLyThayDoiInput = (e) => {
     const { name, value } = e.target
@@ -90,6 +94,73 @@ const TrangDangNhap = () => {
   const chuyenCheDo = () => {
     setCheDoForm(prev => prev === 'dangNhap' ? 'dangKy' : 'dangNhap')
     setFormData({ username: '', email: '', matKhau: '', xacNhanMatKhau: '' })
+  }
+
+  // ── Cloud-Sync Polling: Đăng nhập Google qua Flutter Bridge ──────────
+  const xuLyDangNhapGoogleTrongApp = async () => {
+    if (dangLoginGoogle) return
+    setDangLoginGoogle(true)
+
+    const sessionId = crypto.randomUUID()
+    let pollInterval = null
+
+    try {
+      // 1. Đăng ký phiên chờ trên server
+      const formData = new FormData()
+      formData.append('session_id', sessionId)
+      const regResp = await fetch(`${DIA_CHI_API_GOC}/api/auth/login-session`, {
+        method: 'POST',
+        body: formData,
+      })
+      if (!regResp.ok) {
+        throw new Error('Không thể khởi tạo phiên đăng nhập')
+      }
+
+      // 2. Bắt đầu Polling
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`${DIA_CHI_API_GOC}/api/auth/login-session/${sessionId}`)
+          if (!res.ok) {
+            // 404 hoặc 410 = session hết hạn hoặc đã dùng
+            if (res.status === 404 || res.status === 410) {
+              clearInterval(pollInterval)
+              setDangLoginGoogle(false)
+            }
+            return
+          }
+          const data = await res.json()
+          if (data.status === 'completed' && data.token) {
+            clearInterval(pollInterval)
+            // Lưu phiên đăng nhập
+            dangNhapQuaPolling(data.token, data.user)
+            toast.success('Đăng nhập thành công!')
+            const duongDanDich = data.user?.role === 'admin' ? '/quan-tri' : '/chuyen-doi'
+            window.location.replace(duongDanDich)
+          }
+        } catch {
+          // Lỗi mạng - tiếp tục polling
+        }
+      }, 2000)
+
+      // 3. Timeout: dừng polling sau 10 phút
+      setTimeout(() => {
+        if (pollInterval) {
+          clearInterval(pollInterval)
+          setDangLoginGoogle(false)
+        }
+      }, 10 * 60 * 1000)
+
+      // 4. Gọi Flutter Bridge để mở Chrome Custom Tab
+      if (window.FlutterBridge) {
+        window.FlutterBridge.postMessage(`GOOGLE_LOGIN:${sessionId}`)
+      } else {
+        throw new Error('Không tìm thấy kết nối với ứng dụng')
+      }
+    } catch (loi) {
+      if (pollInterval) clearInterval(pollInterval)
+      setDangLoginGoogle(false)
+      toast.error(loi.message || 'Không thể kết nối đăng nhập Google')
+    }
   }
 
   useEffect(() => {
@@ -191,13 +262,39 @@ const TrangDangNhap = () => {
           </div>
 
           <div className="mt-6">
-            <a
-              href={`${DIA_CHI_API_GOC}/api/auth/google/login`}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 transition"
-            >
-              Đăng nhập với Google
-            </a>
+            {dangChayTrongApp ? (
+              <button
+                onClick={xuLyDangNhapGoogleTrongApp}
+                disabled={dangLoginGoogle}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 transition disabled:opacity-50"
+              >
+                {dangLoginGoogle ? (
+                  <><Loader2 className="w-5 h-5 animate-spin" /> Đang chờ đăng nhập...</>
+                ) : (
+                  'Đăng nhập với Google'
+                )}
+              </button>
+            ) : (
+              <a
+                href={`${DIA_CHI_API_GOC}/api/auth/google/login`}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 transition"
+              >
+                Đăng nhập với Google
+              </a>
+            )}
           </div>
+          
+          {!dangChayTrongApp && (
+            <div className="mt-4">
+               <a
+                  href="/word2latex-app.apk"
+                  download
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-primary-500/30 bg-primary-500/10 px-4 py-3 text-sm font-semibold text-primary-300 hover:bg-primary-500/20 transition"
+                >
+                  <Download className="w-5 h-5" /> Tải Ứng dụng Android (APK)
+                </a>
+            </div>
+          )}
         </div>
       </div>
 

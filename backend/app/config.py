@@ -106,6 +106,10 @@ SECRET_XOR_KEY = _lay_so_nguyen_tu_env('SECRET_XOR_KEY', 0x5EAFB)
 GOOGLE_CLIENT_ID = _lay_chuoi_tu_env('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = _lay_chuoi_tu_env('GOOGLE_CLIENT_SECRET')
 GOOGLE_REDIRECT_URI = _lay_chuoi_tu_env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/auth/google/callback')
+GOOGLE_REDIRECT_URI_FLUTTER = _lay_chuoi_tu_env(
+    'GOOGLE_REDIRECT_URI_FLUTTER',
+    GOOGLE_REDIRECT_URI.replace('/callback', '/callback/flutter') if GOOGLE_REDIRECT_URI else ''
+)
 
 # Rate limiting
 RATE_LIMIT_AUTH_PER_MINUTE = _lay_so_nguyen_tu_env('RATE_LIMIT_AUTH_PER_MINUTE', 30, min_value=5)

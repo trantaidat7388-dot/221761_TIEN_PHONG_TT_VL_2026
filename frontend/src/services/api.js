@@ -953,6 +953,87 @@ export const xacNhanPaymentThuCongAdmin = async (paymentId) => {
   }
 }
 
+// ── LANDING CONTENT & THEME (Public + Admin) ─────────────────────────────────
+
+export const layNoiDungLandingPublic = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/landing-content`)
+    if (!response.ok) return { thanhCong: false, loiMessage: 'Không thể tải nội dung landing' }
+    const data = await response.json()
+    return { thanhCong: true, content: data.content || {} }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const layThemeHienTai = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/active-theme`)
+    if (!response.ok) return { thanhCong: false, theme: 'dark-indigo' }
+    const data = await response.json()
+    return { thanhCong: true, theme: data.theme || 'dark-indigo' }
+  } catch {
+    return { thanhCong: false, theme: 'dark-indigo' }
+  }
+}
+
+export const layNoiDungLandingAdmin = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/landing-content`, {
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, content: data.content || {} }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const capNhatNoiDungLandingAdmin = async (content) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/landing-content`, {
+      method: 'PATCH',
+      headers: {
+        ...taoHeaderXacThuc(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ content }),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, content: data.content || {} }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const resetNoiDungLandingAdmin = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/landing-content`, {
+      method: 'DELETE',
+      headers: taoHeaderXacThuc(),
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) {
+      const msg = await docLoiJsonTuResponse(response)
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return { thanhCong: true, content: data.content || {} }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
 // ── AUTH (JWT - no Firebase) ──────────────────────────────────────────────────
 // Auth functions are now managed by AuthContext.jsx
 // These are kept for backward-compat imports in components

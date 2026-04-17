@@ -20,11 +20,14 @@ from ..config import (
 _CONFIG_FILE = BASE_DIR / "backend" / "storage" / "admin_system_config.json"
 _LOCK = Lock()
 
+_VALID_THEMES = {"dark-indigo", "midnight-cyan", "warm-slate", "light-pro"}
+
 _DEFAULTS = {
     "token_min_cost_vnd": int(TOKEN_MIN_COST),
     "free_plan_max_pages": int(FREE_PLAN_MAX_PAGES),
     "max_doc_upload_mb": int(MAX_DOC_UPLOAD_MB),
     "rate_limit_admin_per_minute": int(RATE_LIMIT_ADMIN_PER_MINUTE),
+    "active_theme": "dark-indigo",
 }
 
 
@@ -39,11 +42,13 @@ def _doc_file_json() -> dict:
 
 
 def _xay_dung_ket_qua_tu_saved(saved: dict) -> dict:
+    raw_theme = saved.get("active_theme", _DEFAULTS["active_theme"])
     settings = {
         "token_min_cost_vnd": int(saved.get("token_min_cost_vnd", _DEFAULTS["token_min_cost_vnd"])),
         "free_plan_max_pages": int(saved.get("free_plan_max_pages", _DEFAULTS["free_plan_max_pages"])),
         "max_doc_upload_mb": int(saved.get("max_doc_upload_mb", _DEFAULTS["max_doc_upload_mb"])),
         "rate_limit_admin_per_minute": int(saved.get("rate_limit_admin_per_minute", _DEFAULTS["rate_limit_admin_per_minute"])),
+        "active_theme": raw_theme if raw_theme in _VALID_THEMES else _DEFAULTS["active_theme"],
     }
     return {
         "settings": settings,
@@ -63,7 +68,13 @@ def lay_cau_hinh_he_thong() -> dict:
 
 
 def cap_nhat_cau_hinh_he_thong(partial: dict) -> dict:
-    payload = {k: int(v) for k, v in partial.items() if v is not None}
+    payload = {}
+    for k, v in partial.items():
+        if v is not None:
+            if k == "active_theme":
+                payload[k] = str(v)
+            else:
+                payload[k] = int(v)
 
     with _LOCK:
         saved = _doc_file_json()

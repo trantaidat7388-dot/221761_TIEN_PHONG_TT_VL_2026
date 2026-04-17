@@ -34,6 +34,8 @@ from .config import (
 )
 from .utils.api_utils import quet_xoa_thu_muc_mo_coi
 from .routers import admin_routes, auth_routes, base, file_upload, payment_routes
+from .services.landing_content import lay_noi_dung_landing
+from .services.admin_system_config import lay_cau_hinh_he_thong as _lay_cau_hinh_he_thong
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -160,6 +162,24 @@ def _dam_bao_schema_admin_audit_indexes() -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_admin_audit_logs_created_at ON admin_audit_logs (created_at)"))
 
 
+def _dam_bao_schema_login_sessions() -> None:
+    """Đảm bảo bảng login_sessions tồn tại cho Cloud-Sync Polling."""
+    inspector = inspect(database.engine)
+    if "login_sessions" not in inspector.get_table_names():
+        with database.engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE login_sessions (
+                    session_id VARCHAR PRIMARY KEY,
+                    token VARCHAR,
+                    status VARCHAR DEFAULT 'pending' NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_login_sessions_status ON login_sessions (status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_login_sessions_created_at ON login_sessions (created_at)"))
+        logger.info("[Migration] Created login_sessions table for Cloud-Sync Polling.")
+
+
 def _lay_rate_limit_cho_path(path: str) -> tuple[str, int] | None:
     if path.startswith("/api/auth"):
         return ("auth", RATE_LIMIT_AUTH_PER_MINUTE)
@@ -269,6 +289,7 @@ def xu_ly_don_dep_khi_khoi_dong() -> None:
     _dam_bao_schema_conversion_history_token_fields()
     _dam_bao_schema_token_ledger_indexes()
     _dam_bao_schema_admin_audit_indexes()
+    _dam_bao_schema_login_sessions()
     _tao_tai_khoan_admin_mac_dinh()
 
     logger.info("Registered POST routes:")
@@ -279,6 +300,21 @@ def xu_ly_don_dep_khi_khoi_dong() -> None:
     # Dọn dẹp các thư mục/file mồ côi trong temp khi server khởi động
     quet_xoa_thu_muc_mo_coi(TEMP_FOLDER, TEMP_TTL_HOURS)
     quet_xoa_thu_muc_mo_coi(OUTPUTS_FOLDER, OUTPUT_TTL_HOURS)
+
+# ── PUBLIC ENDPOINTS (no auth required) ──────────────────────────────────────
+
+@app.get("/api/landing-content", tags=["Public"])
+def lay_noi_dung_landing_public() -> dict:
+    """Public endpoint: Trả về nội dung landing page để hiển thị."""
+    return {"content": lay_noi_dung_landing()}
+
+
+@app.get("/api/active-theme", tags=["Public"])
+def lay_theme_hien_tai() -> dict:
+    """Public endpoint: Trả về theme đang active cho toàn website."""
+    config = _lay_cau_hinh_he_thong()
+    return {"theme": config.get("settings", {}).get("active_theme", "dark-indigo")}
+
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> Response:
