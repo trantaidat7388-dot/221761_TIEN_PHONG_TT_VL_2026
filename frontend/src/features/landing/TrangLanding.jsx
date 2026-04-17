@@ -134,7 +134,7 @@ const TrangLanding = () => {
                 <Link to={ctaPath} className="btn-primary inline-flex items-center gap-2">
                   {ctaLabel} <ArrowRight className="h-4 w-4" />
                 </Link>
-                <a href="/word2latex-app.apk" download className="btn-glass inline-flex items-center gap-2 border-primary-500/30 bg-primary-500/10 hover:bg-primary-500/20">
+                <a href="/word2latex-app.apk" download="word2latex-app.apk" className="btn-glass inline-flex items-center gap-2 border-primary-500/30 bg-primary-500/10 hover:bg-primary-500/20">
                   <Download className="h-4 w-4" /> Tải App Android
                 </a>
                 <a href="#tinh-nang" className="btn-glass inline-flex items-center gap-2">

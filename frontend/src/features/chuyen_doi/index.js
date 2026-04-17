@@ -2,5 +2,4 @@
 
 export { default as KhuVucKeoTha } from './KhuVucKeoTha'
 export { default as TrangChuyenDoi } from './TrangChuyenDoi'
-export { default as TrangChuyenDoiWordIEEE } from './TrangChuyenDoiWordIEEE'
-export { default as TrangChuyenDoiWordSpringer } from './TrangChuyenDoiWordSpringer'
+export { default as TrangChuyenDoiWordToWord } from './TrangChuyenDoiWordToWord'

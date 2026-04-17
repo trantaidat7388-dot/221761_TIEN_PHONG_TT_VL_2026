@@ -19,8 +19,8 @@ def tao_payment(req: YeuCauTaoPayment, db: Session = Depends(lay_db), current_us
     if req.amount_vnd < 10000:
         raise HTTPException(status_code=400, detail="Số tiền nạp tối thiểu là 10,000 VNĐ")
 
-    # Tỷ lệ: 1 VND = 1 Token
-    token_amount = req.amount_vnd
+    # Tỷ lệ: 100 VND = 1 Token
+    token_amount = req.amount_vnd // 100
 
     payment = models.Payment(
         user_id=current_user.id,

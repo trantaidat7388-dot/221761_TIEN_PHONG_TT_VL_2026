@@ -1,6 +1,7 @@
 // TrangChuyenDoi.jsx - Trang chính chuyển đổi Word sang LaTeX (Split-pane + SSE)
 
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FileText,
@@ -20,7 +21,10 @@ import {
   Settings,
   Terminal,
   ChevronRight,
-  Table2
+  Table2,
+  Coins,
+  Crown,
+  Shield
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import KhuVucKeoTha from './KhuVucKeoTha'
@@ -108,6 +112,7 @@ const BoGiLoi = ({ error }) => {
 // --- Main Component ---
 
 const TrangChuyenDoi = ({ nguoiDung }) => {
+  const navigate = useNavigate()
   // State
   const [fileChon, setFileChon] = useState(null)
   const [loiValidation, setLoiValidation] = useState(null)
@@ -454,17 +459,62 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   const isStructuredError = error && typeof error === 'object' && (error.loai_loi || error.errorType || error.details)
   const thongDiepLoi = typeof error === 'string' ? error : (error?.loiMessage || '')
   const laLoiKetNoiSSE = /SSE|Kết nối bị gián đoạn|mất kết nối|Không nhận được dữ liệu/i.test(thongDiepLoi)
+  const laLoiThieuToken = /không đủ token|Vui lòng nạp thêm token|mua thêm gói premium/i.test(thongDiepLoi)
 
   return (
     <div className="min-h-screen bg-gradient-animated pt-20 pb-12 px-4">
-      <motion.div
-        className="max-w-7xl mx-auto"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        {/* Header */}
-        <motion.div className="text-center mb-6" variants={itemVariants}>
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Top Token Info Bar */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-wrap items-center justify-between gap-4 bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-2xl shadow-xl"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-amber-500/20 rounded-xl font-bold">
+              <Coins className="w-6 h-6 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-white/40 text-[10px] uppercase tracking-widest font-bold">Số dư Token hiện tại</p>
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-3xl font-black text-white tracking-tighter">
+                  {new Intl.NumberFormat('vi-VN').format(nguoiDung?.token_balance || 0)}
+                </h3>
+                <span className="text-amber-400 font-bold text-sm">TOKEN</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <NutBam
+              onClick={() => navigate('/premium')}
+              bienThe="secondary"
+              icon={Crown}
+              className="!py-2 !px-4 !text-sm border-amber-500/30 text-amber-200"
+            >
+              Bảng Giá Premium
+            </NutBam>
+            {laAdmin && (
+               <NutBam
+               onClick={() => navigate('/quan-tri')}
+               bienThe="secondary"
+               icon={Shield}
+               className="!py-2 !px-4 !text-sm border-cyan-500/30 text-cyan-200"
+             >
+               Quản trị
+             </NutBam>
+            )}
+          </div>
+        </motion.div>
+
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="space-y-6"
+        >
+          {/* Header */}
+          <motion.div className="text-center mb-2" variants={itemVariants}>
           <motion.div
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-500/20 text-primary-300 text-sm mb-3"
             initial={{ opacity: 0, scale: 0.9 }}
@@ -895,20 +945,40 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                 >
                   <div className="flex items-center gap-4">
                     <motion.div
-                      className="w-14 h-14 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0"
+                      className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${
+                        laLoiThieuToken ? 'bg-amber-500/20' : 'bg-red-500/20'
+                      }`}
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                     >
-                      <AlertCircle className="w-7 h-7 text-red-400" />
+                      {laLoiThieuToken
+                        ? <Coins className="w-7 h-7 text-amber-400" />
+                        : <AlertCircle className="w-7 h-7 text-red-400" />
+                      }
                     </motion.div>
                     <div>
-                      <h2 className="text-xl font-bold text-white">Chuyển đổi thất bại</h2>
-                      <p className="text-white/50 text-sm">Kiểm tra chi tiết lỗi bên dưới</p>
+                      <h2 className="text-xl font-bold text-white">
+                        {laLoiThieuToken ? 'Không đủ Token' : 'Chuyển đổi thất bại'}
+                      </h2>
+                      <p className="text-white/50 text-sm">
+                        {laLoiThieuToken ? 'Bạn cần mua thêm Gói Token để tiếp tục' : 'Kiểm tra chi tiết lỗi bên dưới'}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Visual Debugger or plain error */}
-                  {isStructuredError ? (
+                  {/* Token insufficient - special UI */}
+                  {laLoiThieuToken ? (
+                    <div className="space-y-3">
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 space-y-2">
+                        <p className="text-amber-200/90 text-sm">
+                          {typeof error === 'string' ? error : (error?.loiMessage || 'Không đủ token')}
+                        </p>
+                        <p className="text-white/40 text-xs">
+                          💡 Hãy chọn mua thêm Gói Premium để tiếp tục chuyển đổi tài liệu không giới hạn.
+                        </p>
+                      </div>
+                    </div>
+                  ) : isStructuredError ? (
                     <BoGiLoi error={error} />
                   ) : (
                     <div className="space-y-2">
@@ -924,13 +994,30 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                   )}
 
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <NutBam onClick={xuLyChuyenDoiMoi} icon={RefreshCw} className="flex-1">
-                      Thử lại
-                    </NutBam>
-                    {laLoiKetNoiSSE && fileChon && (
-                      <NutBam onClick={xuLyChuyenDoi} bienThe="secondary" icon={ChevronRight} className="flex-1">
-                        Thử kết nối lại
-                      </NutBam>
+                    {laLoiThieuToken ? (
+                      <>
+                        <NutBam
+                          onClick={() => navigate('/premium')}
+                          icon={Crown}
+                          className="flex-1 bg-gradient-to-r from-amber-600 to-amber-500"
+                        >
+                          Bảng giá Premium
+                        </NutBam>
+                        <NutBam onClick={xuLyChuyenDoiMoi} bienThe="secondary" icon={RefreshCw} className="flex-1">
+                          Chọn file khác
+                        </NutBam>
+                      </>
+                    ) : (
+                      <>
+                        <NutBam onClick={xuLyChuyenDoiMoi} icon={RefreshCw} className="flex-1">
+                          Thử lại
+                        </NutBam>
+                        {laLoiKetNoiSSE && fileChon && (
+                          <NutBam onClick={xuLyChuyenDoi} bienThe="secondary" icon={ChevronRight} className="flex-1">
+                            Thử kết nối lại
+                          </NutBam>
+                        )}
+                      </>
                     )}
                   </div>
                 </motion.div>
@@ -939,6 +1026,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
           </div>
         </motion.div>
       </motion.div>
+      </div>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { Crown, Zap, Coins, CreditCard } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dungXacThuc } from '../../context/AuthContext'
@@ -72,7 +73,7 @@ const TrangPremium = () => {
     const soTienCanNap = tokenCost
     navigate('/thanh-toan', {
       state: {
-        amountVnd: soTienCanNap,
+        amountVnd: tokenCost * 100, // 1 Token = 100 VNĐ
         planKey: key,
         planName: plan?.name || 'Premium',
         planDays: plan?.so_ngay || 0,
@@ -85,18 +86,48 @@ const TrangPremium = () => {
     <div className="min-h-screen bg-gradient-animated pt-20 pb-12 px-4">
       <div className="max-w-6xl mx-auto">
         
-        {/* Header */}
-        <div className="mb-10">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-              <Crown className="w-8 h-8 text-amber-300" />
-              Nâng cấp tài khoản
-            </h1>
-            <p className="text-white/60">Chọn gói Premium phù hợp để mở khóa toàn bộ tính năng chuyển đổi.</p>
-            <p className="text-sm text-white/50 mt-2">
-              Số token còn lại của tài khoản này: <span className="text-amber-300 font-semibold">{dinhDangToken(tokenHienTai)}</span>
-            </p>
+        {/* Global Token Balance Hero Card */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="relative overflow-hidden glass-card rounded-3xl p-8 mb-10 border border-amber-500/20 shadow-2xl shadow-amber-500/10"
+        >
+          {/* Decorative background elements */}
+          <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
+          <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-60 h-60 bg-primary-600/10 rounded-full blur-[80px] pointer-events-none" />
+          
+          <div className="relative flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="flex items-center gap-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center shadow-lg transform rotate-3 hover:rotate-0 transition-transform duration-500">
+                <Coins className="w-10 h-10 text-white" />
+              </div>
+              <div className="text-center md:text-left">
+                <p className="text-amber-200/60 text-xs uppercase tracking-[0.2em] font-black mb-1">Tài khoản của bạn hiện có</p>
+                <div className="flex items-baseline gap-3">
+                  <h2 className="text-5xl md:text-6xl font-black text-white tracking-tighter drop-shadow-md">
+                    {new Intl.NumberFormat('vi-VN').format(tokenHienTai)}
+                  </h2>
+                  <span className="text-amber-400 font-bold text-xl uppercase italic">Token</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center md:items-end gap-2">
+              <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 text-sm backdrop-blur-sm">
+                Đổi được khoảng <span className="text-white font-bold">{(tokenHienTai).toLocaleString()}</span> trang LaTeX tiêu chuẩn
+              </div>
+              <p className="text-white/30 text-[10px] italic">1.000 từ quy đổi thành 1 trang chuẩn IEEE.</p>
+            </div>
           </div>
+        </motion.div>
+
+        {/* Premium Packages Header */}
+        <div className="mb-10 text-center md:text-left">
+          <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3 justify-center md:justify-start">
+            <Crown className="w-8 h-8 text-amber-300" />
+            Bảng giá các gói Premium
+          </h1>
+          <p className="text-white/60">Lựa chọn gói phù hợp để đẩy nhanh tiến độ nghiên cứu của bạn.</p>
         </div>
 
         {premiumDangHieuLuc && (
@@ -140,9 +171,9 @@ const TrangPremium = () => {
                       </p>
                       <div className="flex items-baseline gap-1">
                         <span className="text-4xl font-extrabold text-white">{new Intl.NumberFormat('vi-VN').format(plan.token_cost)}</span>
-                        <span className="text-lg text-white/40">₫</span>
+                        <span className="text-lg text-white/40">Token</span>
                       </div>
-                      <p className="text-sm text-white/50 mt-2">{plan.phu_hop}</p>
+                      <p className="text-sm text-white/50 mt-2">({dinhDangVND(plan.token_cost * 100)}) - {plan.phu_hop}</p>
                     </div>
 
                     <div className="bg-white/5 rounded-xl p-4 mb-6 flex-1">
@@ -186,7 +217,7 @@ const TrangPremium = () => {
                               : 'bg-white/5 border border-dashed border-white/20 text-white/50 hover:text-white hover:border-white/40'}`}
                         >
                           <CreditCard className="w-4 h-4" />
-                          {premiumDangHieuLuc ? 'Nạp & Gia hạn' : 'Thanh toán'} {dinhDangVND(plan.token_cost)}
+                          {premiumDangHieuLuc ? 'Nạp & Gia hạn' : 'Mua Gói'} ({dinhDangToken(plan.token_cost)})
                         </button>
                       )}
                     </div>
@@ -199,13 +230,13 @@ const TrangPremium = () => {
 
         <div className="mt-12 bg-white/5 border border-white/10 rounded-2xl p-6">
           <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
-            <Coins className="w-5 h-5 text-amber-400" />
-            Hướng dẫn nạp tiền
+            <Zap className="w-5 h-5 text-amber-400" />
+            Hướng dẫn mua gói Premium
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-white/70">
             <div className="flex gap-3">
               <span className="bg-primary-600/20 text-primary-300 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">1</span>
-              <p>Nhấn nút <strong className="text-white">"Nạp tiền"</strong> ở phía trên và chọn số tiền muốn nạp.</p>
+              <p>Chọn gói ở phía trên và nhấn nút <strong className="text-white">"Mua gói"</strong> tương ứng.</p>
             </div>
             <div className="flex gap-3">
               <span className="bg-primary-600/20 text-primary-300 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">2</span>
@@ -213,7 +244,7 @@ const TrangPremium = () => {
             </div>
             <div className="flex gap-3">
               <span className="bg-primary-600/20 text-primary-300 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">3</span>
-              <p>Hệ thống sẽ <strong className="text-white">tự động xác nhận</strong> và kích hoạt gói Premium của bạn trong vài giây.</p>
+              <p>Hệ thống sẽ <strong className="text-white">tự động kích hoạt</strong> gói Premium của bạn trong vài giây ngay sau khi tiền về.</p>
             </div>
           </div>
         </div>

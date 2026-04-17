@@ -15,7 +15,8 @@ import {
   Shield,
   Menu,
   X,
-  ChevronDown
+  ChevronDown,
+  Coins
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dungXacThuc } from '../context/AuthContext'
@@ -38,8 +39,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
 
   const danhSachMenuCoBan = [
     { duongDan: '/chuyen-doi', nhan: 'Chuyển đổi', icon: Upload },
-    { duongDan: '/chuyen-doi-word-ieee', nhan: 'Springer -> IEEE Word', icon: ArrowRightLeft },
-    { duongDan: '/chuyen-doi-word-springer', nhan: 'IEEE -> Springer Word', icon: ArrowRightLeft },
+    { duongDan: '/chuyen-doi-word', nhan: 'Chuyển đổi Word', icon: ArrowRightLeft },
     { duongDan: '/lich-su', nhan: 'Lịch sử', icon: History },
     { duongDan: '/premium', nhan: 'Premium', icon: Crown },
     { duongDan: '/tai-khoan', nhan: 'Tài khoản', icon: Settings },
@@ -126,7 +126,21 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
             </div>
 
             {/* User Menu Desktop */}
-            <div className="hidden md:flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-4">
+              {/* Token Balance Badge */}
+              <Link
+                to="/premium"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/10 transition-all group"
+              >
+                <div className="p-1 bg-amber-500 rounded-full group-hover:scale-110 transition-transform shadow-sm">
+                  <Coins className="w-3 h-3 text-white" />
+                </div>
+                <span className="text-amber-300 font-bold text-sm tracking-tight">
+                  {new Intl.NumberFormat('vi-VN').format(nguoiDung?.token_balance || 0)}
+                  <span className="ml-1 text-[10px] opacity-70 font-medium">TKN</span>
+                </span>
+              </Link>
+
               <div className="relative">
                 <button
                   onClick={() => setDropdownMo(!dropdownMo)}
@@ -238,6 +252,23 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                     </Link>
                   )
                 })}
+
+                {/* Token Balance Badge Mobile */}
+                <Link
+                  to="/premium"
+                  onClick={() => setMenuMo(false)}
+                  className="flex items-center justify-between px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400">
+                      <Coins className="w-5 h-5" />
+                    </div>
+                    <span className="text-white font-medium">Số dư Token</span>
+                  </div>
+                  <span className="text-amber-400 font-bold text-lg">
+                    {new Intl.NumberFormat('vi-VN').format(nguoiDung?.token_balance || 0)}
+                  </span>
+                </Link>
 
                 <div className="border-t border-white/10 pt-2 mt-2">
                   {nguoiDung?.role === 'admin' && (

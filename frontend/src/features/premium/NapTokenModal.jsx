@@ -46,7 +46,7 @@ const NapTokenModal = ({ isOpen, onClose }) => {
             setTrangThai('thanh_cong')
             clearInterval(intervalId)
             clearInterval(timerId)
-            toast.success('Nạp tiền thành công!')
+            toast.success('Mua gói thành công!')
             await lamMoiThongTinNguoiDung({ imLang: true })
           }
         } catch (e) {
@@ -63,14 +63,14 @@ const NapTokenModal = ({ isOpen, onClose }) => {
   const xuLyTaoHoaDon = async () => {
     const amount = Number(soTien)
     if (amount < 10000) {
-      toast.error('Số tiền nạp tối thiểu là 10.000 ₫')
+      toast.error('Số tiền mua gói tối thiểu là 10.000 ₫')
       return
     }
 
     setDangXuLy(true)
     try {
       const res = await taoHoaDonNapTien(amount)
-      if (!res.thanhCong) throw new Error(res.loiMessage || 'Không thể tạo hóa đơn nạp tiền')
+      if (!res.thanhCong) throw new Error(res.loiMessage || 'Không thể tạo đơn hàng mua gói')
       setHoaDon(res.data)
       setTrangThai('cho_thanh_toan')
       setDemGiay(0)
@@ -93,7 +93,7 @@ const NapTokenModal = ({ isOpen, onClose }) => {
       const res = await xacNhanHoaDonThuCongDev(hoaDon.payment_id)
       if (!res.thanhCong) throw new Error(res.loiMessage || 'Không thể xác nhận thủ công')
       setTrangThai('thanh_cong')
-      toast.success('Đã xác nhận nạp tiền (chế độ dev)')
+      toast.success('Đã xác nhận mua gói (chế độ dev)')
       await lamMoiThongTinNguoiDung({ imLang: true })
     } catch (e) {
       toast.error(e.message || 'Xác nhận thủ công thất bại')
@@ -135,11 +135,11 @@ const NapTokenModal = ({ isOpen, onClose }) => {
             <div className="flex items-center justify-between p-5 border-b border-white/10">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-amber-500/20 rounded-lg">
-                  <Wallet className="w-5 h-5 text-amber-400" />
+                  <Coins className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-white">Nạp tiền vào ví</h2>
-                  <p className="text-xs text-white/40">Chuyển khoản ngân hàng qua mã QR</p>
+                  <h2 className="text-lg font-bold text-white">Mua Gói Token</h2>
+                  <p className="text-xs text-white/40">Chuyển khoản theo gói qua mã QR</p>
                 </div>
               </div>
               <button onClick={onClose} className="text-white/40 hover:text-white transition p-1">
@@ -152,7 +152,7 @@ const NapTokenModal = ({ isOpen, onClose }) => {
               {trangThai === 'chon_menh_gia' && (
                 <div className="space-y-5">
                   <div>
-                    <label className="text-sm text-white/60 mb-3 block font-medium">Chọn số tiền nạp</label>
+                    <label className="text-sm text-white/60 mb-2 block font-medium">Chọn số Token muốn mua</label>
                     <div className="grid grid-cols-3 gap-2">
                       {MENH_GIA.map(item => (
                         <button
@@ -164,7 +164,7 @@ const NapTokenModal = ({ isOpen, onClose }) => {
                               : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white'
                           }`}
                         >
-                          {item.label}
+                          {new Intl.NumberFormat('vi-VN').format(Math.floor(item.value / 100))} Token
                         </button>
                       ))}
                     </div>
@@ -189,7 +189,7 @@ const NapTokenModal = ({ isOpen, onClose }) => {
 
                   {soTien && Number(soTien) >= 10000 && (
                     <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white/60">
-                      Bạn sẽ nhận được: <span className="text-amber-300 font-bold">{dinhDangVND(Number(soTien))}</span> vào ví
+                      Bạn sẽ nhận được: <span className="text-amber-300 font-bold text-lg">{new Intl.NumberFormat('vi-VN').format(Math.floor(Number(soTien) / 100))} Token</span> vào ví
                     </div>
                   )}
 
@@ -198,8 +198,8 @@ const NapTokenModal = ({ isOpen, onClose }) => {
                     disabled={!soTien || Number(soTien) < 10000 || dangXuLy}
                     className="w-full bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-primary-500/20"
                   >
-                    {dangXuLy ? <Loader2 className="w-5 h-5 animate-spin" /> : <CreditCard className="w-5 h-5" />}
-                    Tạo mã thanh toán
+                    {dangXuLy ? <Loader2 className="w-5 h-5 animate-spin" /> : <QrCode className="w-5 h-5" />}
+                    Quét mã mua gói
                   </button>
                 </div>
               )}
@@ -260,13 +260,13 @@ const NapTokenModal = ({ isOpen, onClose }) => {
 
                   {chuaCauHinhNganHang && (
                     <div className="w-full rounded-xl border border-amber-400/30 bg-amber-500/10 p-3">
-                      <p className="text-xs text-amber-200/90 mb-2">Hệ thống thanh toán đang chạy ở chế độ thử nghiệm. Bạn có thể xác nhận nạp tiền bằng nút bên dưới.</p>
+                      <p className="text-xs text-amber-200/90 mb-2">Hệ thống thanh toán đang chạy ở chế độ thử nghiệm. Bạn có thể xác nhận mua gói bằng nút bên dưới.</p>
                       <button
                         onClick={xuLyXacNhanThuCongDev}
                         disabled={dangXacNhanThuCong}
                         className="w-full rounded-lg border border-amber-400/40 bg-amber-500/20 px-3 py-2 text-sm font-medium text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
                       >
-                        {dangXacNhanThuCong ? 'Đang xác nhận...' : 'Xác nhận nạp thủ công (Dev)'}
+                        {dangXacNhanThuCong ? 'Đang xác nhận...' : 'Xác nhận mua gói (Dev)'}
                       </button>
                     </div>
                   )}
@@ -282,8 +282,8 @@ const NapTokenModal = ({ isOpen, onClose }) => {
                   >
                     <CheckCircle2 className="w-10 h-10" />
                   </motion.div>
-                  <h3 className="text-xl font-bold text-emerald-400">Nạp tiền thành công!</h3>
-                  <p className="text-white/60 text-center text-sm">Số dư ví đã được cập nhật. Bạn có thể quay lại chọn gói Premium.</p>
+                  <h3 className="text-xl font-bold text-emerald-400">Mua gói thành công!</h3>
+                  <p className="text-white/60 text-center text-sm">Số Token đã được cộng vào tài khoản của bạn. Bạn có thể quay lại chọn gói Premium.</p>
                   <button
                     onClick={onClose}
                     className="mt-2 w-full bg-white/10 hover:bg-white/20 text-white font-medium py-3 rounded-xl transition"

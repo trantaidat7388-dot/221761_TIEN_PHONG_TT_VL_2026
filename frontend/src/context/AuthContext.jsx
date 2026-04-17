@@ -45,7 +45,10 @@ export const BoBaoBocXacThuc = ({ children }) => {
         const timeoutId = setTimeout(() => controller.abort(), 5000)
         try {
             const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/me`, {
-                headers: { 'Authorization': `Bearer ${tokenDangDung}` },
+                headers: { 
+                    'Authorization': `Bearer ${tokenDangDung}`,
+                    'ngrok-skip-browser-warning': 'true'
+                },
                 signal: controller.signal
             })
             return resp
@@ -157,7 +160,10 @@ export const BoBaoBocXacThuc = ({ children }) => {
     const dangNhap = async (email, password) => {
         const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+            },
             body: JSON.stringify({ email, password })
         })
         const data = await resp.json()
@@ -169,7 +175,10 @@ export const BoBaoBocXacThuc = ({ children }) => {
     const dangKy = async (username, email, password) => {
         const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/register`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+            },
             body: JSON.stringify({ username, email, password })
         })
         const data = await resp.json()
@@ -181,7 +190,10 @@ export const BoBaoBocXacThuc = ({ children }) => {
     const dangNhapGoogle = async (googleIdToken) => {
         const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/google`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+            },
             body: JSON.stringify({ id_token: googleIdToken })
         })
         const data = await resp.json().catch(() => ({}))
@@ -202,7 +214,8 @@ export const BoBaoBocXacThuc = ({ children }) => {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${tokenDangDung}`
+                'Authorization': `Bearer ${tokenDangDung}`,
+                'ngrok-skip-browser-warning': 'true'
             },
             body: JSON.stringify(payload)
         })

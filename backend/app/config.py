@@ -85,16 +85,16 @@ MAX_TEMPLATE_UPLOAD_MB = _lay_so_nguyen_tu_env('MAX_TEMPLATE_UPLOAD_MB', 20, min
 SSE_CLEANUP_DELAY_SECONDS = _lay_so_nguyen_tu_env('SSE_CLEANUP_DELAY_SECONDS', 3600, min_value=60)
 
 # Token economy (pre-release)
-TOKEN_WORDS_PER_PAGE = _lay_so_nguyen_tu_env('TOKEN_WORDS_PER_PAGE', 450, min_value=100)
+TOKEN_WORDS_PER_PAGE = _lay_so_nguyen_tu_env('TOKEN_WORDS_PER_PAGE', 1000, min_value=100)
 TOKEN_WORDS_PER_UNIT = _lay_so_nguyen_tu_env('TOKEN_WORDS_PER_UNIT', 2250, min_value=100)
 TOKEN_MIN_COST = _lay_so_nguyen_tu_env('TOKEN_MIN_COST', 1, min_value=1)
 FREE_PLAN_MAX_PAGES = _lay_so_nguyen_tu_env('FREE_PLAN_MAX_PAGES', 60, min_value=1)
 
 # Cấu hình Gói Premium
 PREMIUM_PACKAGES = {
-    "premium_7d": {"name": "Gói Tuần", "so_ngay": 7, "token_cost": 20000, "phu_hop": "Dùng thử ngắn hạn", "tiet_kiem": False},
-    "premium_30d": {"name": "Gói Tháng", "so_ngay": 30, "token_cost": 50000, "phu_hop": "Phổ biến nhất", "tiet_kiem": False},
-    "premium_365d": {"name": "Gói Năm", "so_ngay": 365, "token_cost": 500000, "phu_hop": "Tiết kiệm dài hạn", "tiet_kiem": True}
+    "premium_7d": {"name": "Gói Tuần", "so_ngay": 7, "token_cost": 200, "phu_hop": "Dùng thử ngắn hạn", "tiet_kiem": False},
+    "premium_30d": {"name": "Gói Tháng", "so_ngay": 30, "token_cost": 500, "phu_hop": "Phổ biến nhất", "tiet_kiem": False},
+    "premium_365d": {"name": "Gói Năm", "so_ngay": 365, "token_cost": 5000, "phu_hop": "Tiết kiệm dài hạn", "tiet_kiem": True}
 }
 
 # Cấu hình nạp tiền (SePay)

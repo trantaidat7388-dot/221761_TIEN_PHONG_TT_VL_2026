@@ -52,15 +52,6 @@ app = FastAPI(title="Word2LaTeX API", version="1.0.0")
 # Khởi tạo database
 models.Base.metadata.create_all(bind=database.engine)
 
-# Cấu hình CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if CORS_ALLOW_ALL else CORS_ORIGINS,
-    allow_credentials=not CORS_ALLOW_ALL,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Gắn các routers
 app.include_router(base.router)
 app.include_router(file_upload.router)
@@ -320,6 +311,27 @@ def lay_theme_hien_tai() -> dict:
 async def favicon() -> Response:
     """Trả về 204 No Content để tắt lỗi 404 từ trình duyệt."""
     return Response(status_code=204)
+
+# ── CORS MIDDLEWARE (Outermost) ──────────────────────────────────────────────
+# Đặt ở cuối để nó được thực thi đầu tiên (Outer-most) trong stack middleware
+if CORS_ALLOW_ALL:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex="https?://.*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 
 if __name__ == "__main__":
     # Chạy server với uvicorn

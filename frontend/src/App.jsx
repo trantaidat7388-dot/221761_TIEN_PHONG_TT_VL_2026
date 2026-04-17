@@ -4,7 +4,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { BoBaoBocXacThuc, dungXacThuc } from './context/AuthContext'
 import { ThanhDieuHuong } from './components'
 import { TrangDangNhap } from './features/xac_thuc'
-import { TrangChuyenDoi, TrangChuyenDoiWordIEEE, TrangChuyenDoiWordSpringer } from './features/chuyen_doi'
+import { TrangChuyenDoi, TrangChuyenDoiWordToWord } from './features/chuyen_doi'
 import { TrangLichSu } from './features/lich_su'
 import { TrangAdmin } from './features/admin'
 import { TrangTaiKhoan } from './features/tai_khoan'
@@ -44,12 +44,8 @@ const CacTuyenUngDung = () => {
           element={nguoiDung ? <TrangChuyenDoi nguoiDung={nguoiDung} /> : <Navigate to="/dang-nhap" replace />}
         />
         <Route
-          path="/chuyen-doi-word-ieee"
-          element={nguoiDung ? <TrangChuyenDoiWordIEEE /> : <Navigate to="/dang-nhap" replace />}
-        />
-        <Route
-          path="/chuyen-doi-word-springer"
-          element={nguoiDung ? <TrangChuyenDoiWordSpringer /> : <Navigate to="/dang-nhap" replace />}
+          path="/chuyen-doi-word"
+          element={nguoiDung ? <TrangChuyenDoiWordToWord /> : <Navigate to="/dang-nhap" replace />}
         />
         <Route
           path="/lich-su"

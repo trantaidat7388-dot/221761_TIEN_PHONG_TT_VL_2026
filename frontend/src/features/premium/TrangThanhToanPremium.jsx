@@ -96,7 +96,7 @@ const TrangThanhToanPremium = () => {
       const kq = await xacNhanHoaDonThuCongDev(hoaDon.payment_id)
       if (!kq.thanhCong) throw new Error(kq.loiMessage || 'Không xác nhận được')
       await lamMoiThongTinNguoiDung({ imLang: true })
-      toast.success('Đã xác nhận nạp tiền (dev)')
+      toast.success('Đã xác nhận mua gói (dev)')
       setThanhToanThanhCong(true)
     } catch (e) {
       toast.error(e.message || 'Xác nhận thủ công thất bại')
@@ -128,7 +128,7 @@ const TrangThanhToanPremium = () => {
           </div>
           <h2 className="text-3xl font-extrabold text-white mb-2">Thanh toán Thành Công!</h2>
           <p className="text-emerald-200 mb-8 max-w-sm mx-auto leading-relaxed">
-            Hệ thống đã xác nhận giao dịch. {planName !== 'Premium Package' ? 'Gói cước Premium của bạn đã được kích hoạt!' : 'Bạn đã nạp token thành công để sử dụng mọi chức năng!'}
+            Hệ thống đã xác nhận giao dịch. {planName !== 'Premium Package' ? 'Gói cước Premium của bạn đã được kích hoạt!' : 'Bạn đã mua gói Token thành công để sử dụng mọi chức năng!'}
           </p>
           <button
             onClick={() => navigate('/chuyen-doi')}
@@ -151,7 +151,7 @@ const TrangThanhToanPremium = () => {
     <div className="min-h-screen bg-gradient-animated pt-20 pb-12 px-4">
       <div className="max-w-6xl mx-auto">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-white">Thanh toán Premium bằng QR Code</h1>
+          <h1 className="text-3xl font-bold text-white">Mua Gói Token Premium</h1>
           <button
             type="button"
             onClick={() => navigate('/premium')}
@@ -166,7 +166,7 @@ const TrangThanhToanPremium = () => {
           <section className="rounded-2xl border border-white/10 bg-white/5 p-6 flex flex-col">
             <h2 className="text-2xl font-bold text-white mb-5 flex items-center gap-2">
                <QrCode className="w-6 h-6 text-primary-400" />
-               Quét mã để thanh toán tự động
+               Quét mã QR mua gói tự động
             </h2>
 
             {hoaDon ? (
@@ -196,7 +196,7 @@ const TrangThanhToanPremium = () => {
 
                 <div className="mt-6 flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
-                  <p className="text-sm text-amber-200/90 font-medium">Đang chờ tiền về tài khoản... ({demGiay}s)</p>
+                  <p className="text-sm text-amber-200/90 font-medium">Đang chờ xác nhận quét mã... ({demGiay}s)</p>
                 </div>
 
                 {chuaCauHinhNganHang && (
@@ -213,7 +213,7 @@ const TrangThanhToanPremium = () => {
             ) : (
               <div className="flex-1 flex flex-col justify-center">
                 <div className="rounded-xl border border-white/10 bg-white/5 p-5">
-                  <label className="text-white/70 text-base font-semibold">Bạn muốn nạp bao nhiêu?</label>
+                  <label className="text-white/70 text-base font-semibold">Chọn quy mô Gói Token</label>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {[10000, 25000, 50000, 100000].map((moc) => (
                       <button
@@ -258,7 +258,7 @@ const TrangThanhToanPremium = () => {
                     className="mt-6 w-full rounded-xl bg-primary-600 p-4 text-lg font-extrabold text-white hover:bg-primary-500 disabled:opacity-60 inline-flex items-center justify-center gap-2 shadow-xl shadow-primary-500/20"
                   >
                     {dangTaoHoaDon ? <Loader2 className="w-5 h-5 animate-spin" /> : <QrCode className="w-5 h-5" />}
-                    Tạo mã thanh toán QR
+                    Quét mã mua Gói ngay
                   </button>
                 </div>
               </div>
@@ -276,13 +276,13 @@ const TrangThanhToanPremium = () => {
                     <p className="text-white/60">Sử dụng trong {planDays >= 300 ? '1 năm' : `${planDays} ngày`}</p>
                   </div>
                   <div className="rounded-lg bg-amber-500/20 px-3 py-2 text-amber-200 font-bold text-lg">
-                    {new Intl.NumberFormat('vi-VN').format(planCost || soTien)} ₫
+                    {planCost ? `${new Intl.NumberFormat('vi-VN').format(planCost)} Token` : `${new Intl.NumberFormat('vi-VN').format(soTien)} ₫`}
                   </div>
                 </div>
 
                 <div className="mt-4 space-y-2 text-white/80">
-                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hệ thống tự động kích hoạt Premium sau 5-10s</div>
-                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hỗ trợ nạp 24/7 không cần chờ</div>
+                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hệ thống tự động kích hoạt gói sau khi quét mã 5-10s</div>
+                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hỗ trợ mua gói 24/7 không cần chờ</div>
                 </div>
               </div>
             </div>

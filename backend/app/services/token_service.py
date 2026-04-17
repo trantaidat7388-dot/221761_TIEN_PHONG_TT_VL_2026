@@ -70,22 +70,20 @@ def tru_token_cho_chuyen_doi(db: Session, user_id: int, so_trang_uoc_tinh: int, 
 
     so_trang_uoc_tinh = max(1, so_trang_uoc_tinh)
     if (user.plan_type or "free").lower() == "free":
-        # Gói thường dùng quota cố định theo trang: 1 trang = 1 token, tối đa 60 trang.
-        if user.token_balance > FREE_PLAN_MAX_PAGES:
-            user.token_balance = FREE_PLAN_MAX_PAGES
-            db.commit()
+        # Gói thường: 1 trang hệ thống (1000 từ) = 1 token
         token_cost = so_trang_uoc_tinh
     else:
         token_cost = tinh_token_tieu_hao_theo_so_trang(so_trang_uoc_tinh)
 
     if user.token_balance < token_cost:
+        thieu = token_cost - user.token_balance
         raise HTTPException(
             status_code=402,
             detail=(
-                f"Không đủ token để chuyển đổi. Cần {token_cost} token, còn {user.token_balance} token. "
-                "Gói thường tối đa 60 trang."
-            ) if (user.plan_type or "free").lower() == "free" else
-            f"Không đủ token để chuyển đổi. Cần {token_cost} token, còn {user.token_balance} token",
+                f"Không đủ token để chuyển đổi. "
+                f"Cần {token_cost} token, bạn còn {user.token_balance} token (thiếu {thieu}). "
+                f"Vui lòng mua thêm gói Premium để tiếp tục sử dụng."
+            ),
         )
 
     user.token_balance -= token_cost

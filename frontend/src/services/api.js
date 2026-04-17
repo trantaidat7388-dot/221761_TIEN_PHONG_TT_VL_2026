@@ -285,7 +285,9 @@ export const taiFileZip = async (jobId, tenFileZipFallback = '') => {
     if (response.status === 401) thongBaoPhienHetHan()
 
     // Fallback sang endpoint cũ nếu chưa đăng nhập
-    const finalResponse = response.ok ? response : await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-zip/${jobId}`)
+    const finalResponse = response.ok ? response : await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-zip/${jobId}`, {
+      headers: taoHeaderXacThuc()
+    })
     if (!finalResponse.ok) {
       const message = await docLoiJsonTuResponse(finalResponse)
       throw new Error(message)

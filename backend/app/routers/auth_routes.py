@@ -180,8 +180,19 @@ def _lay_google_user_info_tu_authorization_code(code: str) -> dict:
         )
         with urlrequest.urlopen(token_req, timeout=10) as resp:
             token_data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-    except Exception:
+    except urlrequest.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="ignore")
+        logger.error("[Google OAuth] Token exchange failed: %s - Body: %s", e, error_body)
+        try:
+            err_json = json.loads(error_body)
+            err_msg = err_json.get("error_description") or err_json.get("error") or str(e)
+        except Exception:
+            err_msg = str(e)
+        raise HTTPException(status_code=401, detail=f"Google API Error: {err_msg}")
+    except Exception as e:
+        logger.error("[Google OAuth] Unexpected error during token exchange: %s", e)
         raise HTTPException(status_code=401, detail="Không thể đổi authorization code từ Google")
+
 
     access_token = (token_data.get("access_token") or "").strip()
     if not access_token:
@@ -305,12 +316,19 @@ def dang_nhap_google_redirect() -> RedirectResponse:
 @router.get("/auth/google/callback")
 def google_callback(code: str, request: Request, db: Session = Depends(lay_db)) -> RedirectResponse:
     _ = request  # reserved for future state validation / audit logging.
-    google_info = _lay_google_user_info_tu_authorization_code(code)
-    user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"])
+    try:
+        google_info = _lay_google_user_info_tu_authorization_code(code)
+        user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"])
 
-    payload = _tao_auth_payload(user)
-    token = payload["access_token"]
-    return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/?token={parse.quote(token)}")
+        payload = _tao_auth_payload(user)
+        token = payload["access_token"]
+        return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/?token={parse.quote(token)}")
+    except HTTPException as e:
+        logger.warning("[Google OAuth] Callback failed: %s", e.detail)
+        return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/dang-nhap?error={parse.quote(e.detail or 'Lỗi đăng nhập Google')}")
+    except Exception as e:
+        logger.error("[Google OAuth] Unexpected callback crash: %s", e)
+        return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/dang-nhap?error=Lỗi hệ thống khi xử lý Google Login")
 
 
 # ── CLOUD-SYNC POLLING: Flutter Hybrid WebView Login ─────────────────────────
@@ -581,9 +599,14 @@ def dang_ky_goi_premium(
     so_ngay = plan.get("so_ngay", 30)
 
     if current_user.token_balance < token_cost:
+        thieu = token_cost - current_user.token_balance
         raise HTTPException(
             status_code=400,
-            detail=f"Không đủ token để đăng ký. Cần {token_cost} token",
+            detail=(
+                f"Không đủ token để đăng ký. "
+                f"Cần {token_cost} token, bạn còn {current_user.token_balance} token (thiếu {thieu}). "
+                f"Vui lòng mua thêm gói Premium để tiếp tục."
+            ),
         )
 
     current_user.token_balance -= token_cost
