@@ -146,59 +146,60 @@ const TabTongQuan = ({ tongQuan, danhSachNguoiDung, danhSachPayments }) => {
             )}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-xl font-bold text-white flex items-center gap-2">
-              <FileDown className="w-6 h-6 text-primary-400" />
-              Trung tâm Xuất Báo cáo
-            </h3>
-            <p className="text-sm text-white/50 mt-1">Xuất dữ liệu hệ thống ra tệp CSV để theo dõi và đối soát</p>
+        {/* Report Center - Spans all columns */}
+        <div className="col-span-1 lg:col-span-3 xl:col-span-4 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <FileDown className="w-6 h-6 text-primary-400" />
+                Trung tâm Xuất Báo cáo
+              </h3>
+              <p className="text-sm text-white/50 mt-1">Xuất dữ liệu hệ thống ra tệp CSV để theo dõi và đối soát</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button
+              onClick={() => xuatBaoCaoAdmin('payments')}
+              className="flex items-center justify-between p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all group gap-3"
+            >
+              <div className="flex items-center gap-3 text-emerald-300 font-semibold">
+                <div className="p-2 bg-emerald-500/20 rounded-lg">
+                  <Coins className="w-5 h-5" />
+                </div>
+                <span className="text-sm">Báo cáo Doanh thu</span>
+              </div>
+              <Download className="w-4 h-4 text-emerald-400/50 group-hover:text-emerald-400 shrink-0" />
+            </button>
+
+            <button
+              onClick={() => xuatBaoCaoAdmin('conversions')}
+              className="flex items-center justify-between p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all group gap-3"
+            >
+              <div className="flex items-center gap-3 text-cyan-300 font-semibold">
+                <div className="p-2 bg-cyan-500/20 rounded-lg">
+                  <History className="w-5 h-5" />
+                </div>
+                <span className="text-sm">Báo cáo Chuyển đổi</span>
+              </div>
+              <Download className="w-4 h-4 text-cyan-400/50 group-hover:text-cyan-400 shrink-0" />
+            </button>
+
+            <button
+              onClick={() => xuatBaoCaoAdmin('users')}
+              className="flex items-center justify-between p-4 rounded-xl bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 transition-all group gap-3"
+            >
+              <div className="flex items-center gap-3 text-violet-300 font-semibold">
+                <div className="p-2 bg-violet-500/20 rounded-lg">
+                  <Users className="w-5 h-5" />
+                </div>
+                <span className="text-sm">Danh sách Người dùng</span>
+              </div>
+              <Download className="w-4 h-4 text-violet-400/50 group-hover:text-violet-400 shrink-0" />
+            </button>
           </div>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button
-            onClick={() => xuatBaoCaoAdmin('payments')}
-            className="flex flex-col sm:flex-row items-center justify-between p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all group gap-3 text-center sm:text-left"
-          >
-            <div className="flex flex-col sm:flex-row items-center gap-3 text-emerald-300 font-semibold">
-              <div className="p-2 bg-emerald-500/20 rounded-lg">
-                <Coins className="w-5 h-5" />
-              </div>
-              <span>Báo cáo Doanh thu</span>
-            </div>
-            <Download className="w-4 h-4 text-emerald-400/50 group-hover:text-emerald-400 shrink-0" />
-          </button>
-
-          <button
-            onClick={() => xuatBaoCaoAdmin('conversions')}
-            className="flex flex-col sm:flex-row items-center justify-between p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all group gap-3 text-center sm:text-left"
-          >
-            <div className="flex flex-col sm:flex-row items-center gap-3 text-cyan-300 font-semibold">
-              <div className="p-2 bg-cyan-500/20 rounded-lg">
-                <History className="w-5 h-5" />
-              </div>
-              <span>Báo cáo Chuyển đổi</span>
-            </div>
-            <Download className="w-4 h-4 text-cyan-400/50 group-hover:text-cyan-400 shrink-0" />
-          </button>
-
-          <button
-            onClick={() => xuatBaoCaoAdmin('users')}
-            className="flex flex-col sm:flex-row items-center justify-between p-4 rounded-xl bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 transition-all group gap-3 text-center sm:text-left"
-          >
-            <div className="flex flex-col sm:flex-row items-center gap-3 text-violet-300 font-semibold">
-              <div className="p-2 bg-violet-500/20 rounded-lg">
-                <Users className="w-5 h-5" />
-              </div>
-              <span>Danh sách Người dùng</span>
-            </div>
-            <Download className="w-4 h-4 text-violet-400/50 group-hover:text-violet-400 shrink-0" />
-          </button>
-        </div>
       </div>
-    </div>
     </div>
   );
 };

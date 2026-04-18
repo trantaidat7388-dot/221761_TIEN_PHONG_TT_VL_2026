@@ -25,8 +25,10 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       host: true,
       allowedHosts: [
-        'nacho-disjoin-deprecate.ngrok-free.dev',
-        '.ngrok-free.dev'
+        '.ngrok-free.dev',
+        '.trycloudflare.com',
+        'word2latex.id.vn',
+        'api.word2latex.id.vn'
       ],
       open: false,
       headers: {

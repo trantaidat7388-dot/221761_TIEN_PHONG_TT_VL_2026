@@ -308,6 +308,7 @@ def dang_nhap_google_redirect() -> RedirectResponse:
             "scope": "openid email profile",
             "access_type": "online",
             "prompt": "select_account",
+            "state": "web_login_" + os.urandom(8).hex(),
         }
     )
     return RedirectResponse(url=f"https://accounts.google.com/o/oauth2/v2/auth?{query}")
@@ -458,8 +459,12 @@ def _lay_google_user_info_flutter(code: str) -> dict:
         )
         with urlrequest.urlopen(token_req, timeout=10) as resp:
             token_data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+    except urlrequest.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="ignore")
+        logger.error("[Cloud-Sync] Token exchange failed in _lay_google_user_info_flutter: %s - Body: %s", e, error_body)
+        raise HTTPException(status_code=401, detail=f"Google API Error: {error_body}")
     except Exception as e:
-        logger.error("[Cloud-Sync] Token exchange failed in _lay_google_user_info_flutter: %s", e)
+        logger.error("[Cloud-Sync] Unexpected error during token exchange: %s", e)
         raise HTTPException(status_code=401, detail="Không thể đổi authorization code từ Google")
 
     access_token = (token_data.get("access_token") or "").strip()
@@ -529,19 +534,35 @@ def google_callback_flutter(
     else:
         logger.warning("[Cloud-Sync] Session not found (expired?): %s", session_id)
 
-    # ── Redirect về app scheme để Chrome Custom Tab tự đóng ──
-    # FlutterWebAuth2 sẽ bắt URL word2latex://callback và tự đóng CCT.
-    # Frontend WebView vẫn polling để nhận token từ login_sessions.
-    callback_url = "word2latex://callback?status=success"
-
-    # ── Redirect trực tiếp về app scheme ──
-    # Sử dụng RedirectResponse (HTTP 302) là cách đáng tin cậy nhất để 
-    # Chrome Custom Tab tự đóng và kích hoạt app scheme.
-    callback_url = "word2latex://callback?status=success"
-    logger.info("[Cloud-Sync] Successful login, redirecting to app: %s", callback_url)
-    
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url=callback_url)
+    # Trả HTML thông báo thành công (Cơ chế cũ ổn định hơn cho môi trường dev)
+    return HTMLResponse(
+        content="""
+        <html>
+        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                   display: flex; align-items: center; justify-content: center;
+                   min-height: 100vh; margin: 0; background: #070513; color: white; }
+            .card { text-align: center; padding: 48px 32px; background: rgba(255,255,255,0.05);
+                    border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+                    border-radius: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.4); max-width: 400px; }
+            .icon { font-size: 64px; margin-bottom: 24px; }
+            h2 { color: #10b981; margin-bottom: 12px; font-weight: 800; }
+            p { color: rgba(255,255,255,0.7); line-height: 1.6; }
+            .btn-close { margin-top: 32px; display: inline-block; padding: 12px 24px; 
+                         background: #7c3aed; color: white; text-decoration: none; 
+                         border-radius: 12px; font-weight: 600; }
+        </style></head>
+        <body><div class="card">
+            <div class="icon">✅</div>
+            <h2>Đăng nhập thành công!</h2>
+            <p>Bạn có thể <strong>đóng tab này</strong> và quay lại ứng dụng Word2LaTeX.<br>
+            Hệ thống sẽ tự động đăng nhập cho bạn.</p>
+        </div></body>
+        </html>
+        """,
+        status_code=200,
+    )
 
 
 @router.get("/auth/me")

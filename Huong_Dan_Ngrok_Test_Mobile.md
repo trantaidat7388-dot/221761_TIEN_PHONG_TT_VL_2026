@@ -1,88 +1,91 @@
-# HƯỚNG DẪN KIỂM THỬ ỨNG DỤNG TRÊN ĐIỆN THOẠI VỚI NGROK
+# HƯỚNG DẪN KIỂM THỬ TRÊN ĐIỆN THOẠI (NGROK TÀI KHOẢN MỚI)
 
-Tài liệu này cung cấp kiến thức nền tảng và các bước thiết lập chi tiết để đưa ứng dụng đang code trên máy tính (localhost) lên điện thoại di động thông qua môi trường Internet bằng công cụ Ngrok.
-
----
-
-## 1. KHÁI NIỆM CƠ BẢN (Dành cho người mới)
-
-### 1.1 Localhost là gì? Tại sao điện thoại không vào được?
-Khi bạn lập trình trên máy tính, trang web của bạn chạy trên địa chỉ dạng `http://localhost:5173`. Từ `localhost` ám chỉ "Mạng nội bộ bên trong cái máy tính này".
-Vì thế, nếu bạn lấy mạng wifi 4G của điện thoại mở `http://localhost:5173`, điện thoại sẽ cố gắng tự tìm ứng dụng bên trong bộ nhớ của chính con điện thoại đó (chắc chắn là không có) => Nó sẽ báo lỗi **"Không thể kết nối" (Site can't be reached)**.
-
-### 1.2 Ngrok là gì?
-Để điện thoại có thể "nhìn thấy" máy tính đang cắm code, chúng ta cần một **cầu nối (Đường hầm / Tunnel)**. 
-Ngrok đóng vai trò là cây cầu đó. Ngrok sinh ra một địa chỉ "Có thật trên mạng Internet" (ví dụ: `https://nacho...ngrok-free.dev`). Khi điện thoại truy cập vào link này, máy chủ Ngrok trên không gian mạng sẽ hứng lấy dữ liệu đó và bí mật đẩy nó qua ống dẫn ngầm thẳng vào cổng 5173 trên máy tính của bạn.
-
-### 1.3 Tại sao phải dùng Tên miền cố định (Static Domain)?
-Bản miễn phí của Ngrok thường có tính xấu: mỗi lần mở lại ứng dụng nó sẽ vứt trả một tên miền rác mới (như `ds4q.ngrok-free.app`). 
-Nếu dùng link ngẫu nhiên này, mỗi ngày bạn lập trình bạn lại phải đi sửa code, sửa `.env` và sửa API Google. Rất đau đầu!
-Rất may tài khoản của chúng ta đã được cấp 1 tên miền danh dự miễn phí mãi mãi: `nacho-disjoin-deprecate.ngrok-free.dev`. Chỉ cần chạy đúng tên miền này là hệ sinh thái code của bạn vững như bàn thạch!
+Tài liệu này đã được cập nhật để phù hợp với quy trình sử dụng Ngrok mới nhất, tối ưu hơn và dễ quản lý hơn.
 
 ---
 
-## 2. HƯỚNG DẪN LỆNH CHẠY NGROK VÀ Ý NGHĨA 
+## 1. QUY TRÌNH MỚI: MỘT CẦU NỐI DUY NHẤT (Vite Proxy)
 
-Để kích hoạt Cầu nối Cố định, bạn mở một cửa sổ CMD đen nhánh (không tắt hay liên quan đến cửa sổ start.bat của Backend) và gõ đúng lệnh sau:
+Thay vì chạy nhiều đường hầm cho cả Frontend và Backend, chúng ta sẽ sử dụng kỹ thuật **Proxy**. 
+- Bạn chỉ cần chạy **1 đường hầm Ngrok** trỏ vào cổng **5173** (Frontend).
+- Mọi yêu cầu liên quan đến API (đăng nhập, chuyển đổi file) sẽ được Frontend tự động "chuyển tiếp" sang Backend (cổng 8000) đang chạy trên máy tính bạn.
 
-```bash
-ngrok http --domain=nacho-disjoin-deprecate.ngrok-free.dev 5173
+**Lợi ích:** 
+- Tiết kiệm tài nguyên tài khoản Ngrok.
+- Chỉ cần quản lý 1 link Ngrok duy nhất.
+- Tránh lỗi CORS và dễ dàng thiết lập Google OAuth.
+
+---
+
+## 2. CÁC BƯỚC THIẾT LẬP (LÀM 1 LẦN)
+
+### Bước 1: Cập nhật Authtoken mới
+- Truy cập [dashboard.ngrok.com](https://dashboard.ngrok.com/get-started/your-authtoken) để lấy token của tài khoản mới.
+- Chạy file `start_ngrok.bat`, chọn số **1** và dán token của bạn vào.
+
+### Bước 2: Lấy Static Domain (Khuyên dùng)
+- Ngrok hiện tại cho phép mỗi tài khoản miễn phí có 1 domain cố định (ví dụ: `your-name.ngrok-free.app`). 
+- Hãy tạo domain này trên dashboard của Ngrok để không bị đổi link mỗi ngày.
+
+---
+
+## 3. CÁCH VẬN HÀNH HÀNG NGÀY
+
+### Bước 1: Khởi động hệ thống
+- Chạy file `start.bat` để mở cả Backend và Frontend như bình thường.
+- Đảm bảo bạn có thể vào `http://localhost:5173` trên máy tính.
+
+### Bước 2: Kích hoạt Ngrok
+- Chạy file `start_ngrok.bat`.
+- Nếu bạn có domain cố định: Chọn **2** và nhập domain.
+- Nếu dùng link ngẫu nhiên: Chọn **3**.
+
+### Bước 3: Cập nhật cấu hình Backend
+Khi Ngrok đã chạy, bạn sẽ có một địa chỉ (Link), ví dụ: `https://abcd.ngrok-free.app`.
+Bạn **BẮT BUỘC** phải mở file `backend/.env` và thay thế các dòng sau bằng link mới:
+```env
+GOOGLE_REDIRECT_URI=https://abcd.ngrok-free.app/api/auth/google/callback
+FRONTEND_URL=https://abcd.ngrok-free.app
+CORS_ORIGINS=https://abcd.ngrok-free.app,http://localhost:5173
 ```
-
-**Bảng mổ xẻ phẫu thuật lệnh chạy:**
-| Thành phần | Giải thích chức năng |
-| :--- | :--- |
-| `ngrok` | Gọi khởi động phần mềm ngrok đã cài trong Windows. |
-| `http` | Báo cho ngrok biết hãy mã hoá dữ liệu qua giao thức web HTTP/HTTPS. |
-| `--domain=...` | Ép buộc ngrok sử dụng **Bằng được** cái tên miền vĩnh viễn đã xin được. |
-| `5173` | Cổng dịch vụ của Vite Frontend mà đường hầm này sẽ đổ vào khi đến được máy tính. |
+*(Lưu ý: Không được có dấu gạch chéo `/` ở cuối FRONTEND_URL).*
 
 ---
 
-## 3. CÁCH CÀI ĐẶT VÀ VẬN HÀNH KIỂM THỬ HÀNG NGÀY
+## 4. CẤU HÌNH GOOGLE CLOUD (Cực kỳ quan trọng)
 
-Đây là thói quen mà bạn nên làm mỗi khi ngồi vào bàn để viết Code và Test:
-
-### Bước 1: Khởi động máy chủ ứng dụng cục bộ
-Hầu hết các dự án lập trình thực tế đều chia làm Frontend và Backend, bạn cần mở riêng từng Terminal (hoặc CMD) để khởi chạy chúng thủ công bằng lệnh thay vì phụ thuộc vào các file cài sẵn.
-
-**Ví dụ thông dụng:**
-- **Chạy Frontend (React/Vue/NextJS):** 
-  Mở terminal tại thư mục frontend, chạy lệnh:
-  ```bash
-  npm install
-  npm run dev
-  ```
-  *(Frontend thường sẽ chạy ở các cổng như: 3000, 5173, 8080...)*
-
-- **Chạy Backend (Tuỳ ngôn ngữ):**
-  - **Node.js**: `npm run start` hoặc `node index.js`
-  - **Python (FastAPI/Django):** Kích hoạt môi trường ảo (nếu có), sau đó chạy `python run_api.py` hoặc `uvicorn app.main:app --reload`
-  
-**Mục tiêu:** Hãy đảm bảo rằng lúc này bạn có thể tự truy cập thành công dự án trên trình duyệt máy tính của chính mình thông qua địa chỉ `http://localhost:<PORT>`. (Tuyệt đối không tắt các cửa sổ khởi chạy này đi).
-
-### Bước 2: Kích hoạt Ngrok xuyên tường lửa
-- **Hành động:** Mở 1 cửa sổ CMD mới tinh. Dán lệnh: `ngrok http --domain=nacho-disjoin-deprecate.ngrok-free.dev 5173` rồi Enter.
-- **Kết quả:** Nó báo chữ **Online** màu xanh nhạt. Máy tính của bạn đã được hòa mình vào mạng Internet đại chúng.
-
-### Bước 3: Đưa lên điện thoại (Hoặc máy tính người khác)
-- **Hành động:** Gửi đường link `https://nacho-disjoin-deprecate.ngrok-free.dev` cho bạn bè, hoặc tự nhập thẳng vào Chrome/Safari trên điện thoại.
-- **Kết quả:** 
-   - Nếu là lần đầu tiên vào bằng trình duyệt, Ngrok có thể hiện màn hình chống Lừa đảo (Cảnh báo). Bấm nút **"Visit Site"**.
-   - Giao diện của bạn sẽ load đầy đủ. Thử ngay các tính năng gọi API, đăng nhập,...!
+Để tính năng Đăng nhập hoạt động trên điện thoại, bạn phải thêm Link Ngrok vào [Google Cloud Console](https://console.cloud.google.com/):
+1. **Authorized JavaScript origins**: Thêm `https://abcd.ngrok-free.app`
+2. **Authorized redirect URIs**: Bạn phải thêm **CẢ 2** link sau:
+   - `https://abcd.ngrok-free.app/api/auth/google/callback`
+   - `https://abcd.ngrok-free.app/api/auth/google/callback/flutter` (Dành cho App)
 
 ---
 
-## 4. BÍ kÍP GIẢI QUYẾT CÁC LỖI THƯỜNG GẶP
+## 5. CÁCH ĐỔI TÀI KHOẢN NGROK (Khi bị giới hạn/Hết hạn)
 
-### ⛔ ERR_NGROK_3200 (The endpoint is offline)
-- **Nghĩa là:** Điện thoại đang truy cập cái link nhưng Ngrok trên máy tính của bạn thì đang ngủ tắt máy.
-- **Cách sửa:** Quên làm Bước 2 rồi! Mở lệnh ngrok lên, giữ nó ở trạng thái online.
+Nếu bạn muốn chuyển sang một tài khoản Ngrok khác, hãy làm theo các cách sau:
 
-### ⛔ Đăng nhập Google báo uỷ quyền URL / Mismatch
-- **Nghĩa là:** Bạn chưa thêm cái tên miền "nacho-disjoin..." vào **Google Cloud Console**.
-- **Cách sửa:** Lên quản lý Application GCP. Tại thông tin OAuth 2.0 Credentials, thêm `https://nacho-disjoin-deprecate.ngrok-free.dev` vào cả mục `Origins` và chèn `/api/auth/google/callback` vào mục thư mục tiếp nhận.
+### Cách 1: Sử dụng File Start
+1. Chạy file `start_ngrok.bat`.
+2. Chọn phím **1** (Thêm/Cập nhật Ngrok Authtoken).
+3. Dán Authtoken của tài khoản mới vào và nhấn Enter.
 
-### ⛔ Bấm Đăng Nhập bình thường không chịu chạy (Lỗi ngầm chặn gói mạng Vite)
-- **Nghĩa là:** Backend API bị bức tường của Ngrok chặn mồm. 
-- **Cách sửa:** Hệ thống code hiện tại đã tự động nhúng công nghệ "Pass thẻ từ ngrok-skip-browser-warning" vào mọi thao tác fetch API. Nếu bạn bị lỗi này thì chỉ cần load lại trang là được; vấn đề này đã vĩnh viễn bị loại trừ.
+### Cách 2: Sử dụng Terminal (Lệnh trực tiếp)
+Mở PowerShell hoặc CMD và chạy lệnh sau:
+```powershell
+ngrok config add-authtoken <TOKEN_MOI_CUA_BAN>
+```
+*(Thay `<TOKEN_MOI_CUA_BAN>` bằng mã token thực tế lấy từ trang Dashboard của Ngrok).*
+
+### Lưu ý sau khi đổi:
+- Tắt cửa sổ Ngrok cũ đang chạy.
+- Chạy lại Ngrok (theo bước 3.2) để nhận Link mới.
+- **QUAN TRỌNG:** Phải cập nhật lại Link mới này vào file `backend/.env` và Google Cloud Console.
+
+---
+
+## 6. GIẢI QUYẾT LỖI
+- **Lỗi 502 Bad Gateway:** Do Backend (cổng 8000) chưa bật hoặc bị treo. Hãy kiểm tra cửa số `start.bat`.
+- **Lỗi Mismatch URI:** Do bạn chưa cập nhật link Ngrok mới vào `backend/.env` hoặc Google Cloud Console.
+- **Màn hình cảnh báo của Ngrok:** Bấm nút "Visit Site" để vượt qua.

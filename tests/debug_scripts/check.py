@@ -1,1 +1,0 @@
-import docx, glob; files = glob.glob(r'C:\221761_TIEN_PHONG_TT_VL_2026\input_data\Template_word\*.docx'); doc = docx.Document(files[0]); print([p.text for p in doc.paragraphs if '0.937' in p.text or 'includegraphics' in p.text])

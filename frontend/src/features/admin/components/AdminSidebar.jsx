@@ -5,9 +5,11 @@ const AdminSidebar = ({ sidebarOpen, activeTab, setActiveTab, TABS, navigate, xu
     <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} flex flex-col border-r border-white/5 bg-slate-950/90 transition-all duration-300`}>
       {/* Logo */}
       <div className="flex items-center gap-2 border-b border-white/5 px-4 py-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 text-xs font-black text-white">
-          W2L
-        </div>
+        <img 
+          src="/logo_admin.png" 
+          alt="W2L Logo" 
+          className="h-9 w-9 shrink-0 rounded-lg object-cover shadow-lg shadow-cyan-500/20" 
+        />
         {sidebarOpen && <span className="text-sm font-bold text-white">Admin Panel</span>}
       </div>
 

@@ -53,6 +53,7 @@ cp frontend/.env.example frontend/.env
   - http://localhost:5173
 - Authorized redirect URIs:
   - http://localhost:8000/api/auth/google/callback
+  - http://localhost:8000/api/auth/google/callback/flutter (Dành cho Mobile)
 6. Bam Create, copy:
 - Client ID
 - Client Secret
@@ -64,6 +65,7 @@ Cap nhat:
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
+GOOGLE_REDIRECT_URI_FLUTTER=http://localhost:8000/api/auth/google/callback/flutter
 FRONTEND_URL=http://localhost:5173
 
 ### frontend/.env

@@ -1,28 +1,25 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Users, Trophy, CreditCard, Files, History, Shield, Settings, Palette, Layout, FileText, FileCode2 } from 'lucide-react';
+import { BarChart3, Users, Trophy, CreditCard, Files, History, Settings, Paintbrush, FileText } from 'lucide-react';
 import { dungXacThuc } from '../../context/AuthContext';
 import { useAdminData } from './hooks/useAdminData';
 import { AdminSidebar, AdminTopBar } from './components';
 import {
   TabTongQuan, TabNguoiDung, TabXepHang, TabThanhToan,
-  TabTemplate, TabLichSu, TabAuditLog, TabCauHinh,
-  TabGiaoDien, TabLandingEditor, TabChuyenDoiAdmin, TabTrangTuyChinh
+  TabTemplate, TabLichSu, TabCauHinh,
+  TabQuanTriGiaoDien, TabChuyenDoiAdmin
 } from './tabs';
 
 const TABS = [
   { key: 'tong-quan', label: 'Tổng quan', icon: BarChart3 },
   { key: 'chuyen-doi', label: 'Chuyển Đổi', icon: FileText },
-  { key: 'trang-tuy-chinh', label: 'Page Builder', icon: FileCode2 },
   { key: 'nguoi-dung', label: 'Người dùng', icon: Users },
   { key: 'xep-hang', label: 'Xếp hạng', icon: Trophy },
   { key: 'thanh-toan', label: 'Thanh toán', icon: CreditCard },
   { key: 'template', label: 'Template', icon: Files },
   { key: 'lich-su', label: 'Lịch sử', icon: History },
-  { key: 'audit-log', label: 'Audit Log', icon: Shield },
   { key: 'cau-hinh', label: 'Cấu hình', icon: Settings },
-  { key: 'giao-dien', label: 'Giao diện', icon: Palette },
-  { key: 'landing-editor', label: 'Landing Editor', icon: Layout },
+  { key: 'quan-tri-giao-dien', label: 'Quản trị Giao diện', icon: Paintbrush },
 ];
 
 const TrangAdmin = () => {
@@ -72,12 +69,9 @@ const TrangAdmin = () => {
           {activeTab === 'thanh-toan' && <TabThanhToan {...adminData} />}
           {activeTab === 'template' && <TabTemplate {...adminData} />}
           {activeTab === 'lich-su' && <TabLichSu {...adminData} />}
-          {activeTab === 'audit-log' && <TabAuditLog {...adminData} />}
           {activeTab === 'cau-hinh' && <TabCauHinh {...adminData} />}
-          {activeTab === 'giao-dien' && <TabGiaoDien />}
-          {activeTab === 'landing-editor' && <TabLandingEditor />}
+          {activeTab === 'quan-tri-giao-dien' && <TabQuanTriGiaoDien />}
           {activeTab === 'chuyen-doi' && <TabChuyenDoiAdmin />}
-          {activeTab === 'trang-tuy-chinh' && <TabTrangTuyChinh />}
         </div>
       </main>
     </div>

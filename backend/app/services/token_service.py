@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models
-from ..config import FREE_PLAN_MAX_PAGES, TOKEN_MIN_COST, TOKEN_WORDS_PER_PAGE, TOKEN_WORDS_PER_UNIT
+from ..config import TOKEN_MIN_COST, TOKEN_WORDS_PER_PAGE, TOKEN_WORDS_PER_UNIT
 
 
 def tinh_token_tieu_hao_theo_so_trang(so_trang: int) -> int:
