@@ -1,24 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Crown, Zap, Coins, CreditCard } from 'lucide-react'
+import { Crown, Zap, Coins, CreditCard, Plus, CheckCircle2, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { dungXacThuc } from '../../context/AuthContext'
-import { dangKyGoiPremium, layThongTinGoiPremium } from '../../services/api'
+import { layThongTinGoiPremium } from '../../services/api'
 import { NutBam } from '../../components'
 
 const TrangPremium = () => {
   const navigate = useNavigate()
   const { nguoiDung, lamMoiThongTinNguoiDung } = dungXacThuc()
   const [dangTai, setDangTai] = useState(true)
-  const [dangDangKy, setDangDangKy] = useState('')
   const [danhSachGoi, setDanhSachGoi] = useState({})
 
   const taiThongTin = async () => {
     setDangTai(true)
     try {
       const ketQua = await layThongTinGoiPremium()
-      if (!ketQua.thanhCong) throw new Error(ketQua.loiMessage || 'Không tải được thông tin gói premium')
+      if (!ketQua.thanhCong) throw new Error(ketQua.loiMessage || 'Không tải được thông tin premium')
       setDanhSachGoi(ketQua.data?.danh_sach_goi || {})
       await lamMoiThongTinNguoiDung({ imLang: true })
     } catch (error) {
@@ -40,226 +39,254 @@ const TrangPremium = () => {
     return !Number.isNaN(ngayHetHan.getTime()) && ngayHetHan.getTime() > Date.now()
   }, [nguoiDung?.plan_type, nguoiDung?.premium_expires_at])
 
-  const xuLyDangKyPremium = async (planKey) => {
-    setDangDangKy(planKey)
-    try {
-      const ketQua = await dangKyGoiPremium(planKey)
-      if (!ketQua.thanhCong) throw new Error(ketQua.loiMessage || 'Đăng ký premium thất bại')
-      toast.success(ketQua.data?.thong_bao || 'Đăng ký gói premium thành công')
-      await lamMoiThongTinNguoiDung({ imLang: true })
-    } catch (error) {
-      toast.error(error.message || 'Không thể đăng ký premium')
-    } finally {
-      setDangDangKy('')
-    }
-  }
-
-  const dinhDangVND = (so) => {
-    return new Intl.NumberFormat('vi-VN').format(so) + ' ₫'
-  }
-
-  const dinhDangToken = (so) => {
-    return new Intl.NumberFormat('vi-VN').format(so) + ' token'
-  }
+  const dinhDangVND = (so) => new Intl.NumberFormat('vi-VN').format(so) + ' ₫'
+  const dinhDangToken = (so) => new Intl.NumberFormat('vi-VN').format(so) + ' token'
 
   const tokenHienTai = nguoiDung?.token_balance ?? 0
 
-  const xuLyMuaGoi = async (key, tokenCost) => {
-    if (tokenHienTai >= tokenCost) {
-      await xuLyDangKyPremium(key)
-      return
-    }
-    const plan = danhSachGoi?.[key] || null
-    const soTienCanNap = tokenCost
+  const xuLyMuaTokenLe = (amountVnd, tokenAmount) => {
     navigate('/thanh-toan', {
       state: {
-        amountVnd: tokenCost * 100, // 1 Token = 100 VNĐ
+        amountVnd,
+        planName: `Nạp lẻ ${tokenAmount} Token`,
+        tokenAmount,
+        type: 'topup'
+      }
+    })
+  }
+
+  const xuLyMuaCombo = (key) => {
+    const plan = danhSachGoi?.[key]
+    if (!plan) return
+
+    // Quy đổi VND dựa trên plan (Giả định giá cố định cho combo Way A)
+    let comboVnd = 50000
+    let tokenBonus = 600
+    if (key === 'premium_7d') { comboVnd = 20000; tokenBonus = 200 }
+    if (key === 'premium_365d') { comboVnd = 500000; tokenBonus = 7000 }
+
+    navigate('/thanh-toan', {
+      state: {
+        amountVnd: comboVnd,
         planKey: key,
-        planName: plan?.name || 'Premium',
-        planDays: plan?.so_ngay || 0,
-        planCost: tokenCost,
+        planName: `Combo ${plan.name}`,
+        planDays: plan.so_ngay,
+        tokenAmount: tokenBonus,
+        type: 'combo'
       }
     })
   }
 
   return (
-    <div className="min-h-screen bg-gradient-animated pt-20 pb-12 px-4">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-[#0a0c10] pt-24 pb-20 px-4 overflow-hidden relative">
+      {/* Background Decor */}
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-primary-600/10 rounded-full blur-[120px] -translate-y-1/2 pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-amber-500/5 rounded-full blur-[100px] translate-y-1/2 pointer-events-none" />
+
+      <div className="max-w-6xl mx-auto relative z-10">
         
-        {/* Global Token Balance Hero Card */}
-        <motion.div
+        {/* Header Section */}
+        <div className="text-center mb-10">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold mb-4"
+          >
+            <Crown className="w-3.5 h-3.5" />
+            NÂNG CẤP TRẢI NGHIỆM
+          </motion.div>
+          <h1 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight leading-tight">
+            Chọn gói phù hợp với <br /> 
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-white to-amber-300">
+              nhu cầu của bạn
+            </span>
+          </h1>
+          <p className="text-white/50 max-w-2xl mx-auto text-base">
+            Sử dụng hệ thống Token linh hoạt hoặc đăng ký Premium để nhận ưu đãi lên đến 60% chi phí xử lý tài liệu.
+          </p>
+        </div>
+
+        {/* User Status Summary */}
+        <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="relative overflow-hidden glass-card rounded-3xl p-8 mb-10 border border-amber-500/20 shadow-2xl shadow-amber-500/10"
+          className="glass-card rounded-[1.5rem] p-6 mb-12 border border-white/5 flex flex-col md:flex-row items-center justify-between gap-6"
         >
-          {/* Decorative background elements */}
-          <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
-          <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-60 h-60 bg-primary-600/10 rounded-full blur-[80px] pointer-events-none" />
-          
-          <div className="relative flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="flex items-center gap-6">
-              <div className="w-20 h-20 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center shadow-lg transform rotate-3 hover:rotate-0 transition-transform duration-500">
-                <Coins className="w-10 h-10 text-white" />
-              </div>
-              <div className="text-center md:text-left">
-                <p className="text-amber-200/60 text-xs uppercase tracking-[0.2em] font-black mb-1">Tài khoản của bạn hiện có</p>
-                <div className="flex items-baseline gap-3">
-                  <h2 className="text-5xl md:text-6xl font-black text-white tracking-tighter drop-shadow-md">
-                    {new Intl.NumberFormat('vi-VN').format(tokenHienTai)}
-                  </h2>
-                  <span className="text-amber-400 font-bold text-xl uppercase italic">Token</span>
-                </div>
+          <div className="flex items-center gap-5">
+            <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg transform rotate-3">
+              <Coins className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <p className="text-white/40 text-[10px] uppercase tracking-widest font-bold mb-0.5">Số dư hiện tại</p>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl font-black text-white tracking-tighter">{new Intl.NumberFormat('vi-VN').format(tokenHienTai)}</span>
+                <span className="text-amber-400 font-bold text-xs uppercase italic">Tokens</span>
               </div>
             </div>
+          </div>
 
-            <div className="flex flex-col items-center md:items-end gap-2">
-              <div className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white font-bold text-sm backdrop-blur-sm">
-                Sẵn sàng sử dụng cho mọi dự án của bạn
-              </div>
+          <div className="h-10 w-px bg-white/10 hidden md:block" />
+
+          <div className="flex items-center gap-5">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg transform -rotate-3 transition-colors duration-500 ${premiumDangHieuLuc ? 'bg-gradient-to-br from-primary-500 to-primary-700' : 'bg-white/5 border border-white/10'}`}>
+              <Crown className={`w-6 h-6 ${premiumDangHieuLuc ? 'text-white' : 'text-white/20'}`} />
             </div>
-
+            <div>
+              <p className="text-white/40 text-[10px] uppercase tracking-widest font-bold mb-0.5">Trạng thái tài khoản</p>
+              <div className="flex items-center gap-2">
+                <span className={`text-lg font-bold ${premiumDangHieuLuc ? 'text-primary-400' : 'text-white/60'}`}>
+                  {premiumDangHieuLuc ? 'Thành viên Premium' : 'Tài khoản Miễn phí'}
+                </span>
+                {premiumDangHieuLuc && (
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 text-[9px] font-bold uppercase">Active</span>
+                )}
+              </div>
+              {premiumDangHieuLuc && (
+                <p className="text-white/30 text-[10px] mt-0.5 font-mono">Hết hạn: {new Date(nguoiDung.premium_expires_at).toLocaleDateString('vi-VN')}</p>
+              )}
+            </div>
           </div>
         </motion.div>
 
-        {/* Premium Packages Header */}
-        <div className="mb-10 text-center md:text-left">
-          <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3 justify-center md:justify-start">
-            <Crown className="w-8 h-8 text-amber-300" />
-            Bảng giá các gói Premium
-          </h1>
-          <p className="text-white/60">Lựa chọn gói phù hợp để đẩy nhanh tiến độ nghiên cứu của bạn.</p>
+        {/* Section 1: Premium Combo (Combo Gói) - NOW ON TOP */}
+        <div className="mb-16">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="h-px bg-gradient-to-r from-transparent to-primary-500/30 flex-1" />
+            <h2 className="text-xl font-bold text-white flex items-center gap-3">
+              <Crown className="w-6 h-6 text-primary-400" />
+              Gói Combo Premium
+            </h2>
+            <div className="h-px bg-gradient-to-l from-transparent to-primary-500/30 flex-1" />
+          </div>
+
+          {dangTai ? (
+            <div className="flex justify-center py-20"><Zap className="w-10 h-10 animate-bounce text-primary-400" /></div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {Object.entries(danhSachGoi).map(([key, plan]) => {
+                const isPopular = key === 'premium_30d'
+                let comboVnd = 50000
+                let tokenBonus = 600
+                if (key === 'premium_7d') { comboVnd = 20000; tokenBonus = 200 }
+                if (key === 'premium_365d') { comboVnd = 500000; tokenBonus = 7000 }
+
+                return (
+                  <motion.div 
+                    key={key} 
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    whileHover={{ y: -8 }}
+                    className={`relative overflow-hidden rounded-[2rem] p-0.5 flex flex-col transition-all duration-500
+                      ${isPopular 
+                        ? 'bg-gradient-to-br from-primary-500 via-purple-500 to-amber-500' 
+                        : 'bg-white/10 border border-white/5'}`}
+                  >
+                    <div className="bg-[#0f1115] rounded-[1.9rem] p-6 flex flex-col h-full">
+                      {isPopular && (
+                        <div className="absolute top-4 right-4 px-2 py-0.5 rounded-full bg-primary-500 text-white text-[9px] font-black uppercase tracking-wider">
+                          Đề xuất
+                        </div>
+                      )}
+
+                      <div className="mb-6">
+                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center mb-4">
+                          {key === 'premium_7d' ? <Zap className="w-5 h-5 text-blue-400" /> : <Crown className="w-5 h-5 text-primary-400" />}
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-1">{plan.name}</h3>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl font-black text-white tracking-tighter lowercase">{dinhDangVND(comboVnd)}</span>
+                          <span className="text-white/40 text-xs">/ kỳ</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 mb-6 flex-1">
+                        <div className="p-3 rounded-xl bg-primary-500/10 border border-primary-500/20">
+                          <p className="text-primary-300 text-[10px] font-bold uppercase mb-0.5">Tặng kèm ngay</p>
+                          <div className="text-lg font-bold text-white">+{tokenBonus} Tokens</div>
+                        </div>
+
+                        <ul className="space-y-3 text-xs text-white/60">
+                          <li className="flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span>Kích hoạt <strong className="text-white">{plan.so_ngay} ngày</strong> Premium</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span>Phí chuyển đổi <strong className="text-white">0.4 Token/trang</strong></span>
+                          </li>
+                        </ul>
+                      </div>
+
+                      <button 
+                        onClick={() => xuLyMuaCombo(key)}
+                        className={`w-full py-3 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2
+                          ${isPopular 
+                            ? 'bg-primary-600 hover:bg-primary-500 text-white shadow-lg shadow-primary-500/20' 
+                            : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'}`}
+                      >
+                        Bắt đầu ngay
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
-        {premiumDangHieuLuc && (
-          <div className="bg-emerald-500/15 border border-emerald-500/30 p-5 rounded-2xl mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 text-emerald-100">
-            <div>
-              <p className="font-bold text-lg">✨ Bạn đang là thành viên Premium!</p>
-              <p className="text-sm opacity-80 mt-1">Đăng ký thêm sẽ cộng dồn hạn sử dụng thay vì thay thế gói hiện tại.</p>
-            </div>
-            <div className="px-4 py-2 bg-emerald-500/20 rounded-xl text-sm font-mono whitespace-nowrap">
-              Hết hạn: {new Date(nguoiDung.premium_expires_at).toLocaleDateString('vi-VN')}
-            </div>
+        {/* Section 2: Individual Top-up (Nạp lẻ) - NOW AT BOTTOM */}
+        <div className="mb-12">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="h-px bg-gradient-to-r from-transparent to-white/10 flex-1" />
+            <h2 className="text-xl font-bold text-white flex items-center gap-3">
+              <Zap className="w-5 h-5 text-amber-500" />
+              Nạp lẻ Token tự do
+            </h2>
+            <div className="h-px bg-gradient-to-l from-transparent to-white/10 flex-1" />
           </div>
-        )}
 
-        {dangTai ? (
-          <div className="flex justify-center py-20"><Zap className="w-10 h-10 animate-bounce text-amber-300" /></div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
-            {Object.entries(danhSachGoi).map(([key, plan]) => {
-              const isPopular = key === 'premium_30d'
-              const isAffordable = tokenHienTai >= plan.token_cost
-
-              return (
-                <div 
-                  key={key} 
-                  className={`relative glass-card rounded-3xl flex flex-col transition-all duration-300 transform overflow-hidden
-                    ${isPopular 
-                      ? 'border-2 border-primary-500/60 shadow-2xl shadow-primary-500/20 md:-translate-y-4 md:scale-[1.03]' 
-                      : 'border border-white/10 hover:border-white/20 hover:-translate-y-2'}`}
-                >
-                  {isPopular && (
-                    <div className="bg-gradient-to-r from-primary-600 to-purple-600 text-white text-xs font-bold uppercase tracking-wider py-2 px-4 text-center">
-                      ⭐ Phổ biến nhất
-                    </div>
-                  )}
-
-                  <div className="p-8 flex flex-col flex-1">
-                    <div className="mb-6">
-                      <p className={`text-sm font-semibold uppercase tracking-wider mb-3 ${isPopular ? 'text-primary-300' : 'text-white/50'}`}>
-                        {plan.name}
-                      </p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-4xl font-extrabold text-white">{new Intl.NumberFormat('vi-VN').format(plan.token_cost)}</span>
-                        <span className="text-lg text-white/40">Token</span>
-                      </div>
-                      <p className="text-sm text-white/50 mt-2">({dinhDangVND(plan.token_cost * 100)}) - {plan.phu_hop}</p>
-                    </div>
-
-                    <div className="bg-white/5 rounded-xl p-4 mb-6 flex-1">
-                      <ul className="space-y-3 text-sm text-white/80 list-none">
-                        <li className="flex items-center gap-3">
-                          <CheckIcon /> <span className="font-semibold text-white">{plan.so_ngay} ngày</span> sử dụng Premium
-                        </li>
-                        <li className="flex items-center gap-3">
-                          <CheckIcon /> Xử lý <span className="font-semibold text-white">công thức phức tạp</span>
-                        </li>
-                        <li className="flex items-center gap-3">
-                          <CheckIcon /> Ưu tiên hàng đợi chuyển đổi
-                        </li>
-                        <li className="flex items-center gap-3">
-                          <CheckIcon /> Không giới hạn số lần dùng
-                        </li>
-                        {plan.tiet_kiem && (
-                          <li className="flex items-center gap-3 text-emerald-300 font-medium">
-                            <CheckIcon color="text-emerald-400" /> Tiết kiệm hơn so với gói Tháng
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-
-                    <div className="mt-auto">
-                      {isAffordable ? (
-                        <NutBam 
-                          onClick={() => xuLyMuaGoi(key, plan.token_cost)}
-                          dangTai={dangDangKy === key}
-                          disabled={dangDangKy !== '' && dangDangKy !== key}
-                          className={`w-full !py-3.5 !rounded-xl !font-bold !text-base ${isPopular ? '!bg-primary-600 hover:!bg-primary-500' : '!bg-white/10 hover:!bg-white/20'}`}
-                        >
-                          {premiumDangHieuLuc ? 'Gia hạn' : 'Mua ngay'}
-
-                        </NutBam>
-                      ) : (
-                        <button 
-                          onClick={() => xuLyMuaGoi(key, plan.token_cost)}
-                          className={`w-full py-3.5 rounded-xl font-bold text-sm transition flex justify-center items-center gap-2
-                            ${isPopular 
-                              ? 'bg-primary-600/20 border border-primary-500/40 text-primary-200 hover:bg-primary-600/30' 
-                              : 'bg-white/5 border border-dashed border-white/20 text-white/50 hover:text-white hover:border-white/40'}`}
-                        >
-                          <CreditCard className="w-4 h-4" />
-                          {premiumDangHieuLuc ? 'Gia hạn' : 'Mua ngay'} ({dinhDangToken(plan.token_cost)})
-
-                        </button>
-                      )}
-                    </div>
-                  </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { amount: 100, price: 10000, label: 'Khởi đầu', color: 'bg-slate-500/10' },
+              { amount: 250, price: 20000, label: 'Cơ bản', color: 'bg-blue-500/10', bonus: '25%' },
+              { amount: 700, price: 50000, label: 'Phổ biến', color: 'bg-primary-500/10', bonus: '40%' },
+              { amount: 1500, price: 100000, label: 'Pro', color: 'bg-emerald-500/10', bonus: '50%' }
+            ].map((item, idx) => (
+              <motion.div 
+                key={idx}
+                whileHover={{ y: -4 }}
+                className="glass-card rounded-2xl p-4 border border-white/5 flex flex-col items-center group cursor-pointer"
+                onClick={() => xuLyMuaTokenLe(item.price, item.amount)}
+              >
+                <div className={`w-10 h-10 ${item.color} rounded-lg flex items-center justify-center mb-3 transition-transform group-hover:scale-110`}>
+                  <Coins className="w-5 h-5 text-white" />
                 </div>
-              )
-            })}
+                <p className="text-white/40 text-[9px] font-bold uppercase mb-0.5">{item.label}</p>
+                <h3 className="text-2xl font-black text-white mb-0.5 tracking-tight">{item.amount}</h3>
+                <p className="text-amber-400 font-bold text-[10px] mb-3 uppercase italic">Tokens</p>
+                <div className="w-full h-px bg-white/5 mb-3" />
+                <div className="flex flex-col items-center gap-2 w-full">
+                  <div className="text-base font-bold text-white">{dinhDangVND(item.price)}</div>
+                  {item.bonus && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[8px] font-bold">Thưởng {item.bonus}</span>
+                  )}
+                </div>
+              </motion.div>
+            ))}
           </div>
-        )}
+        </div>
 
-        <div className="mt-12 bg-white/5 border border-white/10 rounded-2xl p-6">
-          <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
-            <Zap className="w-5 h-5 text-amber-400" />
-            Hướng dẫn mua gói Premium
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-white/70">
-            <div className="flex gap-3">
-              <span className="bg-primary-600/20 text-primary-300 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">1</span>
-              <p>Chọn gói ở phía trên và nhấn nút <strong className="text-white">"Mua gói"</strong> tương ứng.</p>
-            </div>
-            <div className="flex gap-3">
-              <span className="bg-primary-600/20 text-primary-300 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">2</span>
-              <p>Quét <strong className="text-white">mã QR</strong> hiện ra bằng App ngân hàng và chuyển khoản <strong className="text-white">đúng nội dung</strong>.</p>
-            </div>
-            <div className="flex gap-3">
-              <span className="bg-primary-600/20 text-primary-300 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">3</span>
-              <p>Hệ thống sẽ <strong className="text-white">tự động kích hoạt</strong> gói Premium của bạn trong vài giây ngay sau khi tiền về.</p>
-            </div>
-          </div>
+        {/* Footer info */}
+        <div className="mt-20 text-center">
+          <p className="text-white/30 text-sm">
+            Thanh toán an toàn qua QR Code ngân hàng. <br />
+            Nếu gặp sự cố, vui lòng liên hệ Admin qua kênh hỗ trợ để được cộng Token thủ công.
+          </p>
         </div>
       </div>
-
     </div>
   )
 }
-
-const CheckIcon = ({ color = "text-primary-400" }) => (
-  <svg className={`w-5 h-5 ${color} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-  </svg>
-)
 
 export default TrangPremium

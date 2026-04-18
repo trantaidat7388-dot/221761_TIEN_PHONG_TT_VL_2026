@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import KhuVucKeoTha from './KhuVucKeoTha'
 import { NutBam } from '../../components'
 import { chuyenDoiWordIEEE, chuyenDoiWordSpringer, taiFileWordTheoJob } from '../../services/api'
+import { dungXacThuc } from '../../context/AuthContext'
 
 const CHE_DO = {
   SPRINGER_TO_IEEE: 'springer-to-ieee',
@@ -12,6 +13,7 @@ const CHE_DO = {
 }
 
 const TrangChuyenDoiWordToWord = () => {
+  const { lamMoiThongTinNguoiDung } = dungXacThuc()
   const [cheDo, setCheDo] = useState(CHE_DO.SPRINGER_TO_IEEE)
   const [fileNguon, setFileNguon] = useState(null)
   const [suDungTemplateRieng, setSuDungTemplateRieng] = useState(false)
@@ -136,6 +138,9 @@ const TrangChuyenDoiWordToWord = () => {
 
     setKetQua(kq.data)
     toast.success(`Đã chuyển đổi sang ${tenFileHienThi} thành công`)
+    if (lamMoiThongTinNguoiDung) {
+      try { await lamMoiThongTinNguoiDung({ imLang: true }) } catch (e) { console.error('Failed to sync token', e) }
+    }
   }
 
   const xuLyTaiFile = async () => {

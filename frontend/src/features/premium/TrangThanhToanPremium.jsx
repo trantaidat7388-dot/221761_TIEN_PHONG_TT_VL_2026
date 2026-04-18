@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CheckCircle2, Copy, ShieldCheck, ArrowLeft, Loader2, QrCode } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { taoHoaDonNapTien, kiemTraTrangThaiHoaDon, xacNhanHoaDonThuCongDev } from '../../services/api'
+import { taoHoaDonNapTien, kiemTraTrangThaiHoaDon, xacNhanHoaDonThuCongDev, dangKyGoiPremium } from '../../services/api'
 import { dungXacThuc } from '../../context/AuthContext'
 
 const TrangThanhToanPremium = () => {
@@ -49,7 +49,15 @@ const TrangThanhToanPremium = () => {
       if (kq.thanhCong && kq.data?.status === 'completed') {
         clearInterval(tickId)
         clearInterval(pollId)
-        toast.success('Thanh toán thành công')
+        
+        // Way A: Backend handles activation automatically.
+        // We just notify the user based on what they bought.
+        if (location.state?.planKey) {
+            toast.success('Gói Premium của bạn đã được kích hoạt thành công!')
+        } else {
+            toast.success('Thanh toán thành công, Token đã được cộng vào tài khoản!')
+        }
+
         await lamMoiThongTinNguoiDung({ imLang: true })
         setThanhToanThanhCong(true)
       }
@@ -70,7 +78,8 @@ const TrangThanhToanPremium = () => {
 
     setDangTaoHoaDon(true)
     try {
-      const kq = await taoHoaDonNapTien(Math.floor(amount))
+      const planKey = location.state?.planKey || null
+      const kq = await taoHoaDonNapTien(Math.floor(amount), planKey)
       if (!kq.thanhCong) throw new Error(kq.loiMessage || 'Không tạo được hóa đơn')
       setHoaDon(kq.data)
       setDemGiay(0)
@@ -120,8 +129,8 @@ const TrangThanhToanPremium = () => {
 
   if (thanhToanThanhCong) {
     return (
-      <div className="min-h-screen bg-gradient-animated pt-20 pb-12 px-4 flex items-center justify-center">
-        <div className="max-w-lg w-full bg-white/5 border border-emerald-500/30 rounded-3xl p-8 text-center glass-card shadow-2xl shadow-emerald-500/20 backdrop-blur-2xl">
+      <div className="min-h-screen bg-gradient-animated pt-16 pb-12 px-4 flex items-center justify-center">
+        <div className="max-w-lg w-full bg-white/5 border border-emerald-500/30 rounded-2xl p-6 text-center glass-card shadow-2xl shadow-emerald-500/20 backdrop-blur-2xl">
           <div className="w-24 h-24 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 relative">
             <div className="absolute inset-0 bg-emerald-500 animate-ping rounded-full opacity-20"></div>
             <CheckCircle2 className="w-12 h-12 text-emerald-400" />
@@ -148,10 +157,12 @@ const TrangThanhToanPremium = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-animated pt-20 pb-12 px-4">
+    <div className="min-h-screen bg-gradient-animated pt-16 pb-12 px-4">
       <div className="max-w-6xl mx-auto">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-white">Mua Gói Token Premium</h1>
+          <h1 className="text-3xl font-bold text-white">
+            {location.state?.planKey ? `Đăng ký / Gia hạn ${planName}` : 'Nạp Thêm Token Tự Do'}
+          </h1>
           <button
             type="button"
             onClick={() => navigate('/premium')}
@@ -163,8 +174,8 @@ const TrangThanhToanPremium = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-6 flex flex-col">
-            <h2 className="text-2xl font-bold text-white mb-5 flex items-center gap-2">
+          <section className="rounded-xl border border-white/10 bg-white/5 p-5 flex flex-col">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                <QrCode className="w-6 h-6 text-primary-400" />
                Quét mã QR mua gói tự động
             </h2>
@@ -178,7 +189,7 @@ const TrangThanhToanPremium = () => {
                   <img
                     src={`https://img.vietqr.io/image/${bankBin}-${bankAccount}-compact2.png?amount=${hoaDon.amount_vnd}&addInfo=${encodeURIComponent(hoaDon.noidung_ck)}&accountName=${encodeURIComponent(bankName)}`}
                     alt="QR thanh toán"
-                    className="w-72 h-72 sm:w-80 sm:h-80 rounded-2xl object-contain drop-shadow-sm transition-transform duration-500 group-hover:scale-[1.02]"
+                    className="w-68 h-68 sm:w-72 sm:h-72 rounded-2xl object-contain drop-shadow-sm transition-transform duration-500 group-hover:scale-[1.02]"
                   />
                 </div>
 
@@ -209,6 +220,11 @@ const TrangThanhToanPremium = () => {
                     {dangXacNhanThuCong ? 'Đang xác nhận...' : 'Xác nhận nạp thủ công'}
                   </button>
                 )}
+              </div>
+            ) : location.state?.planKey ? (
+              <div className="flex-1 flex flex-col justify-center items-center h-64">
+                <Loader2 className="w-8 h-8 text-amber-300 animate-spin mb-4" />
+                <p className="text-white/70">Đang khởi tạo hóa đơn thanh toán cho gói Premium...</p>
               </div>
             ) : (
               <div className="flex-1 flex flex-col justify-center">
@@ -265,9 +281,9 @@ const TrangThanhToanPremium = () => {
             )}
           </section>
 
-          <section className="space-y-6">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-2xl font-bold text-white mb-4">Gói của bạn</h2>
+          <section className="space-y-4">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+              <h2 className="text-xl font-bold text-white mb-3">Gói của bạn</h2>
               <div className="rounded-xl border border-white/10 bg-slate-900/45 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -281,14 +297,17 @@ const TrangThanhToanPremium = () => {
                 </div>
 
                 <div className="mt-4 space-y-2 text-white/80">
-                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hệ thống tự động kích hoạt gói sau khi quét mã 5-10s</div>
-                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hỗ trợ mua gói 24/7 không cần chờ</div>
+                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Tự động cộng {location.state?.tokenAmount || (soTien/100)} Tokens</div>
+                  {location.state?.planKey && (
+                    <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Tự động kích hoạt {location.state.planDays} ngày Premium</div>
+                  )}
+                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Hệ thống tự động kích hoạt ngay lập tức</div>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-6">
-              <h3 className="text-3xl font-bold text-white mb-3">An toàn & Tiện lợi</h3>
+            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-5">
+              <h3 className="text-2xl font-bold text-white mb-2">An toàn & Tiện lợi</h3>
               <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 p-4 text-white">
                 <div className="inline-flex items-center gap-2 font-bold mb-2">
                   <ShieldCheck className="w-5 h-5 text-emerald-300" />

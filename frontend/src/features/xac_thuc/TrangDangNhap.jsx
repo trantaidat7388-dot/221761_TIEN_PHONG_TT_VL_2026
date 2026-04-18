@@ -50,8 +50,8 @@ const TrangDangNhap = () => {
     xacNhanMatKhau: ''
   })
 
-  // Phát hiện WebView qua cookie "viewappmobie"
-  const dangChayTrongApp = document.cookie.split(';').some(c => c.trim().startsWith('viewappmobie='))
+  // Phát hiện WebView qua cookie "viewappmobie" hoặc object window.FlutterBridge
+  const dangChayTrongApp = document.cookie.split(';').some(c => c.trim().startsWith('viewappmobie=')) || typeof window.FlutterBridge !== 'undefined'
 
   const xuLyThayDoiInput = (e) => {
     const { name, value } = e.target
@@ -82,8 +82,7 @@ const TrangDangNhap = () => {
         user = await dangKy(formData.username, formData.email, formData.matKhau)
         toast.success('Đăng ký thành công!')
       }
-      const duongDanDich = user?.role === 'admin' ? '/quan-tri' : '/chuyen-doi'
-      window.location.replace(duongDanDich)
+      // Navigate is handled by useEffect when nguoiDung state changes
     } catch (loi) {
       toast.error(loi.message || 'Đã xảy ra lỗi')
     } finally {
@@ -134,11 +133,14 @@ const TrangDangNhap = () => {
           const data = await res.json()
           if (data.status === 'completed' && data.token) {
             clearInterval(pollInterval)
-            // Lưu phiên đăng nhập
+            // Đồng bộ token về Flutter App
+            if (typeof window.FlutterBridge !== 'undefined') {
+              window.FlutterBridge.postMessage(`SAVE_TOKEN:${data.token}`)
+            }
+            // Lưu phiên đăng nhập trên Web
             dangNhapQuaPolling(data.token, data.user)
             toast.success('Đăng nhập thành công!')
-            const duongDanDich = data.user?.role === 'admin' ? '/quan-tri' : '/chuyen-doi'
-            window.location.replace(duongDanDich)
+            // Navigate is handled by useEffect when nguoiDung state changes
           }
         } catch {
           // Lỗi mạng - tiếp tục polling

@@ -429,7 +429,7 @@ def dang_nhap_google_flutter_redirect(session_id: str) -> RedirectResponse:
             "state": session_id,
         }
     )
-    logger.info("[Cloud-Sync] Flutter OAuth redirect, session: %s", session_id)
+    logger.info("[Cloud-Sync] Flutter OAuth redirect initiated. Session: %s, Redirect URI: %s", session_id, redirect_uri)
     return RedirectResponse(url=f"https://accounts.google.com/o/oauth2/v2/auth?{query}")
 
 
@@ -458,7 +458,8 @@ def _lay_google_user_info_flutter(code: str) -> dict:
         )
         with urlrequest.urlopen(token_req, timeout=10) as resp:
             token_data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-    except Exception:
+    except Exception as e:
+        logger.error("[Cloud-Sync] Token exchange failed in _lay_google_user_info_flutter: %s", e)
         raise HTTPException(status_code=401, detail="Không thể đổi authorization code từ Google")
 
     access_token = (token_data.get("access_token") or "").strip()
@@ -497,7 +498,10 @@ def google_callback_flutter(
 ) -> HTMLResponse:
     """Callback từ Google OAuth cho Flutter. Lưu JWT token vào login_sessions."""
     session_id = state.strip()
+    logger.info("[Cloud-Sync] Flutter Callback received. Code length: %d, State/Session: %s", len(code) if code else 0, session_id)
+    
     if not session_id:
+        logger.error("[Cloud-Sync] Callback failed: Missing state/session_id")
         return HTMLResponse(
             content="<html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
                     "<h2 style='color:#c00'>❌ Lỗi: Thiếu session ID</h2>"
@@ -530,41 +534,14 @@ def google_callback_flutter(
     # Frontend WebView vẫn polling để nhận token từ login_sessions.
     callback_url = "word2latex://callback?status=success"
 
-    # Trả HTML với auto-redirect + fallback nút đóng
-    return HTMLResponse(
-        content=f"""
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width,initial-scale=1">
-            <meta http-equiv="refresh" content="0;url={callback_url}">
-            <style>
-                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                       display: flex; align-items: center; justify-content: center;
-                       min-height: 100vh; margin: 0; background: #f8f9fa; color: #333; }}
-                .card {{ text-align: center; padding: 48px 32px; background: white;
-                        border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 400px; }}
-                .icon {{ font-size: 64px; margin-bottom: 16px; }}
-                h2 {{ color: #2e7d32; margin-bottom: 8px; }}
-                p {{ color: #666; line-height: 1.6; }}
-            </style>
-        </head>
-        <body>
-            <div class="card">
-                <div class="icon">✅</div>
-                <h2>Đăng nhập thành công!</h2>
-                <p>Đang quay lại ứng dụng...<br>
-                Nếu không tự chuyển, hãy <strong>đóng tab này</strong>.</p>
-            </div>
-            <script>
-                // Auto-redirect để đóng Chrome Custom Tab
-                window.location.href = "{callback_url}";
-            </script>
-        </body>
-        </html>
-        """,
-        status_code=200,
-    )
+    # ── Redirect trực tiếp về app scheme ──
+    # Sử dụng RedirectResponse (HTTP 302) là cách đáng tin cậy nhất để 
+    # Chrome Custom Tab tự đóng và kích hoạt app scheme.
+    callback_url = "word2latex://callback?status=success"
+    logger.info("[Cloud-Sync] Successful login, redirecting to app: %s", callback_url)
+    
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=callback_url)
 
 
 @router.get("/auth/me")

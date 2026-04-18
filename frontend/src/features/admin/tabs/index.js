@@ -8,3 +8,5 @@ export { default as TabAuditLog } from './TabAuditLog';
 export { default as TabCauHinh } from './TabCauHinh';
 export { default as TabGiaoDien } from './TabGiaoDien';
 export { default as TabLandingEditor } from './TabLandingEditor';
+export { default as TabChuyenDoiAdmin } from './TabChuyenDoi';
+export { default as TabTrangTuyChinh } from './TabTrangTuyChinh';

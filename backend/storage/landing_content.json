@@ -1,0 +1,173 @@
+{
+  "hero": {
+    "badge": "Nền tảng chuyển đổi tự động",
+    "title": "Biến file Word thành",
+    "title_highlight": "LaTeX chuẩn xuất bản",
+    "description": "Upload file .docx, chọn template nhà xuất bản, nhận kết quả LaTeX chuẩn — tự động, nhanh chóng, chính xác.",
+    "cta_primary": "Bắt đầu miễn phí",
+    "cta_secondary": "Tải App Android",
+    "stats": [
+      {
+        "val": "6+",
+        "sub": "Template"
+      },
+      {
+        "val": "3",
+        "sub": "Tầng toán học"
+      },
+      {
+        "val": "Live",
+        "sub": "Realtime"
+      },
+      {
+        "val": "24/7",
+        "sub": "Hoạt động"
+      }
+    ]
+  },
+  "tinh_nang": [
+    {
+      "icon": "FileText",
+      "title": "Chuyển đổi thông minh",
+      "desc": "Tự động nhận dạng bố cục tài liệu, tiêu đề, tác giả, công thức và bảng biểu từ file Word."
+    },
+    {
+      "icon": "BrainCircuit",
+      "title": "Công thức toán học",
+      "desc": "Giữ công thức rõ ràng, dễ biên dịch và đúng ngữ cảnh trong tài liệu LaTeX."
+    },
+    {
+      "icon": "Layers",
+      "title": "6+ mẫu nhà xuất bản",
+      "desc": "IEEE, Springer LNCS, ACM, Elsevier, MDPI, Rho Class — sẵn sàng nộp bài ngay."
+    },
+    {
+      "icon": "Zap",
+      "title": "Xử lý thời gian thực",
+      "desc": "Theo dõi tiến trình trực tiếp trong khi hệ thống chuyển đổi tài liệu."
+    },
+    {
+      "icon": "Lock",
+      "title": "Bảo mật tài khoản",
+      "desc": "Đăng nhập an toàn, phân quyền rõ ràng và bảo vệ dữ liệu người dùng."
+    },
+    {
+      "icon": "CreditCard",
+      "title": "Thanh toán tiện lợi",
+      "desc": "Nạp token nhanh bằng chuyển khoản và nhận cập nhật trạng thái gần như tức thời."
+    }
+  ],
+  "buoc_su_dung": [
+    {
+      "step": 1,
+      "icon": "Upload",
+      "title": "Tải lên file Word",
+      "desc": "Chọn file .docx từ máy tính của bạn."
+    },
+    {
+      "step": 2,
+      "icon": "Settings",
+      "title": "Chọn mẫu LaTeX",
+      "desc": "Chọn nhà xuất bản hoặc upload template riêng."
+    },
+    {
+      "step": 3,
+      "icon": "Download",
+      "title": "Tải về kết quả",
+      "desc": "Nhận .zip gồm .tex, .pdf, hình ảnh và phụ thuộc."
+    }
+  ],
+  "mau_template": [
+    {
+      "name": "IEEE Conference",
+      "cls": "IEEEtran.cls"
+    },
+    {
+      "name": "Springer LNCS",
+      "cls": "llncs.cls"
+    },
+    {
+      "name": "ACM SIG",
+      "cls": "acmart.cls"
+    },
+    {
+      "name": "MDPI Open Access",
+      "cls": "mdpi.cls"
+    },
+    {
+      "name": "Elsevier",
+      "cls": "elsarticle.cls"
+    },
+    {
+      "name": "Rho Class",
+      "cls": "rho.cls"
+    }
+  ],
+  "goi_premium": [
+    {
+      "name": "Gói Tuần",
+      "days": 7,
+      "price": "20.000",
+      "badge": null
+    },
+    {
+      "name": "Gói Tháng",
+      "days": 30,
+      "price": "50.000",
+      "badge": "Phổ biến"
+    },
+    {
+      "name": "Gói Năm",
+      "days": 365,
+      "price": "500.000",
+      "badge": "Tiết kiệm"
+    }
+  ],
+  "faq": [
+    {
+      "q": "Kết quả xuất ra gồm những gì?",
+      "a": "Hệ thống xuất file .zip sẵn sàng sử dụng: .tex, hình ảnh, tài nguyên template và file PDF nếu môi trường có LaTeX."
+    },
+    {
+      "q": "Thanh toán có an toàn không?",
+      "a": "Hệ thống hỗ trợ các kênh thanh toán phổ biến và lưu vết giao dịch rõ ràng trong tài khoản."
+    },
+    {
+      "q": "Sau khi thanh toán thì kích hoạt khi nào?",
+      "a": "Tài khoản được kích hoạt nhanh chóng ngay sau khi giao dịch được xác nhận."
+    }
+  ],
+  "so_sanh": {
+    "truoc": {
+      "title": "Thủ công, rời rạc, dễ sai",
+      "items": [
+        "Copy/paste công thức và format nhiều lần",
+        "Dễ lệch chuẩn template nhà xuất bản",
+        "Mất thời gian sửa lỗi biên dịch"
+      ]
+    },
+    "sau": {
+      "title": "Tự động, nhất quán, sẵn nộp",
+      "items": [
+        "Chuẩn hóa heading, tác giả, hình, bảng",
+        "Mapping công thức đa tầng OMML/OLE sang LaTeX",
+        "Xuất gói .zip sẵn upload Overleaf"
+      ]
+    }
+  },
+  "cta_bottom": {
+    "title": "Sẵn sàng chuyển đổi?",
+    "description": "Đăng ký miễn phí & bắt đầu chuyển đổi bài báo của bạn hôm nay."
+  },
+  "section_order": [
+    "hero",
+    "tinh_nang",
+    "buoc_su_dung",
+    "mau_template",
+    "goi_premium",
+    "thanh_toan",
+    "so_sanh",
+    "faq",
+    "cta_bottom"
+  ]
+}

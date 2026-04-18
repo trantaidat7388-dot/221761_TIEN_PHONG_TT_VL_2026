@@ -1,4 +1,4 @@
-# SỔ TAY HƯỚNG DẪN KIỂM THỬ ỨNG DẪN TRÊN ĐIỆN THOẠI VỚI NGROK
+# HƯỚNG DẪN KIỂM THỬ ỨNG DỤNG TRÊN ĐIỆN THOẠI VỚI NGROK
 
 Tài liệu này cung cấp kiến thức nền tảng và các bước thiết lập chi tiết để đưa ứng dụng đang code trên máy tính (localhost) lên điện thoại di động thông qua môi trường Internet bằng công cụ Ngrok.
 
@@ -43,9 +43,23 @@ ngrok http --domain=nacho-disjoin-deprecate.ngrok-free.dev 5173
 
 Đây là thói quen mà bạn nên làm mỗi khi ngồi vào bàn để viết Code và Test:
 
-### Bước 1: Khởi động máy chủ ứng dụng nội bộ
-- **Hành động:** Chạy file `start.bat`.
-- **Kết quả:** Ngồi chờ đến khi trình duyệt hiện lên giao diện Word2LaTeX ở `http://localhost:5173`. Không được tắt cái màn đen CMD đi, hãy thu nhỏ nó xuống khay màn hình.
+### Bước 1: Khởi động máy chủ ứng dụng cục bộ
+Hầu hết các dự án lập trình thực tế đều chia làm Frontend và Backend, bạn cần mở riêng từng Terminal (hoặc CMD) để khởi chạy chúng thủ công bằng lệnh thay vì phụ thuộc vào các file cài sẵn.
+
+**Ví dụ thông dụng:**
+- **Chạy Frontend (React/Vue/NextJS):** 
+  Mở terminal tại thư mục frontend, chạy lệnh:
+  ```bash
+  npm install
+  npm run dev
+  ```
+  *(Frontend thường sẽ chạy ở các cổng như: 3000, 5173, 8080...)*
+
+- **Chạy Backend (Tuỳ ngôn ngữ):**
+  - **Node.js**: `npm run start` hoặc `node index.js`
+  - **Python (FastAPI/Django):** Kích hoạt môi trường ảo (nếu có), sau đó chạy `python run_api.py` hoặc `uvicorn app.main:app --reload`
+  
+**Mục tiêu:** Hãy đảm bảo rằng lúc này bạn có thể tự truy cập thành công dự án trên trình duyệt máy tính của chính mình thông qua địa chỉ `http://localhost:<PORT>`. (Tuyệt đối không tắt các cửa sổ khởi chạy này đi).
 
 ### Bước 2: Kích hoạt Ngrok xuyên tường lửa
 - **Hành động:** Mở 1 cửa sổ CMD mới tinh. Dán lệnh: `ngrok http --domain=nacho-disjoin-deprecate.ngrok-free.dev 5173` rồi Enter.

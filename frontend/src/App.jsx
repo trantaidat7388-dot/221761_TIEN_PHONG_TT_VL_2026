@@ -10,6 +10,7 @@ import { TrangAdmin } from './features/admin'
 import { TrangTaiKhoan } from './features/tai_khoan'
 import { TrangPremium, TrangThanhToanPremium } from './features/premium'
 import { TrangLanding } from './features/landing'
+import CustomPageViewer from './features/landing/CustomPageViewer'
 import { ThemeProvider } from './features/admin/context/AdminThemeContext'
 
 // Layout chung cho các trang có thanh điều hướng
@@ -31,9 +32,10 @@ const CacTuyenUngDung = () => {
     <Routes>
       {/* Route công khai */}
       <Route path="/" element={nguoiDung ? <Navigate to="/chuyen-doi" replace /> : <TrangLanding />} />
+      <Route path="/p/:slug" element={<CustomPageViewer />} />
       <Route
         path="/dang-nhap"
-        element={nguoiDung ? <Navigate to="/chuyen-doi" replace /> : <TrangDangNhap />}
+        element={nguoiDung ? <Navigate to={nguoiDung.role === 'admin' ? '/quan-tri' : '/chuyen-doi'} replace /> : <TrangDangNhap />}
       />
 
 

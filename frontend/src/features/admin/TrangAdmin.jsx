@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Users, Trophy, CreditCard, Files, History, Shield, Settings, Palette, Layout } from 'lucide-react';
+import { BarChart3, Users, Trophy, CreditCard, Files, History, Shield, Settings, Palette, Layout, FileText, FileCode2 } from 'lucide-react';
 import { dungXacThuc } from '../../context/AuthContext';
 import { useAdminData } from './hooks/useAdminData';
 import { AdminSidebar, AdminTopBar } from './components';
 import {
   TabTongQuan, TabNguoiDung, TabXepHang, TabThanhToan,
   TabTemplate, TabLichSu, TabAuditLog, TabCauHinh,
-  TabGiaoDien, TabLandingEditor
+  TabGiaoDien, TabLandingEditor, TabChuyenDoiAdmin, TabTrangTuyChinh
 } from './tabs';
 
 const TABS = [
   { key: 'tong-quan', label: 'Tổng quan', icon: BarChart3 },
+  { key: 'chuyen-doi', label: 'Chuyển Đổi', icon: FileText },
+  { key: 'trang-tuy-chinh', label: 'Page Builder', icon: FileCode2 },
   { key: 'nguoi-dung', label: 'Người dùng', icon: Users },
   { key: 'xep-hang', label: 'Xếp hạng', icon: Trophy },
   { key: 'thanh-toan', label: 'Thanh toán', icon: CreditCard },
@@ -74,6 +76,8 @@ const TrangAdmin = () => {
           {activeTab === 'cau-hinh' && <TabCauHinh {...adminData} />}
           {activeTab === 'giao-dien' && <TabGiaoDien />}
           {activeTab === 'landing-editor' && <TabLandingEditor />}
+          {activeTab === 'chuyen-doi' && <TabChuyenDoiAdmin />}
+          {activeTab === 'trang-tuy-chinh' && <TabTrangTuyChinh />}
         </div>
       </main>
     </div>

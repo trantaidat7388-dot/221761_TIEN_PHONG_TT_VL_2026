@@ -4,6 +4,9 @@ admin_routes.py
 """
 
 import shutil
+import csv
+import io
+from fastapi.responses import StreamingResponse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Request
@@ -791,13 +794,30 @@ def xac_nhan_payment_thu_cong_admin(
     user = db.query(models.User).filter(models.User.id == payment.user_id).first()
     if user:
         user.token_balance += payment.token_amount
+
+        # [Way A] Xử lý kích hoạt Premium Combo nếu có plan_key
+        if payment.plan_key:
+            from ..config import PREMIUM_PACKAGES
+            plan = PREMIUM_PACKAGES.get(payment.plan_key)
+            if plan:
+                so_ngay = plan.get("so_ngay", 30)
+                now = datetime.utcnow()
+                if user.plan_type == "premium" and user.premium_expires_at and user.premium_expires_at > now:
+                    base_time = user.premium_expires_at
+                else:
+                    base_time = now
+                    user.premium_started_at = now
+                
+                user.plan_type = "premium"
+                user.premium_expires_at = base_time + timedelta(days=so_ngay)
+
         db.add(
             models.TokenLedger(
                 user_id=user.id,
                 delta_token=payment.token_amount,
                 balance_after=user.token_balance,
                 reason="admin_confirm_payment",
-                meta_json=f"payment_id={payment.id}",
+                meta_json=f"payment_id={payment.id},plan={payment.plan_key or ''}",
             )
         )
 
@@ -816,3 +836,62 @@ def xac_nhan_payment_thu_cong_admin(
         "status": "completed",
         "token_nhan": payment.token_amount,
     }
+
+@router.get("/reports/export/{data_type}")
+def xuat_bao_cao_csv(
+    data_type: str,
+    db: Session = Depends(lay_db),
+    _: models.User = Depends(auth.yeu_cau_quyen_admin),
+):
+    """Xuất dữ liệu báo cáo ra file CSV (Admin only)."""
+    output = io.StringIO()
+    # Add BOM for Excel UTF-8 support
+    output.write('\ufeff')
+    writer = csv.writer(output)
+
+    if data_type == "payments":
+        filename = f"bao_cao_doanh_thu_{datetime.now().strftime('%Y%m%d')}.csv"
+        writer.writerow(["ID", "Email Người dùng", "Số tiền (VND)", "Số Token", "Trạng thái", "Gói Combo", "Ngày tạo"])
+        # Query models.Payment joined with models.User for emails
+        payments = db.query(models.Payment, models.User.email)\
+            .join(models.User, models.User.id == models.Payment.user_id)\
+            .order_by(models.Payment.created_at.desc()).all()
+        for p, email in payments:
+            writer.writerow([
+                p.id, email, p.amount_vnd, p.token_amount, p.status, 
+                p.plan_key or "Nạp lẻ", p.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            ])
+
+    elif data_type == "conversions":
+        filename = f"bao_cao_chuyen_doi_{datetime.now().strftime('%Y%m%d')}.csv"
+        writer.writerow(["Job ID", "Email", "Tên File", "Template", "Số Trang", "Token trừ", "Trạng thái", "Ngày thực hiện"])
+        history = db.query(models.ConversionHistory, models.User.email)\
+            .join(models.User, models.User.id == models.ConversionHistory.user_id)\
+            .order_by(models.ConversionHistory.created_at.desc()).all()
+        for h, email in history:
+            writer.writerow([
+                h.job_id, email, h.file_name, h.template_name, h.pages_count,
+                h.token_cost, h.status, h.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            ])
+
+    elif data_type == "users":
+        filename = f"danh_sach_nguoi_dung_{datetime.now().strftime('%Y%m%d')}.csv"
+        writer.writerow(["ID", "Email", "Vai trò", "Loại Gói", "Số dư Token", "Ngày hết hạn Premium", "Ngày tham gia"])
+        users = db.query(models.User).order_by(models.User.created_at.desc()).all()
+        for u in users:
+            writer.writerow([
+                u.id, u.email, u.role, u.plan_type, u.token_balance,
+                u.premium_expires_at.strftime("%Y-%m-%d") if u.premium_expires_at else "N/A",
+                u.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            ])
+    else:
+        raise HTTPException(status_code=400, detail="Loại dữ liệu không hợp lệ")
+
+    output.seek(0)
+    from fastapi import Response
+    content = output.getvalue().encode('utf-8-sig')
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

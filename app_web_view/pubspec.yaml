@@ -46,6 +46,8 @@ dependencies:
 
   # Lưu token an toàn
   shared_preferences: ^2.3.0
+  webview_flutter_android: ^4.11.0
+  file_picker: ^11.0.2
 
 dev_dependencies:
   flutter_test:

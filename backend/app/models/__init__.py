@@ -100,6 +100,7 @@ class Payment(Base):
     amount_vnd = Column(Integer, nullable=False)
     token_amount = Column(Integer, nullable=False)
     status = Column(String, default="pending", nullable=False, index=True)  # pending, completed, failed
+    plan_key = Column(String, nullable=True)  # Optional: logic for combos/premium packages
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -115,3 +116,18 @@ class LoginSession(Base):
     token = Column(String, nullable=True)
     status = Column(String, default="pending", nullable=False)  # pending, completed
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class CustomPage(Base):
+    """Dynamic custom HTML pages created via Admin Page Builder."""
+
+    __tablename__ = "custom_pages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String, unique=True, index=True, nullable=False)
+    title = Column(String, nullable=False)
+    content_html = Column(String, nullable=False, default="")
+    css_variables = Column(String, nullable=True, default="{}") # JSON config specific to this page
+    is_published = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+

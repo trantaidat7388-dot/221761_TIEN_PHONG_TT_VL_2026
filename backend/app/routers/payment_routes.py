@@ -13,6 +13,7 @@ PAYMENT_EXPIRE_MINUTES = 60
 
 class YeuCauTaoPayment(BaseModel):
     amount_vnd: int
+    plan_key: str | None = None
 
 @router.post("/create")
 def tao_payment(req: YeuCauTaoPayment, db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)):
@@ -26,7 +27,8 @@ def tao_payment(req: YeuCauTaoPayment, db: Session = Depends(lay_db), current_us
         user_id=current_user.id,
         amount_vnd=req.amount_vnd,
         token_amount=token_amount,
-        status="pending"
+        status="pending",
+        plan_key=req.plan_key
     )
     db.add(payment)
     db.commit()
@@ -77,18 +79,41 @@ def kiem_tra_trang_thai_payment(payment_id: int, db: Session = Depends(lay_db), 
         # Nhỏ gọn: update user token
         current_user.token_balance += payment.token_amount
         
+        # [Way A] Xử lý kích hoạt Premium Combo nếu có plan_key
+        thong_bao_extra = ""
+        if payment.plan_key:
+            from ..config import PREMIUM_PACKAGES
+            plan = PREMIUM_PACKAGES.get(payment.plan_key)
+            if plan:
+                so_ngay = plan.get("so_ngay", 30)
+                now = datetime.utcnow()
+                if current_user.plan_type == "premium" and current_user.premium_expires_at and current_user.premium_expires_at > now:
+                    base_time = current_user.premium_expires_at
+                else:
+                    base_time = now
+                    current_user.premium_started_at = now
+                
+                current_user.plan_type = "premium"
+                current_user.premium_expires_at = base_time + timedelta(days=so_ngay)
+                thong_bao_extra = f" + Kích hoạt Premium {so_ngay} ngày"
+
         # Thêm lịch sử Ledger
         db.add(models.TokenLedger(
             user_id=current_user.id,
             delta_token=payment.token_amount,
             balance_after=current_user.token_balance,
-            reason="nạp token qua sepay",
+            reason=f"nạp combo {payment.plan_key}" if payment.plan_key else "nạp token qua sepay",
             meta_json=f"sepay_tx={tx_id}"
         ))
         
         db.commit()
         db.refresh(payment)
-        return {"thanh_cong": True, "status": "completed", "token_nhan": payment.token_amount}
+        return {
+            "thanh_cong": True, 
+            "status": "completed", 
+            "token_nhan": payment.token_amount,
+            "thong_bao": f"Nạp thành công {payment.token_amount} token{thong_bao_extra}"
+        }
 
     return {"thanh_cong": True, "status": payment.status}
 
@@ -118,13 +143,36 @@ def xac_nhan_thanh_toan_thu_cong_dev(
     payment.updated_at = datetime.utcnow()
     current_user.token_balance += payment.token_amount
 
+    # [Way A] Xử lý kích hoạt Premium Combo nếu có plan_key
+    thong_bao_extra = ""
+    if payment.plan_key:
+        from ..config import PREMIUM_PACKAGES
+        plan = PREMIUM_PACKAGES.get(payment.plan_key)
+        if plan:
+            so_ngay = plan.get("so_ngay", 30)
+            now = datetime.utcnow()
+            if current_user.plan_type == "premium" and current_user.premium_expires_at and current_user.premium_expires_at > now:
+                base_time = current_user.premium_expires_at
+            else:
+                base_time = now
+                current_user.premium_started_at = now
+            
+            current_user.plan_type = "premium"
+            current_user.premium_expires_at = base_time + timedelta(days=so_ngay)
+            thong_bao_extra = f" + Kích hoạt Premium {so_ngay} ngày"
+
     db.add(models.TokenLedger(
         user_id=current_user.id,
         delta_token=payment.token_amount,
         balance_after=current_user.token_balance,
-        reason="nạp token dev manual",
+        reason=f"nạp combo {payment.plan_key} (dev)" if payment.plan_key else "nạp token dev manual",
         meta_json=f"payment_id={payment.id}"
     ))
 
     db.commit()
-    return {"thanh_cong": True, "status": "completed", "token_nhan": payment.token_amount}
+    return {
+        "thanh_cong": True, 
+        "status": "completed", 
+        "token_nhan": payment.token_amount,
+        "thong_bao": f"Nạp dev thành công{thong_bao_extra}"
+    }

@@ -83,10 +83,12 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
   const coTheHienAnh = Boolean(nguoiDung?.photoURL) && !avatarLoi
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50">
-      <div className="bg-slate-900/80 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+    <nav 
+      className="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-white/10"
+      style={{ paddingTop: 'var(--safe-area-top, env(safe-area-inset-top, 0px))' }}
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between min-h-[4rem]">
             {/* Logo */}
             <Link
               to="/chuyen-doi"
@@ -223,7 +225,6 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
               )}
             </button>
           </div>
-        </div>
 
         {/* Menu Mobile */}
         <AnimatePresence>

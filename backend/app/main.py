@@ -33,7 +33,7 @@ from .config import (
     RATE_LIMIT_ADMIN_PER_MINUTE,
 )
 from .utils.api_utils import quet_xoa_thu_muc_mo_coi
-from .routers import admin_routes, auth_routes, base, file_upload, payment_routes
+from .routers import admin_routes, auth_routes, base, file_upload, payment_routes, pages_routes
 from .services.landing_content import lay_noi_dung_landing
 from .services.admin_system_config import lay_cau_hinh_he_thong as _lay_cau_hinh_he_thong
 
@@ -58,6 +58,7 @@ app.include_router(file_upload.router)
 app.include_router(auth_routes.router)
 app.include_router(admin_routes.router)
 app.include_router(payment_routes.router)
+app.include_router(pages_routes.router)
 
 
 def _dam_bao_cot_vai_tro_nguoi_dung() -> None:

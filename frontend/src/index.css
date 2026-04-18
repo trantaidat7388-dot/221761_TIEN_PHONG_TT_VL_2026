@@ -253,3 +253,7 @@ code, pre, .font-mono {
 [data-theme="light-pro"] .border-white\/5 { border-color: rgba(0,0,0,0.1) !important; }
 [data-theme="light-pro"] .border-white\/10 { border-color: rgba(0,0,0,0.15) !important; }
 
+/* Safe Area support for mobile devices */
+nav.fixed {
+  padding-top: env(safe-area-inset-top, 0px);
+}
