@@ -109,7 +109,6 @@ const TrangDangNhap = () => {
       formData.append('session_id', sessionId)
       const regResp = await fetch(`${DIA_CHI_API_GOC}/api/auth/login-session`, {
         method: 'POST',
-        headers: { 'ngrok-skip-browser-warning': 'true' },
         body: formData,
       })
       if (!regResp.ok) {
@@ -119,9 +118,7 @@ const TrangDangNhap = () => {
       // 2. Bắt đầu Polling
       pollInterval = setInterval(async () => {
         try {
-          const res = await fetch(`${DIA_CHI_API_GOC}/api/auth/login-session/${sessionId}`, {
-            headers: { 'ngrok-skip-browser-warning': 'true' }
-          })
+          const res = await fetch(`${DIA_CHI_API_GOC}/api/auth/login-session/${sessionId}`)
           if (!res.ok) {
             // 404 hoặc 410 = session hết hạn hoặc đã dùng
             if (res.status === 404 || res.status === 410) {

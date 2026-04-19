@@ -263,8 +263,6 @@ async def gan_request_id(request: Request, call_next) -> Response:
     response = await call_next(request)
     elapsed_ms = (time.perf_counter() - started) * 1000
     response.headers["X-Request-ID"] = request_id
-    response.headers["ngrok-skip-browser-warning"] = "true"
-    response.headers["Bypass-Tunnel-Reminder"] = "true"
     logger.info(
         "request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
         request_id,

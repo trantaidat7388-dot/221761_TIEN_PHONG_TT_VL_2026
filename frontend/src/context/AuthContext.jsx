@@ -46,8 +46,7 @@ export const BoBaoBocXacThuc = ({ children }) => {
         try {
             const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/me`, {
                 headers: { 
-                    'Authorization': `Bearer ${tokenDangDung}`,
-                    'ngrok-skip-browser-warning': 'true'
+                    'Authorization': `Bearer ${tokenDangDung}`
                 },
                 signal: controller.signal
             })
@@ -161,8 +160,7 @@ export const BoBaoBocXacThuc = ({ children }) => {
         const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/login`, {
             method: 'POST',
             headers: { 
-                'Content-Type': 'application/json',
-                'ngrok-skip-browser-warning': 'true'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({ email, password })
         })
@@ -176,8 +174,7 @@ export const BoBaoBocXacThuc = ({ children }) => {
         const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/register`, {
             method: 'POST',
             headers: { 
-                'Content-Type': 'application/json',
-                'ngrok-skip-browser-warning': 'true'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({ username, email, password })
         })
@@ -191,8 +188,7 @@ export const BoBaoBocXacThuc = ({ children }) => {
         const resp = await fetch(`${DIA_CHI_API_GOC}/api/auth/google`, {
             method: 'POST',
             headers: { 
-                'Content-Type': 'application/json',
-                'ngrok-skip-browser-warning': 'true'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({ id_token: googleIdToken })
         })
@@ -214,8 +210,7 @@ export const BoBaoBocXacThuc = ({ children }) => {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${tokenDangDung}`,
-                'ngrok-skip-browser-warning': 'true'
+                'Authorization': `Bearer ${tokenDangDung}`
             },
             body: JSON.stringify(payload)
         })
