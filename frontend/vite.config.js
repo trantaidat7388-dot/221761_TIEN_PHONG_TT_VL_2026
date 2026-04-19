@@ -25,6 +25,8 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       host: true,
       allowedHosts: [
+        '.ngrok-free.dev',
+        '.trycloudflare.com',
         'word2latex.id.vn',
         'api.word2latex.id.vn'
       ],
@@ -35,8 +37,12 @@ export default defineConfig(({ mode }) => {
       },
       proxy: {
         '/api': {
-          target: env.VITE_API_URL || 'http://127.0.0.1:8000',
-          changeOrigin: true
+          target: env.VITE_API_URL || 'http://localhost:8000',
+          changeOrigin: true,
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+            'Bypass-Tunnel-Reminder': 'true'
+          }
         }
       }
     },
