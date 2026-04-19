@@ -50,6 +50,11 @@ if "!choice!"=="2" (
     set "domain="
     set /p domain="Nhập Static Domain (ví dụ: abc-xyz.ngrok-free.app): "
     if not "!domain!"=="" (
+        rem Tự động lọc bỏ https://, http:// và dấu / ở cuối
+        set "domain=!domain:https://=!"
+        set "domain=!domain:http://=!"
+        if "!domain:~-1!"=="/" set "domain=!domain:~0,-1!"
+
         echo.
         echo Đang khởi chạy Ngrok với domain !domain!...
         echo [!] HÃY NHỚ CẬP NHẬT LINK NÀY VÀO BACKEND/.ENV

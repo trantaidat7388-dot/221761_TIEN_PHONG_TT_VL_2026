@@ -157,16 +157,17 @@ def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, g
     return user
 
 
-def _lay_google_user_info_tu_authorization_code(code: str) -> dict:
+def _lay_google_user_info_tu_authorization_code(code: str, redirect_uri: str = None) -> dict:
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Thiếu GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET")
 
+    actual_redirect_uri = redirect_uri or GOOGLE_REDIRECT_URI
     token_payload = parse.urlencode(
         {
             "code": code,
             "client_id": GOOGLE_CLIENT_ID,
             "client_secret": GOOGLE_CLIENT_SECRET,
-            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "redirect_uri": actual_redirect_uri,
             "grant_type": "authorization_code",
         }
     ).encode("utf-8")
@@ -296,14 +297,26 @@ def dang_nhap_voi_google(req: YeuCauDangNhapGoogle, db: Session = Depends(lay_db
 
 
 @router.get("/auth/google/login")
-def dang_nhap_google_redirect() -> RedirectResponse:
+def dang_nhap_google_redirect(request: Request) -> RedirectResponse:
     if not GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=500, detail="Thiếu cấu hình GOOGLE_CLIENT_ID")
+
+    # Tự động chọn redirect_uri dựa trên host hoặc referer (localhost vs ngrok)
+    host = request.headers.get("host", "")
+    referer = request.headers.get("referer", "")
+    
+    redirect_uri = GOOGLE_REDIRECT_URI
+    if any(x in (host + referer).lower() for x in ["localhost", "127.0.0.1"]):
+        # Nếu truy cập qua localhost, ưu tiên dùng callback local để tiết kiệm ngrok
+        redirect_uri = "http://localhost:8000/api/auth/google/callback"
+        logger.info("[SmartRedirect] Detected Localhost. Using LOCAL callback.")
+    else:
+        logger.info("[SmartRedirect] Detected Public/Ngrok. Host: %s, Referer: %s", host, referer)
 
     query = parse.urlencode(
         {
             "client_id": GOOGLE_CLIENT_ID,
-            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "redirect_uri": redirect_uri,
             "response_type": "code",
             "scope": "openid email profile",
             "access_type": "online",
@@ -316,20 +329,31 @@ def dang_nhap_google_redirect() -> RedirectResponse:
 
 @router.get("/auth/google/callback")
 def google_callback(code: str, request: Request, db: Session = Depends(lay_db)) -> RedirectResponse:
-    _ = request  # reserved for future state validation / audit logging.
+    # Tự động chọn redirect_uri/frontend dựa trên host hoặc referer của request hiện tại
+    host = request.headers.get("host", "")
+    referer = request.headers.get("referer", "")
+    
+    redirect_uri = GOOGLE_REDIRECT_URI
+    target_frontend = FRONTEND_URL
+    
+    if any(x in (host + referer).lower() for x in ["localhost", "127.0.0.1"]):
+        redirect_uri = "http://localhost:8000/api/auth/google/callback"
+        target_frontend = "http://localhost:5173"
+
     try:
-        google_info = _lay_google_user_info_tu_authorization_code(code)
+        # Đổi code lấy user info với redirect_uri tương ứng
+        google_info = _lay_google_user_info_tu_authorization_code(code, redirect_uri=redirect_uri)
         user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"])
 
         payload = _tao_auth_payload(user)
         token = payload["access_token"]
-        return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/?token={parse.quote(token)}")
+        return RedirectResponse(url=f"{target_frontend.rstrip('/')}/?token={parse.quote(token)}")
     except HTTPException as e:
         logger.warning("[Google OAuth] Callback failed: %s", e.detail)
-        return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/dang-nhap?error={parse.quote(e.detail or 'Lỗi đăng nhập Google')}")
+        return RedirectResponse(url=f"{target_frontend.rstrip('/')}/dang-nhap?error={parse.quote(e.detail or 'Lỗi đăng nhập Google')}")
     except Exception as e:
         logger.error("[Google OAuth] Unexpected callback crash: %s", e)
-        return RedirectResponse(url=f"{FRONTEND_URL.rstrip('/')}/dang-nhap?error=Lỗi hệ thống khi xử lý Google Login")
+        return RedirectResponse(url=f"{target_frontend.rstrip('/')}/dang-nhap?error=Lỗi hệ thống khi xử lý Google Login")
 
 
 # ── CLOUD-SYNC POLLING: Flutter Hybrid WebView Login ─────────────────────────
