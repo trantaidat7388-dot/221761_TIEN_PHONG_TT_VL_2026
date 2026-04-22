@@ -111,14 +111,30 @@ timeout /t 3 /nobreak >nul
 echo       OK - Backend window opened.
 echo.
 
-REM ============================================================
-REM STEP 6: START FRONTEND
-REM ============================================================
 echo [6/6] Starting Frontend (Vite on :5173)...
 
 start "Word2LaTeX Frontend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%frontend"" & (if not exist node_modules npm install --prefer-offline) & npm run dev"
 
 echo       OK - Frontend window opened.
+echo.
+
+REM ============================================================
+REM STEP 7: START CLOUDFLARE TUNNEL (OPTIONAL)
+REM ============================================================
+where cloudflared.exe >nul 2>&1
+if %ERRORLEVEL% NEQ 0 goto :skip_tunnel
+
+echo [7/7] Starting Cloudflare Tunnel (word2latex.id.vn)...
+set "CF_TOKEN=eyJhIjoiNWIxZWY0N2VjYTU0NzBmZjM5M2U4ODVlZDIwYjdjOWUiLCJ0IjoiYWRjZjAxMjctZjBlMC00NjMzLThhZTMtYWM4OWEyMzc4YWRhIiwicyI6ImJlSjNKck4yYUF6NkZCUTgxSUNuNUtvdU1yWnlVY0dEZVZMY09abWpzOWc9In0="
+start "Word2LaTeX Tunnel" cmd /k "cloudflared.exe tunnel run --token %CF_TOKEN%"
+echo       OK - Public Tunnel is starting...
+goto :after_tunnel
+
+:skip_tunnel
+echo [7/7] Cloudflare Tunnel: SKIPPED (cloudflared.exe not found)
+echo       Local dev mode only. Install cloudflared for public access.
+
+:after_tunnel
 echo.
 
 REM ============================================================

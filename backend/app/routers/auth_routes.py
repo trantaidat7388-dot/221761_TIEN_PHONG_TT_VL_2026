@@ -306,12 +306,15 @@ def dang_nhap_google_redirect(request: Request) -> RedirectResponse:
     referer = request.headers.get("referer", "")
     
     redirect_uri = GOOGLE_REDIRECT_URI
-    if any(x in (host + referer).lower() for x in ["localhost", "127.0.0.1"]):
+    
+    if "word2latex.id.vn" in (host + referer).lower():
+        logger.info("[SmartRedirect] Detected Project Domain. Using PUBLIC callback.")
+    elif any(x in (host + referer).lower() for x in ["localhost", "127.0.0.1"]):
         # Nếu truy cập qua localhost, ưu tiên dùng callback local để tiết kiệm ngrok
         redirect_uri = "http://localhost:8000/api/auth/google/callback"
         logger.info("[SmartRedirect] Detected Localhost. Using LOCAL callback.")
     else:
-        logger.info("[SmartRedirect] Detected Public/Ngrok. Host: %s, Referer: %s", host, referer)
+        logger.info("[SmartRedirect] Detected Public/Other. Host: %s, Referer: %s", host, referer)
 
     query = parse.urlencode(
         {
@@ -336,7 +339,10 @@ def google_callback(code: str, request: Request, db: Session = Depends(lay_db)) 
     redirect_uri = GOOGLE_REDIRECT_URI
     target_frontend = FRONTEND_URL
     
-    if any(x in (host + referer).lower() for x in ["localhost", "127.0.0.1"]):
+    if "word2latex.id.vn" in (host + referer).lower():
+        # Ưu tiên tên miền chính thức
+        pass 
+    elif any(x in (host + referer).lower() for x in ["localhost", "127.0.0.1"]):
         redirect_uri = "http://localhost:8000/api/auth/google/callback"
         target_frontend = "http://localhost:5173"
 

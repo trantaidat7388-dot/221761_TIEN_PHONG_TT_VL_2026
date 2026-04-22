@@ -119,17 +119,17 @@ const NapTokenModal = ({ isOpen, onClose }) => {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[1000] flex items-start justify-center p-4 overflow-y-auto sm:items-center">
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
             onClick={onClose}
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="relative w-full max-w-md bg-[#1a1a2e] border border-white/10 shadow-2xl rounded-2xl overflow-hidden"
+            className="relative w-full max-w-md bg-[#1a1a2e] border border-white/10 shadow-2xl rounded-2xl overflow-hidden my-auto"
           >
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-white/10">
