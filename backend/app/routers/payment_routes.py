@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from .. import models, auth
 from ..database import lay_db
-from ..config import NAME_WEB, APP_ENV
+from ..config import NAME_WEB, APP_ENV, PREMIUM_PACKAGES, TOPUP_BONUS_TIERS
 from ..services.sepay_sync import encode_payment_id, check_payment_status
 
 router = APIRouter(prefix="/api/payment", tags=["Payment"])
@@ -17,15 +17,32 @@ class YeuCauTaoPayment(BaseModel):
 
 @router.post("/create")
 def tao_payment(req: YeuCauTaoPayment, db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)):
-    if req.amount_vnd < 10000:
-        raise HTTPException(status_code=400, detail="Số tiền nạp tối thiểu là 10,000 VNĐ")
+    amount_vnd = req.amount_vnd
+    token_amount = 0
 
-    # Tỷ lệ: 100 VND = 1 Token
-    token_amount = req.amount_vnd // 100
+    if req.plan_key:
+        plan = PREMIUM_PACKAGES.get(req.plan_key)
+        if not plan:
+            raise HTTPException(status_code=400, detail="Gói Premium không hợp lệ")
+        # Ghi đè amount_vnd bằng giá thật của gói để tránh lỗ hổng bảo mật
+        amount_vnd = plan.get("price_vnd", 50000)
+        token_amount = plan.get("token_bonus", amount_vnd // 100)
+    else:
+        if amount_vnd < 10000:
+            raise HTTPException(status_code=400, detail="Số tiền nạp tối thiểu là 10,000 VNĐ")
+        
+        base_tokens = amount_vnd // 100
+        bonus_percent = 0
+        for tier in TOPUP_BONUS_TIERS:
+            if amount_vnd >= tier["min_vnd"]:
+                bonus_percent = tier["bonus_percent"]
+                break
+        
+        token_amount = base_tokens + int(base_tokens * (bonus_percent / 100))
 
     payment = models.Payment(
         user_id=current_user.id,
-        amount_vnd=req.amount_vnd,
+        amount_vnd=amount_vnd,
         token_amount=token_amount,
         status="pending",
         plan_key=req.plan_key

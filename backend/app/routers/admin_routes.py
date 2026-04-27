@@ -294,8 +294,6 @@ def cap_nhat_premium_nguoi_dung(
         user.plan_type = "premium"
         user.premium_started_at = now
         user.premium_expires_at = now + timedelta(days=so_ngay)
-        if user.token_balance < 25000:
-            user.token_balance = 25000
     else:
         user.plan_type = "free"
         user.premium_expires_at = None
@@ -761,6 +759,7 @@ def lay_danh_sach_payments_admin(
                 "email": users.get(r.user_id).email if users.get(r.user_id) else None,
                 "amount_vnd": r.amount_vnd,
                 "token_amount": r.token_amount,
+                "plan_key": getattr(r, 'plan_key', None),
                 "status": r.status,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
                 "updated_at": r.updated_at.isoformat() if r.updated_at else None,

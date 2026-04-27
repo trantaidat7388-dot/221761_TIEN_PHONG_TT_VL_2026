@@ -59,11 +59,8 @@ const TrangPremium = () => {
     const plan = danhSachGoi?.[key]
     if (!plan) return
 
-    // Quy đổi VND dựa trên plan (Giả định giá cố định cho combo Way A)
-    let comboVnd = 50000
-    let tokenBonus = 600
-    if (key === 'premium_7d') { comboVnd = 20000; tokenBonus = 200 }
-    if (key === 'premium_365d') { comboVnd = 500000; tokenBonus = 7000 }
+    const comboVnd = plan.price_vnd || 50000
+    const tokenBonus = plan.token_bonus || 600
 
     navigate('/thanh-toan', {
       state: {
@@ -84,7 +81,7 @@ const TrangPremium = () => {
       <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-amber-500/5 rounded-full blur-[100px] translate-y-1/2 pointer-events-none" />
 
       <div className="max-w-6xl mx-auto relative z-10">
-        
+
         {/* Header Section */}
         <div className="text-center mb-10">
           <motion.div
@@ -96,7 +93,7 @@ const TrangPremium = () => {
             NÂNG CẤP TRẢI NGHIỆM
           </motion.div>
           <h1 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight leading-tight">
-            Chọn gói phù hợp với <br /> 
+            Chọn gói phù hợp với <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-white to-amber-300">
               nhu cầu của bạn
             </span>
@@ -107,7 +104,7 @@ const TrangPremium = () => {
         </div>
 
         {/* User Status Summary */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           className="glass-card rounded-[1.5rem] p-6 mb-12 border border-white/5 flex flex-col md:flex-row items-center justify-between gap-6"
@@ -165,20 +162,18 @@ const TrangPremium = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {Object.entries(danhSachGoi).map(([key, plan]) => {
                 const isPopular = key === 'premium_30d'
-                let comboVnd = 50000
-                let tokenBonus = 600
-                if (key === 'premium_7d') { comboVnd = 20000; tokenBonus = 200 }
-                if (key === 'premium_365d') { comboVnd = 500000; tokenBonus = 7000 }
+                const comboVnd = plan.price_vnd || 50000
+                const tokenBonus = plan.token_bonus || 600
 
                 return (
-                  <motion.div 
-                    key={key} 
+                  <motion.div
+                    key={key}
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     whileHover={{ y: -8 }}
                     className={`relative overflow-hidden rounded-[2rem] p-0.5 flex flex-col transition-all duration-500
-                      ${isPopular 
-                        ? 'bg-gradient-to-br from-primary-500 via-purple-500 to-amber-500' 
+                      ${isPopular
+                        ? 'bg-gradient-to-br from-primary-500 via-purple-500 to-amber-500'
                         : 'bg-white/10 border border-white/5'}`}
                   >
                     <div className="bg-[#0f1115] rounded-[1.9rem] p-6 flex flex-col h-full">
@@ -217,11 +212,11 @@ const TrangPremium = () => {
                         </ul>
                       </div>
 
-                      <button 
+                      <button
                         onClick={() => xuLyMuaCombo(key)}
                         className={`w-full py-3 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2
-                          ${isPopular 
-                            ? 'bg-primary-600 hover:bg-primary-500 text-white shadow-lg shadow-primary-500/20' 
+                          ${isPopular
+                            ? 'bg-primary-600 hover:bg-primary-500 text-white shadow-lg shadow-primary-500/20'
                             : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'}`}
                       >
                         Bắt đầu ngay
@@ -249,11 +244,11 @@ const TrangPremium = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { amount: 100, price: 10000, label: 'Khởi đầu', color: 'bg-slate-500/10' },
-              { amount: 250, price: 20000, label: 'Cơ bản', color: 'bg-blue-500/10', bonus: '25%' },
-              { amount: 700, price: 50000, label: 'Phổ biến', color: 'bg-primary-500/10', bonus: '40%' },
-              { amount: 1500, price: 100000, label: 'Pro', color: 'bg-emerald-500/10', bonus: '50%' }
+              { amount: 220, price: 20000, label: 'Cơ bản', color: 'bg-blue-500/10', bonus: '10%' },
+              { amount: 600, price: 50000, label: 'Phổ biến', color: 'bg-primary-500/10', bonus: '20%' },
+              { amount: 1300, price: 100000, label: 'Pro', color: 'bg-emerald-500/10', bonus: '30%' }
             ].map((item, idx) => (
-              <motion.div 
+              <motion.div
                 key={idx}
                 whileHover={{ y: -4 }}
                 className="glass-card rounded-2xl p-4 border border-white/5 flex flex-col items-center group cursor-pointer"

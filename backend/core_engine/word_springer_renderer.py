@@ -1116,23 +1116,26 @@ class SpringerWordRenderer(IEEEWordRenderer):
         """Render Springer figure with centered image and `figurecaption` style below."""
         self._figure_index += 1
 
-        path_match = re.search(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", latex_figure_text)
+        paths = []
+        for match in re.finditer(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", latex_figure_text):
+            paths.append(self._latex_to_plain(match.group(1)))
+            
         cap_match = re.search(r"\\caption\{([^}]*)\}", latex_figure_text)
-        image_path = self._latex_to_plain(path_match.group(1)) if path_match else ""
         caption = self._normalize_springer_caption(
             self._latex_to_plain(cap_match.group(1)) if cap_match else "",
             "figure",
         )
 
-        resolved = self._resolve_image_path(image_path)
-        if resolved and resolved.exists():
-            try:
-                pic_para = doc.add_paragraph()
-                pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                width = max(3.2, min(5.6, self._current_table_target_width_inch(doc, False)))
-                pic_para.add_run().add_picture(str(resolved), width=Inches(width))
-            except Exception:
-                pass
+        for image_path in paths:
+            resolved = self._resolve_image_path(image_path)
+            if resolved and resolved.exists():
+                try:
+                    pic_para = doc.add_paragraph()
+                    pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    width = max(3.2, min(5.6, self._current_table_target_width_inch(doc, False)))
+                    pic_para.add_run().add_picture(str(resolved), width=Inches(width))
+                except Exception:
+                    pass
 
         cap_text = f"Fig. {self._figure_index}. {caption}" if caption else f"Fig. {self._figure_index}."
         p = doc.add_paragraph(cap_text)

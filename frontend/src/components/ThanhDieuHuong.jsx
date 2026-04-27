@@ -70,7 +70,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
 
   const chuCaiDau = useMemo(() => {
     // Lấy chữ cái đầu của tên/email để làm avatar fallback
-    const nguon = (nguoiDung?.displayName || nguoiDung?.email || '').trim()
+    const nguon = (nguoiDung?.username || nguoiDung?.email || '').trim()
     if (!nguon) return 'U'
     const phan = nguon
       .replace(/\s+/g, ' ')
@@ -78,9 +78,9 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
       .filter(Boolean)
     if (phan.length >= 2) return (phan[0][0] + phan[phan.length - 1][0]).toUpperCase()
     return (phan[0]?.slice(0, 2) || 'U').toUpperCase()
-  }, [nguoiDung?.displayName, nguoiDung?.email])
+  }, [nguoiDung?.username, nguoiDung?.email])
 
-  const coTheHienAnh = Boolean(nguoiDung?.photoURL) && !avatarLoi
+  const coTheHienAnh = Boolean(nguoiDung?.photo_url) && !avatarLoi
 
   return (
     <nav 
@@ -156,7 +156,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                   <div className="w-8 h-8 rounded-full bg-primary-500/30 flex items-center justify-center overflow-hidden">
                     {coTheHienAnh ? (
                       <img
-                        src={nguoiDung.photoURL}
+                        src={nguoiDung.photo_url}
                         alt="Avatar"
                         className="w-8 h-8 rounded-full"
                         onError={() => setAvatarLoi(true)}
@@ -294,7 +294,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                     <div className="w-10 h-10 rounded-full bg-primary-500/30 flex items-center justify-center overflow-hidden">
                       {coTheHienAnh ? (
                         <img
-                          src={nguoiDung.photoURL}
+                          src={nguoiDung.photo_url}
                           alt="Avatar"
                           className="w-10 h-10 rounded-full"
                           onError={() => setAvatarLoi(true)}

@@ -18,20 +18,64 @@ const TrangLanding = () => {
   const [faqMo, setFaqMo] = useState(0)
   const [landingData, setLandingData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
-  useEffect(() => {
-    const fetchLanding = async () => {
+  const fetchLanding = async () => {
+    setLoading(true)
+    setError(false)
+    try {
       const res = await layNoiDungLandingPublic()
-      if (res.thanhCong) setLandingData(res.content)
+      if (res.thanhCong && res.content) {
+        setLandingData(res.content)
+      } else {
+        setError(true)
+      }
+    } catch (err) {
+      console.error('Lỗi tải Landing:', err)
+      setError(true)
+    } finally {
       setLoading(false)
     }
+  }
+
+  useEffect(() => {
     fetchLanding()
   }, [])
 
-  if (loading || !landingData) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <LucideIcons.Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+        <div className="flex flex-col items-center gap-4">
+          <LucideIcons.Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
+          <p className="text-white/40 text-sm animate-pulse font-medium">Đang tải tài nguyên...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !landingData) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+        <div className="relative mb-8">
+          <div className="absolute inset-0 bg-primary-500/20 blur-[60px] rounded-full" />
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-slate-900 border border-white/10 shadow-2xl">
+            <LucideIcons.Unplug className="h-10 w-10 text-primary-400" />
+          </div>
+        </div>
+        
+        <h2 className="text-2xl font-bold text-white mb-3">Hệ thống đang bận khởi động</h2>
+        <p className="text-white/50 mb-8 max-w-md leading-relaxed">
+          Chúng tôi đang chuẩn bị dữ liệu cho phiên làm việc mới. Quá trình này có thể mất vài giây nếu máy chủ vừa được khởi chạy.
+        </p>
+        
+        <button 
+          onClick={fetchLanding}
+          className="btn-primary inline-flex items-center gap-2.5 px-8 py-3 rounded-xl shadow-lg shadow-primary-500/20 hover:scale-105 active:scale-95 transition-all"
+        >
+          <LucideIcons.RefreshCw className="w-4.5 h-4.5" /> Thử lại ngay
+        </button>
+        
+        <p className="mt-6 text-xs text-white/20 font-mono">Status: ECONNREFUSED_OR_ASYNC_BOOT</p>
       </div>
     )
   }

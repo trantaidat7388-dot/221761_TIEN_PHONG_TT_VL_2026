@@ -500,7 +500,8 @@ class TemplatePreprocessor:
         INJECT_BLOCK = (
             "\\makeatletter\n"
             "\\@ifpackageloaded{iftex}{}{\\usepackage{iftex}}\n"
-            "\\ifPDFTeX\\@ifpackageloaded{fontenc}{}{\\usepackage[T1]{fontenc}}\\fi\n"
+            "\\ifPDFTeX\\@ifpackageloaded{fontenc}{}{\\usepackage[T1,T5]{fontenc}}\\fi\n"
+            "\\ifPDFTeX\\@ifpackageloaded{inputenc}{}{\\usepackage[utf8]{inputenc}}\\fi\n"
             "\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n"
             "\\@ifundefined{Bbbk}{}{\\let\\Bbbk\\relax}\n"
             "\\@ifpackageloaded{amssymb}{}{\\usepackage{amssymb}}\n"
@@ -530,7 +531,8 @@ class TemplatePreprocessor:
             if not has_iftex_pkg:
                 repair_lines.append("\\@ifpackageloaded{iftex}{}{\\usepackage{iftex}}")
             if not (has_fontenc_t1 or has_fontenc_guard):
-                repair_lines.append("\\ifPDFTeX\\@ifpackageloaded{fontenc}{}{\\usepackage[T1]{fontenc}}\\fi")
+                repair_lines.append("\\ifPDFTeX\\@ifpackageloaded{fontenc}{}{\\usepackage[T1,T5]{fontenc}}\\fi")
+                repair_lines.append("\\ifPDFTeX\\@ifpackageloaded{inputenc}{}{\\usepackage[utf8]{inputenc}}\\fi")
             if not (has_xcolor_guard or has_xcolor_pkg):
                 repair_lines.append("\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}")
             repair_lines.append("\\makeatother")

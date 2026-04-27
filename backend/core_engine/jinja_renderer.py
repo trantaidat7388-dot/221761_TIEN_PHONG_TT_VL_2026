@@ -516,6 +516,7 @@ class JinjaLaTeXRenderer:
             "\\usepackage[T1]{fontenc}",
         )
 
+        has_fontspec = re.search(r"\\usepackage(?:\[[^\]]*\])?\{fontspec\}", tex_content) is not None
         has_fontenc = re.search(r"\\usepackage(?:\[[^\]]*\])?\{fontenc\}", tex_content) is not None
         has_iftex = re.search(r"\\usepackage(?:\[[^\]]*\])?\{iftex\}", tex_content) is not None
         has_multirow = re.search(r"\\usepackage(?:\[[^\]]*\])?\{multirow\}", tex_content) is not None
@@ -526,9 +527,11 @@ class JinjaLaTeXRenderer:
         inject_lines = []
         if not has_iftex:
             inject_lines.append("\\usepackage{iftex}")
-        if not has_fontenc:
-            inject_lines.append("\\ifXeTeX\\else")
-            inject_lines.append("\\usepackage[T5,T1]{fontenc}")
+        if not has_fontspec and not has_fontenc:
+            inject_lines.append("\\ifXeTeX")
+            inject_lines.append("\\usepackage{fontspec}")
+            inject_lines.append("\\else")
+            inject_lines.append("\\usepackage[T5]{fontenc}")
             inject_lines.append("\\usepackage[utf8]{inputenc}")
             inject_lines.append("\\fi")
         if not has_multirow:

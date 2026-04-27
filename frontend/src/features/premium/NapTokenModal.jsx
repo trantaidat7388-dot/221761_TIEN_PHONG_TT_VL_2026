@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Loader2, QrCode, Copy, CheckCircle2, CreditCard, Wallet, Coins } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -116,7 +117,7 @@ const NapTokenModal = ({ isOpen, onClose }) => {
   const bankName = import.meta.env.VITE_BANK_ACCOUNT_NAME || 'ADMIN'
   const chuaCauHinhNganHang = bankAccount === '000000000'
 
-  return (
+  const modalContent = (
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[1000] flex items-start justify-center p-4 overflow-y-auto sm:items-center">
@@ -298,6 +299,8 @@ const NapTokenModal = ({ isOpen, onClose }) => {
       )}
     </AnimatePresence>
   )
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : null
 }
 
 export default NapTokenModal

@@ -35,6 +35,21 @@ const TrangThanhToanPremium = () => {
     return Math.max(0, giaThangGiaLap * 12 - planCost)
   }, [planDays, planCost])
 
+  const tinhTokenNhanDuoc = (tien) => {
+    const amount = Number(tien) || 0
+    if (amount < 10000) return 0
+    const base = Math.floor(amount / 100)
+    let percent = 0
+    if (amount >= 100000) percent = 30
+    else if (amount >= 50000) percent = 20
+    else if (amount >= 20000) percent = 10
+    return base + Math.floor((base * percent) / 100)
+  }
+
+  const tokenHienThi = location.state?.planKey 
+    ? (location.state?.tokenAmount || 0) 
+    : tinhTokenNhanDuoc(soTien)
+
   useEffect(() => {
     if (!hoaDon?.payment_id) return
     let tickId = null
@@ -49,13 +64,13 @@ const TrangThanhToanPremium = () => {
       if (kq.thanhCong && kq.data?.status === 'completed') {
         clearInterval(tickId)
         clearInterval(pollId)
-        
+
         // Way A: Backend handles activation automatically.
         // We just notify the user based on what they bought.
         if (location.state?.planKey) {
-            toast.success('Gói Premium của bạn đã được kích hoạt thành công!')
+          toast.success('Gói Premium của bạn đã được kích hoạt thành công!')
         } else {
-            toast.success('Thanh toán thành công, Token đã được cộng vào tài khoản!')
+          toast.success('Thanh toán thành công, Token đã được cộng vào tài khoản!')
         }
 
         await lamMoiThongTinNguoiDung({ imLang: true })
@@ -176,14 +191,14 @@ const TrangThanhToanPremium = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <section className="rounded-xl border border-white/10 bg-white/5 p-5 flex flex-col">
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-               <QrCode className="w-6 h-6 text-primary-400" />
-               Quét mã QR mua gói tự động
+              <QrCode className="w-6 h-6 text-primary-400" />
+              Quét mã QR mua gói tự động
             </h2>
 
             {hoaDon ? (
               <div className="flex-1 flex flex-col items-center justify-center bg-black/20 rounded-2xl p-6 border border-white/5 text-center">
                 <p className="text-white/80 font-medium mb-5">Hệ thống sẽ tự động đối soát và cộng Token sau khi quét mã này</p>
-                
+
                 <div className="bg-white p-4 rounded-[2rem] shadow-2xl shadow-primary-500/20 inline-flex flex-col items-center relative overflow-hidden group">
                   <div className="absolute inset-0 bg-gradient-to-tr from-primary-500/10 to-transparent pointer-events-none" />
                   <img
@@ -196,9 +211,9 @@ const TrangThanhToanPremium = () => {
                 <div className="mt-8 bg-white/5 border border-white/10 rounded-xl p-4 w-full max-w-sm flex flex-col items-center">
                   <p className="text-white/50 text-sm mb-1 uppercase tracking-wider font-semibold">Nội dung chuyển khoản bắt buộc</p>
                   <p className="font-mono text-cyan-300 text-2xl font-bold mb-3">{hoaDon.noidung_ck}</p>
-                  <button 
-                    type="button" 
-                    onClick={() => saoChep(hoaDon.noidung_ck)} 
+                  <button
+                    type="button"
+                    onClick={() => saoChep(hoaDon.noidung_ck)}
                     className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-500/30 py-2 px-4 rounded-lg inline-flex items-center gap-2 font-medium transition"
                   >
                     <Copy className="w-4 h-4" /> Sao chép mã này
@@ -297,7 +312,7 @@ const TrangThanhToanPremium = () => {
                 </div>
 
                 <div className="mt-4 space-y-2 text-white/80">
-                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Tự động cộng {location.state?.tokenAmount || (soTien/100)} Tokens</div>
+                  <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Tự động cộng {new Intl.NumberFormat('vi-VN').format(tokenHienThi)} Tokens</div>
                   {location.state?.planKey && (
                     <div className="inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Tự động kích hoạt {location.state.planDays} ngày Premium</div>
                   )}

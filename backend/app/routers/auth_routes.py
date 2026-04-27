@@ -65,6 +65,7 @@ def _serialize_user(user: models.User) -> dict:
         "premium_started_at": user.premium_started_at.isoformat() if user.premium_started_at else None,
         "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None,
         "auth_provider": user.auth_provider,
+        "photo_url": getattr(user, 'photo_url', None),
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
@@ -83,6 +84,7 @@ def _tao_auth_payload(user: models.User) -> dict:
             "token_balance": user.token_balance,
             "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None,
             "auth_provider": user.auth_provider,
+            "photo_url": getattr(user, 'photo_url', None),
         },
     }
 
@@ -129,7 +131,7 @@ def _tao_username_tu_google(db: Session, email: str, display_name: str = "") -> 
     return candidate
 
 
-def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, google_name: str) -> models.User:
+def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, google_name: str, google_picture: str = "") -> models.User:
     user = db.query(models.User).filter(models.User.google_id == google_sub).first()
 
     if user is None:
@@ -137,6 +139,8 @@ def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, g
         if user_by_email:
             user_by_email.google_id = google_sub
             user_by_email.auth_provider = "google"
+            if google_picture and not user_by_email.photo_url:
+                user_by_email.photo_url = google_picture
             user = user_by_email
         else:
             user = models.User(
@@ -148,12 +152,16 @@ def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, g
                 token_balance=FREE_PLAN_MAX_PAGES,
                 auth_provider="google",
                 google_id=google_sub,
+                photo_url=google_picture,
             )
             db.add(user)
+    else:
+        # Update picture if missing or changed
+        if google_picture and user.photo_url != google_picture:
+            user.photo_url = google_picture
 
-        db.commit()
-        db.refresh(user)
-
+    db.commit()
+    db.refresh(user)
     return user
 
 
@@ -220,7 +228,7 @@ def _lay_google_user_info_tu_authorization_code(code: str, redirect_uri: str = N
     if not email_verified:
         raise HTTPException(status_code=401, detail="Email Google chưa được xác minh")
 
-    return {"sub": google_sub, "email": google_email, "name": google_name}
+    return {"sub": google_sub, "email": google_email, "name": google_name, "picture": info.get("picture", "")}
 
 @router.post("/auth/register")
 def dang_ky(req: YeuCauDangKy, db: Session = Depends(lay_db)) -> dict:
@@ -291,8 +299,9 @@ def dang_nhap_voi_google(req: YeuCauDangNhapGoogle, db: Session = Depends(lay_db
     google_sub = google_info["sub"]
     google_email = google_info["email"]
     google_name = google_info["name"]
+    google_picture = google_info.get("picture", "")
 
-    user = _dong_bo_tai_khoan_google(db, google_sub, google_email, google_name)
+    user = _dong_bo_tai_khoan_google(db, google_sub, google_email, google_name, google_picture)
     return _tao_auth_payload(user)
 
 
@@ -349,7 +358,7 @@ def google_callback(code: str, request: Request, db: Session = Depends(lay_db)) 
     try:
         # Đổi code lấy user info với redirect_uri tương ứng
         google_info = _lay_google_user_info_tu_authorization_code(code, redirect_uri=redirect_uri)
-        user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"])
+        user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"], google_info.get("picture", ""))
 
         payload = _tao_auth_payload(user)
         token = payload["access_token"]
@@ -522,7 +531,7 @@ def _lay_google_user_info_flutter(code: str) -> dict:
     if not email_verified:
         raise HTTPException(status_code=401, detail="Email Google chưa được xác minh")
 
-    return {"sub": google_sub, "email": google_email, "name": google_name}
+    return {"sub": google_sub, "email": google_email, "name": google_name, "picture": info.get("picture", "")}
 
 
 @router.get("/auth/google/callback/flutter")
@@ -546,7 +555,7 @@ def google_callback_flutter(
 
     # Đổi code lấy user info
     google_info = _lay_google_user_info_flutter(code)
-    user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"])
+    user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"], google_info.get("picture", ""))
 
     # Tạo JWT token
     jwt_token = auth.tao_access_token({"sub": str(user.id)})

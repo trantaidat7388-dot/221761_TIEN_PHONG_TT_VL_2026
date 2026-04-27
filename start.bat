@@ -138,10 +138,34 @@ echo       Local dev mode only. Install cloudflared for public access.
 echo.
 
 REM ============================================================
-REM AUTO-OPEN BROWSER 
+REM STEP 8: WAIT FOR SERVICES & AUTO-OPEN BROWSER 
 REM ============================================================
-echo Waiting 8 seconds for servers to boot...
-timeout /t 8 /nobreak >nul
+echo [8/8] Waiting for services to be ready...
+
+:wait_backend
+netstat -ano | findstr :8000 | findstr LISTENING >nul
+if %ERRORLEVEL% NEQ 0 (
+    echo       Waiting for Backend (8000)...
+    timeout /t 2 /nobreak >nul
+    goto :wait_backend
+)
+echo       OK - Backend (8000) is LISTENING.
+
+:wait_frontend
+netstat -ano | findstr :5173 | findstr LISTENING >nul
+if %ERRORLEVEL% NEQ 0 (
+    echo       Waiting for Frontend (5173)...
+    timeout /t 2 /nobreak >nul
+    goto :wait_frontend
+)
+echo       OK - Frontend (5173) is LISTENING.
+
+echo.
+echo ============================================================
+echo   ALL SERVICES ARE READY!
+echo ============================================================
+echo.
+
 echo Opening http://localhost:5173 in your browser...
 start "" http://localhost:5173
 

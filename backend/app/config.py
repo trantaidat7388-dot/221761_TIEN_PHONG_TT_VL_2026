@@ -90,11 +90,18 @@ TOKEN_WORDS_PER_UNIT = _lay_so_nguyen_tu_env('TOKEN_WORDS_PER_UNIT', 2250, min_v
 TOKEN_MIN_COST = _lay_so_nguyen_tu_env('TOKEN_MIN_COST', 1, min_value=1)
 FREE_PLAN_MAX_PAGES = _lay_so_nguyen_tu_env('FREE_PLAN_MAX_PAGES', 60, min_value=1)
 
+# Cấu hình Token Bonus khi nạp lẻ
+TOPUP_BONUS_TIERS = [
+    {"min_vnd": 100000, "bonus_percent": 30},
+    {"min_vnd": 50000, "bonus_percent": 20},
+    {"min_vnd": 20000, "bonus_percent": 10},
+]
+
 # Cấu hình Gói Premium
 PREMIUM_PACKAGES = {
-    "premium_7d": {"name": "Gói Tuần", "so_ngay": 7, "token_cost": 200, "phu_hop": "Dùng thử ngắn hạn", "tiet_kiem": False},
-    "premium_30d": {"name": "Gói Tháng", "so_ngay": 30, "token_cost": 500, "phu_hop": "Phổ biến nhất", "tiet_kiem": False},
-    "premium_365d": {"name": "Gói Năm", "so_ngay": 365, "token_cost": 5000, "phu_hop": "Tiết kiệm dài hạn", "tiet_kiem": True}
+    "premium_7d": {"name": "Gói Tuần", "so_ngay": 7, "price_vnd": 20000, "token_cost": 200, "token_bonus": 200, "phu_hop": "Dùng thử ngắn hạn", "tiet_kiem": False},
+    "premium_30d": {"name": "Gói Tháng", "so_ngay": 30, "price_vnd": 50000, "token_cost": 500, "token_bonus": 600, "phu_hop": "Phổ biến nhất", "tiet_kiem": False},
+    "premium_365d": {"name": "Gói Năm", "so_ngay": 365, "price_vnd": 500000, "token_cost": 5000, "token_bonus": 7000, "phu_hop": "Tiết kiệm dài hạn", "tiet_kiem": True}
 }
 
 # Cấu hình nạp tiền (SePay)

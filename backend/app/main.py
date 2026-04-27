@@ -89,6 +89,8 @@ def _dam_bao_schema_users_premium_token_google() -> None:
         alter_statements.append("ALTER TABLE users ADD COLUMN auth_provider VARCHAR DEFAULT 'local' NOT NULL")
     if "google_id" not in user_columns:
         alter_statements.append("ALTER TABLE users ADD COLUMN google_id VARCHAR")
+    if "photo_url" not in user_columns:
+        alter_statements.append("ALTER TABLE users ADD COLUMN photo_url VARCHAR")
 
     with database.engine.begin() as conn:
         for stmt in alter_statements:

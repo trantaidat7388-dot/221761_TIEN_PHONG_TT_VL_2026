@@ -473,7 +473,7 @@ class WordASTParser:
                 if not text:
                     continue
                 # FIX 1: Support decimal chapter numbers like "Figure 3.1" and IEEE "Fig. 1."
-                if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG)(?:\.|\b)', text, re.IGNORECASE):
+                if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG|PIG)(?:\.|\b)', text, re.IGNORECASE):
                     used_nodes.add(idx_sau)
                     caption_text = self._chuan_hoa_ten_caption(text, kind='figure')
                     return caption_text
@@ -498,8 +498,8 @@ class WordASTParser:
             # Examples stripped: "Table 1:", "TABLE 3.1 -", "BANG 2.", "TABLE I" (IEEE)
             pattern = r'^(Bảng|BANG|Bang|Table|TABLE)\.?\s*[\dIIVX]+(\.\d+)*\s*[:\.\-–—]?\s*'
         else:
-            # Examples stripped: "Figure 2:", "Fig. 3.1", "HINH 1 -", "ẢNH 5"
-            pattern = r'^(Hình|HINH|Hình|Ảnh|ANH|ẢNH|Figure|FIGURE|Fig\.?)\s*\d+(\.\d+)*\s*[:\.\-–—]?\s*'
+            # Examples stripped: "Figure 2:", "Fig. 3.1", "HINH 1 -", "ẢNH 5", "Pig. 3"
+            pattern = r'^(Hình|HINH|Hình|Ảnh|ANH|ẢNH|Figure|FIGURE|Fig\.?|Pig\.?)\s*\d+(\.\d+)*\s*[:\.\-–—]?\s*'
 
         caption_text = re.sub(pattern, '', caption_text, flags=re.IGNORECASE).strip()
         return caption_text
@@ -754,17 +754,79 @@ class WordASTParser:
                     node_text = node.get('text', '')
                     # Post-process: nếu paragraph chứa standalone figure, tìm caption phía dưới
                     if '\\includegraphics' in node_text and '\\begin{figure' in node_text:
-                        img_match = re.search(r'\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}', node_text)
-                        img_path = img_match.group(1).strip() if img_match else ""
-                        if img_path and img_path in seen_figure_paths:
+                        img_matches = list(re.finditer(r'\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}', node_text))
+                        current_images = [m.group(1).strip() for m in img_matches if m.group(1).strip() and m.group(1).strip() not in seen_figure_paths]
+                        
+                        if not current_images:
+                            self.ir["body"].append(node)
                             continue
-                        caption = self._bat_caption_hinh(elements, idx, used_nodes)
+                            
+                        # Bắt đầu gom các ảnh (cùng paragraph hoặc liên tiếp)
+                        consecutive_images = current_images[:]
+                        for pth in current_images:
+                            seen_figure_paths.add(pth)
+                            
+                        step = 1
+                        while True:
+                            idx_sau = idx + step
+                            if idx_sau >= len(elements): break
+                            if idx_sau in used_nodes: 
+                                step += 1
+                                continue
+                            loai_sau, phan_tu_sau = elements[idx_sau]
+                            if loai_sau != 'paragraph': break
+                            
+                            # Kiểm tra xem paragraph tiếp theo có chứa ảnh không
+                            has_img_sau = bool(phan_tu_sau._p.findall(f'.//{{{A_NAMESPACE}}}blip')) or bool(phan_tu_sau._p.findall(r'.//{urn:schemas-microsoft-com:vml}imagedata'))
+                            text_sau = phan_tu_sau.text.strip()
+                            
+                            # Bỏ qua các đoạn paragraph trống (không ảnh, không chữ) nằm giữa các ảnh
+                            if not has_img_sau and not text_sau:
+                                step += 1
+                                continue
+                                
+                            # Nếu có ảnh và KHÔNG CÓ CHỮ (hoặc rất ít chữ - tránh gộp nhầm đoạn văn có chứa 1 ảnh nhỏ inline)
+                            if has_img_sau and len(text_sau) < 20:
+                                # Chắc chắn là ảnh tiếp theo, parse nó
+                                node_sau = self._parse_paragraph(phan_tu_sau)
+                                node_text_sau = node_sau.get('text', '')
+                                
+                                img_matches_sau = list(re.finditer(r'\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}', node_text_sau))
+                                found_new = False
+                                for m in img_matches_sau:
+                                    pth = m.group(1).strip()
+                                    if pth and pth not in seen_figure_paths:
+                                        consecutive_images.append(pth)
+                                        seen_figure_paths.add(pth)
+                                        found_new = True
+                                        
+                                if found_new:
+                                    used_nodes.add(idx_sau) # Đánh dấu đã gom
+                            else:
+                                # Nếu gặp text (có thể là caption hoặc body text), dừng gom
+                                break
+                            step += 1
+                            
+                        # Dù 1 hay nhiều ảnh, format lại thành 1 figure duy nhất!
+                        if len(consecutive_images) >= 1:
+                            combined_tex = f"\\begin{{figure}}[H]\n\\centering\n"
+                            for pth in consecutive_images:
+                                img_opts = self._includegraphics_options("\\columnwidth")
+                                combined_tex += f"\\includegraphics[{img_opts}]{{{pth}}}\n"
+                            combined_tex += "\\caption{}\n\\end{figure}"
+                            node_text = combined_tex
+                            node['text'] = combined_tex
+
+                        # TÌM CAPTION
+                        last_img_idx = idx + step - 1
+                        caption = self._bat_caption_hinh(elements, last_img_idx, used_nodes)
+                        
                         if not caption:
-                            caption = self._bat_caption_hinh_theo_style(elements, idx, used_nodes)
+                            caption = self._bat_caption_hinh_theo_style(elements, last_img_idx, used_nodes)
+                            
                         if caption:
                             node['text'] = node_text.replace('\\caption{}', f'\\caption{{{caption}}}')
-                        if img_path:
-                            seen_figure_paths.add(img_path)
+                            
                     self.ir["body"].append(node)
                 elif state == "references":
                     # Skip the header label itself (e.g., "Tài Liệu Tham Khảo", "References")
@@ -811,22 +873,26 @@ class WordASTParser:
                 else:
                     danh_sach_anh = self._trich_xuat_anh_tu_bang(element)
                     if danh_sach_anh:
-                        # Simple and robust mode: emit every extracted image as a figure.
+                        # Group all extracted images from the table into a single figure block.
                         caption_chinh = self._bat_caption_hinh(elements, idx, used_nodes)
                         ten_thu_muc = os.path.basename(self.thu_muc_anh)
-                        for i, ten_anh in enumerate(danh_sach_anh):
+                        
+                        fig_tex = "\\begin{figure}[H]\n\\centering\n"
+                        for ten_anh in danh_sach_anh:
                             self.dem_anh += 1
                             img_path = f"{ten_thu_muc}/{ten_anh}"
                             if img_path in seen_figure_paths:
                                 continue
-                            cap = caption_chinh if i == 0 else ""
-                            fig_tex = "\\begin{figure}[H]\n\\centering\n"
                             fig_tex += f"  \\includegraphics[width=\\columnwidth,height=0.4\\textheight,keepaspectratio]{{{img_path}}}\n"
-                            fig_tex += f"  \\caption{{{cap}}}\n"
-                            fig_tex += f"  \\label{{fig:img_{self.dem_anh}}}\n"
-                            fig_tex += "\\end{figure}\n\n"
                             seen_figure_paths.add(img_path)
-                            self.ir["body"].append({"type": "paragraph", "text": fig_tex})
+                            
+                        # Add caption and label only once at the end
+                        cap = caption_chinh or ""
+                        fig_tex += f"  \\caption{{{cap}}}\n"
+                        fig_tex += f"  \\label{{fig:img_{self.dem_anh}}}\n"
+                        fig_tex += "\\end{figure}\n\n"
+                        
+                        self.ir["body"].append({"type": "paragraph", "text": fig_tex})
                     else:
                         # Regular data table — with caption from look-behind
                         caption = self._bat_caption_bang(elements, idx, used_nodes)

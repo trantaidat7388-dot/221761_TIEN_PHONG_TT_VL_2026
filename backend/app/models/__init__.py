@@ -29,6 +29,7 @@ class User(Base):
     premium_expires_at = Column(DateTime, nullable=True, index=True)
     auth_provider = Column(String, default="local", nullable=False)
     google_id = Column(String, unique=True, index=True, nullable=True)
+    photo_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     history = relationship("ConversionHistory", back_populates="owner", cascade="all, delete-orphan")
