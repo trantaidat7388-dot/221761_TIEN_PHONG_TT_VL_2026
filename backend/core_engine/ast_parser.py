@@ -473,7 +473,7 @@ class WordASTParser:
                 if not text:
                     continue
                 # FIX 1: Support decimal chapter numbers like "Figure 3.1" and IEEE "Fig. 1."
-                if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG)(?:\.|\b)', text, re.IGNORECASE):
+                if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG|PIG)(?:\.|\b)', text, re.IGNORECASE):
                     used_nodes.add(idx_sau)
                     caption_text = self._chuan_hoa_ten_caption(text, kind='figure')
                     return caption_text
@@ -498,8 +498,8 @@ class WordASTParser:
             # Examples stripped: "Table 1:", "TABLE 3.1 -", "BANG 2.", "TABLE I" (IEEE)
             pattern = r'^(Bảng|BANG|Bang|Table|TABLE)\.?\s*[\dIIVX]+(\.\d+)*\s*[:\.\-–—]?\s*'
         else:
-            # Examples stripped: "Figure 2:", "Fig. 3.1", "HINH 1 -", "ẢNH 5"
-            pattern = r'^(Hình|HINH|Hình|Ảnh|ANH|ẢNH|Figure|FIGURE|Fig\.?)\s*\d+(\.\d+)*\s*[:\.\-–—]?\s*'
+            # Examples stripped: "Figure 2:", "Fig. 3.1", "HINH 1 -", "ẢNH 5", "Pig. 3"
+            pattern = r'^(Hình|HINH|Hình|Ảnh|ANH|ẢNH|Figure|FIGURE|Fig\.?|Pig\.?)\s*\d+(\.\d+)*\s*[:\.\-–—]?\s*'
 
         caption_text = re.sub(pattern, '', caption_text, flags=re.IGNORECASE).strip()
         return caption_text
@@ -593,7 +593,7 @@ class WordASTParser:
                         a_text = a_el.text.strip()
                         if not a_text:
                             continue
-                        if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG)(?:\.|\b)', a_text, re.IGNORECASE):
+                        if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG|PIG)(?:\.|\b)', a_text, re.IGNORECASE):
                             used_nodes.add(idx_after)
                             break
                         if hasattr(a_el, 'style') and a_el.style and a_el.style.name and 'Heading' in a_el.style.name:
@@ -811,22 +811,27 @@ class WordASTParser:
                 else:
                     danh_sach_anh = self._trich_xuat_anh_tu_bang(element)
                     if danh_sach_anh:
-                        # Simple and robust mode: emit every extracted image as a figure.
+                        # Group all images from the table into a SINGLE figure block
+                        # so the IEEE renderer treats them as one figure with one caption.
                         caption_chinh = self._bat_caption_hinh(elements, idx, used_nodes)
+                        if not caption_chinh:
+                            caption_chinh = self._bat_caption_hinh_theo_style(elements, idx, used_nodes)
                         ten_thu_muc = os.path.basename(self.thu_muc_anh)
-                        for i, ten_anh in enumerate(danh_sach_anh):
-                            self.dem_anh += 1
+                        self.dem_anh += 1
+                        fig_tex = "\\begin{figure}[H]\n\\centering\n"
+                        for ten_anh in danh_sach_anh:
                             img_path = f"{ten_thu_muc}/{ten_anh}"
                             if img_path in seen_figure_paths:
                                 continue
-                            cap = caption_chinh if i == 0 else ""
-                            fig_tex = "\\begin{figure}[H]\n\\centering\n"
-                            fig_tex += f"  \\includegraphics[width=\\columnwidth,height=0.4\\textheight,keepaspectratio]{{{img_path}}}\n"
-                            fig_tex += f"  \\caption{{{cap}}}\n"
-                            fig_tex += f"  \\label{{fig:img_{self.dem_anh}}}\n"
-                            fig_tex += "\\end{figure}\n\n"
                             seen_figure_paths.add(img_path)
-                            self.ir["body"].append({"type": "paragraph", "text": fig_tex})
+                            fig_tex += (
+                                f"  \\includegraphics[width=\\columnwidth,height=0.4\\textheight,"
+                                f"keepaspectratio]{{{img_path}}}\n"
+                            )
+                        fig_tex += f"  \\caption{{{caption_chinh or ''}}}\n"
+                        fig_tex += f"  \\label{{fig:img_{self.dem_anh}}}\n"
+                        fig_tex += "\\end{figure}\n\n"
+                        self.ir["body"].append({"type": "paragraph", "text": fig_tex})
                     else:
                         # Regular data table — with caption from look-behind
                         caption = self._bat_caption_bang(elements, idx, used_nodes)
@@ -1415,6 +1420,23 @@ class WordASTParser:
                 
         traverse_node(p._p)
         text = text.strip()
+        
+        # Merge multiple figures inside the same paragraph into a single figure block
+        # This handles paragraphs with several inline images that each got their own
+        # \begin{figure}...\end{figure} — collapse them into one grouped figure.
+        if '\\includegraphics' in text and text.count('\\begin{figure}') > 1:
+            try:
+                # Remove empty-caption intermediate figure boundaries to merge images
+                merge_pattern = (
+                    r'\\caption\{\}\n\\label\{[a-zA-Z0-9:_]+\}\n\\end\{figure\}\n\n'
+                    r'\\begin\{figure\}\[H\]\n\\centering\n'
+                )
+                prev = None
+                while prev != text:
+                    prev = text
+                    text = re.sub(merge_pattern, '\n', text)
+            except Exception:
+                pass
 
         # Heuristics for headings
         if not level:

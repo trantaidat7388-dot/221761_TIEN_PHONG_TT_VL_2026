@@ -570,25 +570,33 @@ class IEEEWordRenderer:
         anchor_p._p.addprevious(tbl_xml) # insert before anchor
         
     def _insert_figure_before(self, anchor_p, fig_data: Dict[str, Any]):
+        caption = fig_data.get('caption', '')
+        # Skip orphan figures with no images and no caption
+        paths = fig_data.get("paths") or []
+        if not paths and fig_data.get("path"):
+            paths = [fig_data.get("path")]
+        if not paths and not caption:
+            return
+
         label = f"Fig. {self._heading_counters_figure}"
         self._heading_counters_figure += 1
-        
-        p = anchor_p.insert_paragraph_before()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        # Insert image
-        img_path = self._resolve_image_path(fig_data.get("path", ""))
-        if img_path:
-            run = p.add_run()
-            try:
-                run.add_picture(img_path, width=Inches(3.0))
-            except Exception:
-                pass
-                
+
+        # Insert each image in its own centered paragraph
+        for path in paths:
+            p = anchor_p.insert_paragraph_before()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            img_path = self._resolve_image_path(path)
+            if img_path:
+                run = p.add_run()
+                try:
+                    run.add_picture(str(img_path), width=Inches(3.0))
+                except Exception:
+                    pass
+
         # Caption below figure
         cap_p = anchor_p.insert_paragraph_before()
         cap_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        cap_run = cap_p.add_run(f"{label}. {fig_data.get('caption', '')}")
+        cap_run = cap_p.add_run(f"{label}. {caption}")
         cap_run.font.name = "Times New Roman"
         cap_run.font.size = Pt(8)
 
@@ -638,15 +646,24 @@ class IEEEWordRenderer:
                             yield p
 
     def _extract_figures_from_text(self, text: str) -> Tuple[str, List[Dict[str, str]]]:
-        """Extracts figure references from text. Supports both \begin{figure} and \begin{figure*}."""
+        """Extracts figure references from text. Supports both \begin{figure} and \begin{figure*}.
+        
+        Now extracts ALL \includegraphics paths per figure block, enabling
+        multi-image figure groups (e.g. from Springer table layouts).
+        """
         figures = []
-        # Updated pattern: allow figure or figure*
-        pattern = r'\\begin\{figure\*?\}.*?\\includegraphics(?:\[.*?\])?\{(.*?)\}.*?\\caption\{(.*?)\}.*?\\end\{figure\*?\}'
+        pattern = r'\\begin\{figure\*?\}.*?\\end\{figure\*?\}'
         for match in re.finditer(pattern, text, re.DOTALL):
-            figures.append({
-                "path": match.group(1),
-                "caption": match.group(2).strip()
-            })
+            block = match.group(0)
+            paths = _FIG_PATH_RE.findall(block)
+            cap_match = _CAPTION_RE.search(block)
+            caption = cap_match.group(1).strip() if cap_match else ""
+            if paths or caption:
+                figures.append({
+                    "paths": paths,
+                    "path": paths[0] if paths else "",
+                    "caption": caption,
+                })
         clean_text = re.sub(pattern, '', text, flags=re.DOTALL).strip()
         return clean_text, list(figures)
 
@@ -844,8 +861,27 @@ class IEEEWordRenderer:
                 if i < len(block_lines) - 1:
                     run.add_break(WD_BREAK.LINE)
 
-        # Hide borders
+        # Hide borders correctly at both the table level and cell level
         try:
+            # 1. Table level
+            tbl = table._tbl
+            tblPr = tbl.tblPr
+            if tblPr is None:
+                tblPr = OxmlElement('w:tblPr')
+                tbl.append(tblPr)
+            tblBorders = OxmlElement('w:tblBorders')
+            for border_name in ["top", "left", "bottom", "right", "insideH", "insideV"]:
+                edge = OxmlElement(f"w:{border_name}")
+                edge.set(qn("w:val"), "nil")
+                tblBorders.append(edge)
+            
+            existing_borders = tblPr.xpath('w:tblBorders')
+            if existing_borders:
+                tblPr.replace(existing_borders[0], tblBorders)
+            else:
+                tblPr.append(tblBorders)
+                
+            # 2. Cell level
             for row in table.rows:
                 for cell in row.cells:
                     tc = cell._tc
@@ -855,7 +891,12 @@ class IEEEWordRenderer:
                         edge = OxmlElement(f"w:{border_name}")
                         edge.set(qn("w:val"), "nil")
                         tc_borders.append(edge)
-                    tc_pr.append(tc_borders)
+                    
+                    existing_tc_borders = tc_pr.xpath('w:tcBorders')
+                    if existing_tc_borders:
+                        tc_pr.replace(existing_tc_borders[0], tc_borders)
+                    else:
+                        tc_pr.append(tc_borders)
         except Exception:
             pass
 
@@ -956,9 +997,16 @@ class IEEEWordRenderer:
                 if "\\begin{figure" in raw_text or _FIG_PATH_RE.search(raw_text):
                     text_without_fig, figures = self._extract_figures_from_text(raw_text)
                     for fig in figures:
+                        # Rebuild figure text with ALL image paths for multi-image support
+                        all_paths = fig.get('paths') or []
+                        if not all_paths and fig.get('path'):
+                            all_paths = [fig.get('path')]
+                        includes = "".join(
+                            f"\\includegraphics{{{p}}}" for p in all_paths
+                        )
                         fig_tex = (
                             "\\begin{figure}[H]"
-                            f"\\includegraphics{{{fig.get('path', '')}}}"
+                            f"{includes}"
                             f"\\caption{{{fig.get('caption', '')}}}"
                             "\\end{figure}"
                         )
@@ -1160,31 +1208,39 @@ class IEEEWordRenderer:
         doc.add_paragraph("")  # spacing after table
 
     def _add_figure_node(self, doc: Document, latex_figure_text: str) -> None:
-        """Insert a figure (image + caption) from LaTeX IR text."""
+        """Insert a figure (image + caption) from LaTeX IR text.
+        
+        Supports multi-image figure blocks: all \includegraphics in the
+        same \begin{figure} block are rendered under one shared caption.
+        """
         self._figure_index += 1
 
-        # Extract path and caption from LaTeX
-        path_match = _FIG_PATH_RE.search(latex_figure_text)
+        # Extract ALL paths and caption from LaTeX
+        image_paths = [self._latex_to_plain(p) for p in _FIG_PATH_RE.findall(latex_figure_text) if p]
         cap_match = _CAPTION_RE.search(latex_figure_text)
-        image_path = self._latex_to_plain(path_match.group(1)) if path_match else ""
         caption = self._normalize_figure_caption(self._latex_to_plain(cap_match.group(1)) if cap_match else "")
 
-        # Try to insert actual image
+        # Skip orphan figures with no images and no caption
+        if not image_paths and not caption:
+            self._figure_index -= 1  # don't waste a figure number
+            return
+
+        # Try to insert actual images
         image_inserted = False
-        resolved = self._resolve_image_path(image_path)
-        if resolved and resolved.exists():
-            try:
-                pic_para = doc.add_paragraph()
-                pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                pic_para.paragraph_format.space_before = Pt(6)
-                pic_para.paragraph_format.space_after = Pt(4)
-                pic_para.paragraph_format.line_spacing = _IEEE_CAPTION_LINE_SPACING
-                # Calculate column width dynamically if possible
-                col_width = self._get_current_column_width_inch(doc)
-                pic_para.add_run().add_picture(str(resolved), width=Inches(col_width))
-                image_inserted = True
-            except Exception:
-                pass
+        col_width = self._get_current_column_width_inch(doc)
+        for idx, image_path in enumerate(image_paths):
+            resolved = self._resolve_image_path(image_path)
+            if resolved and resolved.exists():
+                try:
+                    pic_para = doc.add_paragraph()
+                    pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    pic_para.paragraph_format.space_before = Pt(6 if idx == 0 else 2)
+                    pic_para.paragraph_format.space_after = Pt(4)
+                    pic_para.paragraph_format.line_spacing = _IEEE_CAPTION_LINE_SPACING
+                    pic_para.add_run().add_picture(str(resolved), width=Inches(col_width))
+                    image_inserted = True
+                except Exception:
+                    pass
 
         # IEEE figure caption below image: "Fig. 1. Caption text"
         if caption:
@@ -1208,12 +1264,13 @@ class IEEEWordRenderer:
         run_cap.font.name = "Times New Roman"
         run_cap.font.size = Pt(8)
 
-        if image_path and not image_inserted:
-            fallback = doc.add_paragraph(f"[Image: {image_path}]")
-            fallback.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            for run in fallback.runs:
-                run.font.size = Pt(8)
-                run.italic = True
+        if image_paths and not image_inserted:
+            for image_path in image_paths:
+                fallback = doc.add_paragraph(f"[Image: {image_path}]")
+                fallback.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in fallback.runs:
+                    run.font.size = Pt(8)
+                    run.italic = True
 
     def _add_equation_node(self, doc: Document, raw_text: str) -> None:
         """Render an equation node as centered OMML or stylized text."""
@@ -2088,7 +2145,8 @@ class IEEEWordRenderer:
     def _normalize_figure_caption(self, caption: str) -> str:
         text = (caption or "").strip()
         original = text
-        text = re.sub(r"^Fig(?:ure)?\.?\s*\d+\.?\s*", "", text, flags=re.IGNORECASE)
+        # Also normalize "Pig." typo (common OCR/translation error) to proper "Fig."
+        text = re.sub(r"^(?:Fig(?:ure)?|Pig)\.?\s*\d+\.?\s*", "", text, flags=re.IGNORECASE)
         normalized = text.strip(" .:-")
         if original and normalized != original:
             self._render_metrics["figure_caption_normalized"] += 1
