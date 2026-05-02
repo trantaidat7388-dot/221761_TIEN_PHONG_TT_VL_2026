@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 
 from .. import models, auth
 from ..database import lay_db
-from ..config import NAME_WEB, APP_ENV
+from ..config import NAME_WEB, APP_ENV, TOPUP_PACKAGES, PREMIUM_PACKAGES
 from ..services.sepay_sync import encode_payment_id, check_payment_status
 
 router = APIRouter(prefix="/api/payment", tags=["Payment"])
@@ -20,8 +20,22 @@ def tao_payment(req: YeuCauTaoPayment, db: Session = Depends(lay_db), current_us
     if req.amount_vnd < 10000:
         raise HTTPException(status_code=400, detail="Số tiền nạp tối thiểu là 10,000 VNĐ")
 
-    # Tỷ lệ: 100 VND = 1 Token
-    token_amount = req.amount_vnd // 100
+    # Xác định số token dựa trên gói
+    if req.plan_key:
+        # Combo Premium: lấy token_bonus từ config
+        plan = PREMIUM_PACKAGES.get(req.plan_key)
+        if not plan:
+            raise HTTPException(status_code=400, detail=f"Gói Premium '{req.plan_key}' không tồn tại")
+        token_amount = plan.get("token_bonus", 0)
+    else:
+        # Nạp lẻ: chỉ chấp nhận mệnh giá trong TOPUP_PACKAGES
+        token_amount = TOPUP_PACKAGES.get(req.amount_vnd)
+        if token_amount is None:
+            valid_amounts = ', '.join(f"{a:,}đ" for a in sorted(TOPUP_PACKAGES.keys()))
+            raise HTTPException(
+                status_code=400,
+                detail=f"Mệnh giá {req.amount_vnd:,}đ không hợp lệ. Chỉ chấp nhận: {valid_amounts}"
+            )
 
     payment = models.Payment(
         user_id=current_user.id,
@@ -176,3 +190,78 @@ def xac_nhan_thanh_toan_thu_cong_dev(
         "token_nhan": payment.token_amount,
         "thong_bao": f"Nạp dev thành công{thong_bao_extra}"
     }
+
+
+@router.post("/webhook/sepay")
+async def sepay_webhook(request: Request, db: Session = Depends(lay_db)):
+    """
+    Webhook endpoint nhận thông báo giao dịch từ SePay.
+    Tài liệu: https://docs.sepay.vn/tich-hop-webhook.html
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return {"status": "error", "message": "Invalid JSON"}
+
+    # Lấy nội dung chuyển khoản
+    content = data.get("transaction_content", data.get("content", ""))
+    amount_in = data.get("amount_in", 0)
+    sepay_tx_id = data.get("id")
+
+    if not content or amount_in <= 0:
+        return {"status": "ignored", "message": "Missing content or amount"}
+
+    # Tìm payment_id từ nội dung
+    from ..services.sepay_sync import extract_payment_id_from_content
+    payment_id = extract_payment_id_from_content(content)
+    
+    if not payment_id:
+        return {"status": "ignored", "message": "No payment_id found in content"}
+
+    # Tìm payment trong DB
+    payment = db.query(models.Payment).filter(models.Payment.id == payment_id).first()
+    if not payment:
+        return {"status": "error", "message": "Payment not found"}
+
+    if payment.status == "completed":
+        return {"status": "success", "message": "Already completed"}
+
+    if amount_in < payment.amount_vnd:
+        return {"status": "error", "message": "Insufficient amount"}
+
+    # Cập nhật trạng thái
+    payment.status = "completed"
+    payment.updated_at = datetime.utcnow()
+    
+    # Cộng token cho user
+    user = db.query(models.User).filter(models.User.id == payment.user_id).first()
+    if user:
+        user.token_balance += payment.token_amount
+        
+        # Xử lý Premium Combo
+        if payment.plan_key:
+            from ..config import PREMIUM_PACKAGES
+            plan = PREMIUM_PACKAGES.get(payment.plan_key)
+            if plan:
+                so_ngay = plan.get("so_ngay", 30)
+                now = datetime.utcnow()
+                if user.plan_type == "premium" and user.premium_expires_at and user.premium_expires_at > now:
+                    base_time = user.premium_expires_at
+                else:
+                    base_time = now
+                    user.premium_started_at = now
+                
+                user.plan_type = "premium"
+                user.premium_expires_at = base_time + timedelta(days=so_ngay)
+
+        # Ghi ledger
+        db.add(models.TokenLedger(
+            user_id=user.id,
+            delta_token=payment.token_amount,
+            balance_after=user.token_balance,
+            reason=f"nạp combo {payment.plan_key} (webhook)" if payment.plan_key else "nạp token sepay (webhook)",
+            meta_json=f"sepay_tx={sepay_tx_id}"
+        ))
+
+    db.commit()
+    return {"status": "success", "message": "Payment completed via webhook"}

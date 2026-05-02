@@ -519,6 +519,18 @@ export const capNhatPremiumNguoiDungAdmin = async (userId, enabled, soNgay = 30)
   }
 }
 
+export const capNhatTrangThaiNguoiDungAdmin = async (userId, isActive) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/${userId}/status`, { method: 'PATCH', headers: { ...taoHeaderXacThuc(), 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: isActive }) })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) { const msg = await docLoiJsonTuResponse(response); throw new Error(msg) }
+    const data = await response.json()
+    return { thanhCong: true, user: data.user }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
 export const congTokenNguoiDungAdmin = async (userId, amount, reason = '') => {
   try {
     const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/${userId}/token/grant`, { method: 'POST', headers: { ...taoHeaderXacThuc(), 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, reason }) })
@@ -707,6 +719,18 @@ export const xacNhanPaymentThuCongAdmin = async (paymentId) => {
     if (!response.ok) { const msg = await docLoiJsonTuResponse(response); throw new Error(msg) }
     const data = await response.json()
     return { thanhCong: true, data }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const dongBoSePayAdmin = async () => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/sync-payments`, { method: 'POST', headers: taoHeaderXacThuc() })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) { const msg = await docLoiJsonTuResponse(response); throw new Error(msg) }
+    const data = await response.json()
+    return { thanhCong: true, count: data.synced_count }
   } catch (error) {
     return { thanhCong: false, loiMessage: error.message }
   }

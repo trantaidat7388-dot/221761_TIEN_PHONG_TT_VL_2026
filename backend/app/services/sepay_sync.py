@@ -59,3 +59,14 @@ def check_payment_status(payment_id: int, expected_amount_vnd: int) -> tuple[boo
                 return True, str(tx.get('id'))
 
     return False, ""
+    
+
+def extract_payment_id_from_content(content: str) -> int:
+    """Trích xuất ID hóa đơn từ nội dung chuyển khoản."""
+    prefix = re.escape(NAME_WEB) + r"\s*NAPTOKEN"
+    pattern = rf"{prefix}([A-Fa-f0-9]+)"
+    match = re.search(pattern, content, re.IGNORECASE)
+    if match:
+        hex_id = match.group(1).upper()
+        return decode_payment_id(hex_id)
+    return 0

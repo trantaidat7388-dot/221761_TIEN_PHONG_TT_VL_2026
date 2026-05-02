@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
-import { Search, Eye, Trash2, UserPlus, Crown, Shield, Coins, Users, Filter, ChevronRight, X, Plus, Minus, Star, Mail, Calendar, Hash, Activity } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { Search, Eye, Trash2, UserPlus, Crown, Shield, Coins, Users, Filter, ChevronRight, X, Plus, Minus, Star, Mail, Calendar, Hash, Activity, Download, RefreshCw, AlertCircle, Lock, Unlock } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { avatarChars, fmtDate } from '../utils/formatters';
 import {
@@ -11,6 +12,7 @@ import {
   layLichSuTheoNguoiDungAdmin,
   layTokenLedgerTheoNguoiDungAdmin,
   xoaBanGhiLichSuAdmin,
+  capNhatTrangThaiNguoiDungAdmin,
 } from '../../../services/api';
 
 const FILTERS = [
@@ -65,6 +67,13 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu }) => {
     setTimeout(() => setSelectedUser(null), 300);
   };
 
+  // ── MODAL STATES ──────────────────────────────────────────────────────────
+  const [tokenModal, setTokenModal] = useState({ open: false, user: null, mode: 'grant', amount: '', reason: '' });
+  const [premiumModal, setPremiumModal] = useState({ open: false, user: null, soNgay: '30' });
+
+  const moTokenModal = (user, mode) => setTokenModal({ open: true, user, mode, amount: '', reason: '' });
+  const moPremiumModal = (user) => setPremiumModal({ open: true, user, soNgay: '30' });
+
   // ── ACTIONS ───────────────────────────────────────────────────────────────
   const xuLyDoiVaiTro = async (userId, role) => {
     const kq = await capNhatVaiTroNguoiDungAdmin(userId, role);
@@ -73,42 +82,47 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu }) => {
     taiDuLieu();
   };
 
-  const xuLyCapNhatPremium = async (userId, enabled) => {
-    const soNgayRaw = enabled ? window.prompt('Nhập số ngày premium (mặc định 30):', '30') : '0';
-    if (enabled && soNgayRaw === null) return;
-    const soNgay = Number(soNgayRaw || 30);
-    const kq = await capNhatPremiumNguoiDungAdmin(userId, enabled, Number.isFinite(soNgay) ? soNgay : 30);
+  const xuLyTokenModal = async () => {
+    const { user, mode, amount: rawAmt, reason } = tokenModal;
+    const amount = Math.floor(Number(rawAmt));
+    if (!Number.isFinite(amount) || amount <= 0) { toast.error('Số token phải > 0'); return; }
+    const ly_do = reason || (mode === 'grant' ? 'Admin cộng token' : 'Admin trừ token');
+    const fn = mode === 'grant' ? congTokenNguoiDungAdmin : truTokenNguoiDungAdmin;
+    const kq = await fn(user.id, amount, ly_do);
     if (!kq.thanhCong) { toast.error(kq.loiMessage); return; }
-    toast.success('Đã cập nhật premium');
+    toast.success(mode === 'grant' ? `+${amount} token` : `-${amount} token`);
+    setTokenModal(p => ({ ...p, open: false }));
     taiDuLieu();
+    if (selectedUser?.id === user.id) moChiTiet(selectedUser);
   };
 
-  const xuLyCongToken = async (userId) => {
-    const raw = window.prompt('Nhập số token muốn cộng:', '500');
-    if (raw === null) return;
-    const amount = Number(raw);
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    const kq = await congTokenNguoiDungAdmin(userId, Math.floor(amount), 'Admin grant from dashboard');
+  const xuLyPremiumModal = async (enabled, overrideUser = null) => {
+    const user = overrideUser || premiumModal.user;
+    if (!user) return;
+    const { soNgay: raw } = premiumModal;
+    const soNgay = Number(raw || 30);
+    if (enabled && (!Number.isFinite(soNgay) || soNgay < 1)) { toast.error('Số ngày >= 1'); return; }
+    if (!enabled && !window.confirm(`Hạ Premium cho người dùng ${user.username}?`)) return;
+    const kq = await capNhatPremiumNguoiDungAdmin(user.id, enabled, enabled ? soNgay : 0);
     if (!kq.thanhCong) { toast.error(kq.loiMessage); return; }
-    toast.success('Đã cộng token');
+    toast.success(enabled ? `Premium ${soNgay} ngày cho ${user.username}` : `Đã hạ Premium cho ${user.username}`);
+    setPremiumModal(p => ({ ...p, open: false }));
     taiDuLieu();
-    if (selectedUser?.id === userId) moChiTiet(selectedUser);
+    if (selectedUser?.id === user.id) setSelectedUser({ ...selectedUser, plan_type: enabled ? 'premium' : 'free' });
   };
 
-  const xuLyTruToken = async (userId) => {
-    const raw = window.prompt('Nhập số token muốn trừ:', '100');
-    if (raw === null) return;
-    const amount = Number(raw);
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    const kq = await truTokenNguoiDungAdmin(userId, Math.floor(amount), 'Admin deduct from dashboard');
+  const xuLyDoiTrangThai = async (user) => {
+    const newStatus = !user.is_active;
+    if (!window.confirm(`Bạn có chắc muốn ${newStatus ? 'Mở khóa' : 'Khóa'} tài khoản ${user.username}?`)) return;
+    const kq = await capNhatTrangThaiNguoiDungAdmin(user.id, newStatus);
     if (!kq.thanhCong) { toast.error(kq.loiMessage); return; }
-    toast.success('Đã trừ token');
+    toast.success(`${newStatus ? 'Đã mở khóa' : 'Đã khóa'} tài khoản`);
     taiDuLieu();
-    if (selectedUser?.id === userId) moChiTiet(selectedUser);
+    if (selectedUser?.id === user.id) setSelectedUser({ ...selectedUser, is_active: newStatus });
   };
 
   const xuLyXoaNguoiDung = async (userId) => {
-    if (!window.confirm('Bạn có chắc muốn xóa người dùng này? Hành động không thể hoàn tác.')) return;
+    if (!window.confirm('Bạn có chắc muốn xóa người dùng này?')) return;
     const kq = await xoaNguoiDungAdmin(userId);
     if (!kq.thanhCong) { toast.error(kq.loiMessage); return; }
     toast.success('Đã xóa người dùng');
@@ -129,9 +143,9 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu }) => {
 
       {/* ── STAT CARDS ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatMini icon={Users} label="Tổng người dùng" value={stats.total} color="text-cyan-400 bg-cyan-500/10" />
+        <StatMini icon={Users} label="Tổng người dùng" value={stats.total} color="text-purple-400 bg-purple-500/10" />
         <StatMini icon={Crown} label="Premium" value={stats.premium} color="text-amber-400 bg-amber-500/10" />
-        <StatMini icon={Shield} label="Quản trị viên" value={stats.admin} color="text-emerald-400 bg-emerald-500/10" />
+        <StatMini icon={Shield} label="Quản trị viên" value={stats.admin} color="text-fuchsia-400 bg-fuchsia-500/10" />
         <StatMini icon={Coins} label="Tổng Token" value={new Intl.NumberFormat('vi-VN').format(stats.totalTokens)} color="text-violet-400 bg-violet-500/10" />
       </div>
 
@@ -165,6 +179,51 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu }) => {
           ))}
         </div>
         <span className="text-xs text-slate-500">{danhSachDaLoc.length}/{danhSachNguoiDung.length}</span>
+        
+        <button
+          onClick={() => {
+            const headers = ['ID', 'Username', 'Email', 'Role', 'Plan', 'Tokens', 'Conversions', 'Created At'];
+            const rows = danhSachDaLoc.map(u => [
+              u.id,
+              u.username,
+              u.email,
+              u.role,
+              u.plan_type,
+              u.token_balance,
+              u.so_lan_chuyen_doi,
+              u.created_at
+            ]);
+            const csvContent = [headers, ...rows].map(e => e.join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `danh_sach_nguoi_dung_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            toast.success('Đã xuất danh sách CSV');
+          }}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-white hover:bg-white/10 transition-all"
+        >
+          <Download className="w-4 h-4" />
+          Xuất CSV
+        </button>
+
+        <button
+          onClick={() => {
+            toast.promise(taiDuLieu(), {
+              loading: 'Đang làm mới dữ liệu...',
+              success: 'Đã cập nhật dữ liệu mới nhất',
+              error: 'Lỗi khi làm mới dữ liệu'
+            });
+          }}
+          className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+          title="Làm mới toàn bộ"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
       </div>
 
       {/* ── USERS TABLE (Full-width) ───────────────────────────────────────── */}
@@ -193,10 +252,24 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu }) => {
                 >
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary-500/20 to-violet-500/20 border border-primary-500/20 text-xs font-bold text-primary-300 shrink-0">
+                      {u.photo_url ? (
+                        <img 
+                          src={u.photo_url} 
+                          alt={u.username} 
+                          referrerPolicy="no-referrer"
+                          className="h-9 w-9 rounded-full object-cover border border-white/10 shadow-sm"
+                          onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                        />
+                      ) : null}
+                      <div className={`flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary-500/20 to-violet-500/20 border border-primary-500/20 text-xs font-bold text-primary-300 shrink-0 ${u.photo_url ? 'hidden' : 'flex'}`}>
                         {avatarChars(u)}
                       </div>
-                      <span className="font-medium truncate max-w-[180px]">{u.username}</span>
+                      <span className={`font-medium truncate max-w-[180px] ${u.is_active === false ? 'text-white/40 line-through' : ''}`}>{u.username}</span>
+                      {u.is_active === false && (
+                        <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-400 border border-red-500/20">
+                          <Lock className="w-2.5 h-2.5" /> Khóa
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="py-3 px-3 text-slate-400 truncate max-w-[200px]" title={u.email}>{u.email}</td>
@@ -225,13 +298,19 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu }) => {
                   <td className="py-3 px-3 text-right text-white/60">{u.so_lan_chuyen_doi || 0}</td>
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
-                      <ActionBtn icon={Plus} title="Cộng token" color="text-emerald-400 hover:bg-emerald-500/10" onClick={() => xuLyCongToken(u.id)} />
-                      <ActionBtn icon={Minus} title="Trừ token" color="text-amber-400 hover:bg-amber-500/10" onClick={() => xuLyTruToken(u.id)} />
+                      <ActionBtn icon={Plus} title="Cộng token" color="text-purple-400 hover:bg-purple-500/10" onClick={() => moTokenModal(u, 'grant')} />
+                      <ActionBtn icon={Minus} title="Trừ token" color="text-amber-400 hover:bg-amber-500/10" onClick={() => moTokenModal(u, 'deduct')} />
                       <ActionBtn
                         icon={Crown}
                         title={u.plan_type === 'premium' ? 'Hạ Premium' : 'Nâng Premium'}
                         color={u.plan_type === 'premium' ? 'text-amber-400 hover:bg-amber-500/10' : 'text-slate-400 hover:bg-white/5'}
-                        onClick={() => xuLyCapNhatPremium(u.id, u.plan_type !== 'premium')}
+                        onClick={() => u.plan_type === 'premium' ? xuLyPremiumModal(false, u) : moPremiumModal(u)}
+                      />
+                      <ActionBtn 
+                        icon={u.is_active !== false ? Lock : Unlock} 
+                        title={u.is_active !== false ? 'Khóa tài khoản' : 'Mở khóa tài khoản'} 
+                        color={u.is_active !== false ? 'text-slate-400 hover:bg-red-500/10 hover:text-red-400' : 'text-red-400 hover:bg-emerald-500/10 hover:text-emerald-400'} 
+                        onClick={() => xuLyDoiTrangThai(u)} 
                       />
                       <ActionBtn icon={Trash2} title="Xóa" color="text-red-400/60 hover:bg-red-500/10 hover:text-red-400" onClick={() => xuLyXoaNguoiDung(u.id)} />
                     </div>
@@ -259,12 +338,21 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu }) => {
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-primary-500/30 to-violet-500/30 border border-primary-500/20 text-sm font-bold text-primary-300">
-                  {avatarChars(selectedUser)}
-                </div>
+                {selectedUser.photo_url ? (
+                  <img 
+                    src={selectedUser.photo_url} 
+                    alt={selectedUser.username} 
+                    referrerPolicy="no-referrer"
+                    className="h-12 w-12 rounded-full object-cover border border-primary-500/20 shadow-lg"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-primary-500/30 to-violet-500/30 border border-primary-500/20 text-sm font-bold text-primary-300">
+                    {avatarChars(selectedUser)}
+                  </div>
+                )}
                 <div>
-                  <p className="font-bold text-white text-lg">{selectedUser.username}</p>
-                  <p className="text-xs text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" />{selectedUser.email}</p>
+                  <p className="font-bold text-white text-lg leading-tight">{selectedUser.username}</p>
+                  <p className="text-xs text-slate-400 flex items-center gap-1 mt-1"><Mail className="w-3 h-3" />{selectedUser.email}</p>
                 </div>
               </div>
               <button onClick={dongDrawer} className="p-2 rounded-lg text-slate-500 hover:bg-white/5 hover:text-white transition">
@@ -273,21 +361,33 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu }) => {
             </div>
 
             {/* User Info Cards */}
-            <div className="px-6 py-4 grid grid-cols-3 gap-3">
+            <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
               <InfoCard label="Vai trò" value={selectedUser.role || 'user'} icon={Shield} />
-              <InfoCard label="Gói" value={selectedUser.plan_type || 'free'} icon={Crown} highlight={selectedUser.plan_type === 'premium'} />
+              <InfoCard 
+                label="Gói" 
+                value={selectedUser.plan_type === 'premium' ? (selectedUser.premium_expires_at ? `Premium (${fmtDate(selectedUser.premium_expires_at)})` : 'Premium') : 'Free'} 
+                icon={Crown} 
+                highlight={selectedUser.plan_type === 'premium'} 
+              />
               <InfoCard label="Token" value={selectedUser.token_balance ?? 0} icon={Coins} />
+              <InfoCard label="Sức chứa" value={`~${((selectedUser.token_balance || 0) * 1000).toLocaleString()} từ`} icon={Hash} />
             </div>
 
             {/* Quick Actions */}
             <div className="px-6 pb-4 flex flex-wrap gap-2">
-              <QuickAction label="Cộng token" icon={Plus} color="bg-emerald-500/10 text-emerald-400 border-emerald-500/20" onClick={() => xuLyCongToken(selectedUser.id)} />
-              <QuickAction label="Trừ token" icon={Minus} color="bg-red-500/10 text-red-400 border-red-500/20" onClick={() => xuLyTruToken(selectedUser.id)} />
+              <QuickAction label="Cộng token" icon={Plus} color="bg-purple-500/10 text-purple-400 border-purple-500/20" onClick={() => moTokenModal(selectedUser, 'grant')} />
+              <QuickAction label="Trừ token" icon={Minus} color="bg-red-500/10 text-red-400 border-red-500/20" onClick={() => moTokenModal(selectedUser, 'deduct')} />
               <QuickAction
                 label={selectedUser.plan_type === 'premium' ? 'Hạ Premium' : 'Nâng Premium'}
                 icon={Crown}
                 color="bg-amber-500/10 text-amber-400 border-amber-500/20"
-                onClick={() => xuLyCapNhatPremium(selectedUser.id, selectedUser.plan_type !== 'premium')}
+                onClick={() => selectedUser.plan_type === 'premium' ? xuLyPremiumModal(false, selectedUser) : moPremiumModal(selectedUser)}
+              />
+              <QuickAction 
+                label={selectedUser.is_active !== false ? 'Khóa tài khoản' : 'Mở khóa'} 
+                icon={selectedUser.is_active !== false ? Lock : Unlock} 
+                color={selectedUser.is_active !== false ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'} 
+                onClick={() => xuLyDoiTrangThai(selectedUser)} 
               />
               <QuickAction label="Xóa tài khoản" icon={Trash2} color="bg-red-500/10 text-red-400 border-red-500/20" onClick={() => xuLyXoaNguoiDung(selectedUser.id)} />
             </div>
@@ -308,7 +408,7 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu }) => {
                 <div key={item.id} className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.03]">
                   <p className="text-sm text-white font-medium">{item.reason}</p>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className={`text-xs font-bold ${item.delta_token >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <span className={`text-xs font-bold ${item.delta_token >= 0 ? 'text-purple-400' : 'text-red-400'}`}>
                       {item.delta_token >= 0 ? '+' : ''}{item.delta_token}
                     </span>
                     <span className="text-[11px] text-slate-500">→ Số dư: {item.balance_after}</span>
@@ -319,6 +419,126 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu }) => {
           </div>
         )}
       </div>
+
+      {/* ── TOKEN MODAL ────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {tokenModal.open && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              onClick={() => setTokenModal(p => ({ ...p, open: false }))}
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-sm bg-slate-900 border border-white/10 rounded-3xl shadow-2xl p-6 space-y-5"
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl ${tokenModal.mode === 'grant' ? 'bg-purple-500/10' : 'bg-red-500/10'}`}>
+                    {tokenModal.mode === 'grant' ? <Plus className="w-5 h-5 text-purple-400" /> : <Minus className="w-5 h-5 text-red-400" />}
+                  </div>
+                  <div>
+                    <h3 className="text-white font-bold text-lg leading-tight">
+                      {tokenModal.mode === 'grant' ? 'Cộng Token' : 'Trừ Token'}
+                    </h3>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Quản lý số dư</p>
+                  </div>
+                </div>
+                <button onClick={() => setTokenModal(p => ({ ...p, open: false }))} className="p-2 rounded-full text-slate-500 hover:bg-white/5 hover:text-white transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/[0.03] border border-white/5">
+                <div className="h-10 w-10 rounded-full bg-primary-500/20 flex items-center justify-center text-primary-300 font-bold text-xs">
+                  {avatarChars(tokenModal.user)}
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Người nhận</p>
+                  <p className="text-sm font-bold text-white">{tokenModal.user?.username}</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2 block">Số lượng Token</label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    min="1" 
+                    value={tokenModal.amount} 
+                    onChange={e => setTokenModal(p => ({ ...p, amount: e.target.value }))} 
+                    placeholder="0" 
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white text-2xl font-black focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 focus:outline-none transition-all placeholder:text-white/10" 
+                  />
+                  <div className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">TK</div>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {[100, 500, 1000, 5000].map(v => (
+                    <button key={v} onClick={() => setTokenModal(p => ({ ...p, amount: String(v) }))} className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition-all">+{v}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2 block">Lý do điều chỉnh</label>
+                <input 
+                  type="text" 
+                  value={tokenModal.reason} 
+                  onChange={e => setTokenModal(p => ({ ...p, reason: e.target.value }))} 
+                  placeholder="VD: Khuyến mãi thành viên mới..." 
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white focus:border-primary-500 focus:outline-none transition-all" 
+                />
+              </div>
+
+              <button 
+                onClick={xuLyTokenModal} 
+                className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-xl transition-all active:scale-[0.98] ${
+                  tokenModal.mode === 'grant' 
+                    ? 'bg-gradient-to-r from-purple-600 to-purple-500 shadow-purple-500/20 hover:from-purple-500 hover:to-purple-400' 
+                    : 'bg-gradient-to-r from-red-600 to-red-500 shadow-red-500/20 hover:from-red-500 hover:to-red-400'
+                }`}
+              >
+                Xác nhận {tokenModal.mode === 'grant' ? 'cộng' : 'trừ'} ngay
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── PREMIUM MODAL ──────────────────────────────────────────────────── */}
+      {premiumModal.open && (
+        <>
+          <div className="fixed inset-0 bg-black/60 z-[60]" onClick={() => setPremiumModal(p => ({ ...p, open: false }))} />
+          <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-slate-950 border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                  <Crown className="w-5 h-5 text-amber-400" /> Nâng Premium
+                </h3>
+                <button onClick={() => setPremiumModal(p => ({ ...p, open: false }))} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
+              </div>
+              <p className="text-xs text-slate-400">Cho: <strong className="text-white">{premiumModal.user?.username}</strong></p>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Số ngày Premium</label>
+                <input type="number" min="1" value={premiumModal.soNgay} onChange={e => setPremiumModal(p => ({ ...p, soNgay: e.target.value }))} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-lg font-bold focus:border-amber-500 focus:outline-none" />
+                <div className="flex gap-2 mt-2">
+                  {[7, 30, 90, 365].map(d => (
+                    <button key={d} onClick={() => setPremiumModal(p => ({ ...p, soNgay: String(d) }))} className={`px-4 py-2 rounded-lg border text-xs font-semibold transition ${premiumModal.soNgay === String(d) ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}>{d} ngày</button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => xuLyPremiumModal(true)} className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-500 font-bold text-white transition">
+                Kích hoạt Premium
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

@@ -469,35 +469,43 @@ class SpringerWordRenderer(IEEEWordRenderer):
         anchor_p._p.addprevious(tbl_xml)
 
     def _insert_springer_figure_before(self, doc: Document, anchor_p, latex_figure_text: str) -> None:
-        self._figure_index += 1
-        path_match = re.search(r"\\includegraphics(?:\[[^\]]*\])?\{([^\}]+)\}", latex_figure_text)
-        cap_match = re.search(r"\\caption\{([^\}]*)\}", latex_figure_text)
-        image_path = self._latex_to_plain(path_match.group(1)) if path_match else ""
+        paths = re.findall(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", latex_figure_text)
+        cap_match = re.search(r"\\caption\{([^}]*)\}", latex_figure_text)
         caption = self._normalize_springer_caption(
             self._latex_to_plain(cap_match.group(1)) if cap_match else "",
             "figure",
         )
-        resolved = self._resolve_image_path(image_path)
-        if resolved and resolved.exists():
-            try:
-                from PIL import Image as PILImage
-                img_width_inches = 4.8 # Default max width
+        
+        if not paths and not caption:
+            return
+            
+        self._figure_index += 1
+        
+        for image_path in paths:
+            image_path = self._latex_to_plain(image_path)
+            resolved = self._resolve_image_path(image_path)
+            if resolved and resolved.exists():
                 try:
-                    with PILImage.open(str(resolved)) as img:
-                        ppi = img.info.get("dpi", (72.0, 72.0))
-                        if not hasattr(ppi, "__iter__"): ppi = (72.0, 72.0)
-                        img_width_inches = img.width / ppi[0]
-                except Exception:
-                    pass
+                    from PIL import Image as PILImage
+                    img_width_inches = 4.8 # Default max width
+                    try:
+                        with PILImage.open(str(resolved)) as img:
+                            ppi = img.info.get("dpi", (72.0, 72.0))
+                            if not hasattr(ppi, "__iter__"): ppi = (72.0, 72.0)
+                            img_width_inches = img.width / ppi[0]
+                    except Exception:
+                        pass
 
-                pic_para = anchor_p.insert_paragraph_before()
-                pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                # Springer LNCS text width is ~12.2 cm (4.8 inches)
-                if img_width_inches > 4.8:
-                    pic_para.add_run().add_picture(str(resolved), width=Inches(4.8))
-                else:
-                    pic_para.add_run().add_picture(str(resolved))
-            except: pass
+                    pic_para = anchor_p.insert_paragraph_before()
+                    pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    pic_para.paragraph_format.first_line_indent = Inches(0)
+                    pic_para.paragraph_format.left_indent = Inches(0)
+                    # Springer LNCS text width is ~12.2 cm (4.8 inches)
+                    if img_width_inches > 4.8:
+                        pic_para.add_run().add_picture(str(resolved), width=Inches(4.8))
+                    else:
+                        pic_para.add_run().add_picture(str(resolved))
+                except: pass
 
         cap_text = f"Fig. {self._figure_index}. {caption}" if caption else f"Fig. {self._figure_index}."
         p = anchor_p.insert_paragraph_before()
@@ -1113,26 +1121,32 @@ class SpringerWordRenderer(IEEEWordRenderer):
         return False
 
     def _add_figure_node(self, doc: Document, latex_figure_text: str) -> None:
-        """Render Springer figure with centered image and `figurecaption` style below."""
-        self._figure_index += 1
-
-        path_match = re.search(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", latex_figure_text)
+        """Render Springer figure with centered image(s) and `figurecaption` style below."""
+        paths = re.findall(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", latex_figure_text)
         cap_match = re.search(r"\\caption\{([^}]*)\}", latex_figure_text)
-        image_path = self._latex_to_plain(path_match.group(1)) if path_match else ""
         caption = self._normalize_springer_caption(
             self._latex_to_plain(cap_match.group(1)) if cap_match else "",
             "figure",
         )
 
-        resolved = self._resolve_image_path(image_path)
-        if resolved and resolved.exists():
-            try:
-                pic_para = doc.add_paragraph()
-                pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                width = max(3.2, min(5.6, self._current_table_target_width_inch(doc, False)))
-                pic_para.add_run().add_picture(str(resolved), width=Inches(width))
-            except Exception:
-                pass
+        if not paths and not caption:
+            return
+
+        self._figure_index += 1
+
+        for image_path in paths:
+            image_path = self._latex_to_plain(image_path)
+            resolved = self._resolve_image_path(image_path)
+            if resolved and resolved.exists():
+                try:
+                    pic_para = doc.add_paragraph()
+                    pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    pic_para.paragraph_format.first_line_indent = Inches(0)
+                    pic_para.paragraph_format.left_indent = Inches(0)
+                    width = max(3.2, min(5.6, self._current_table_target_width_inch(doc, False)))
+                    pic_para.add_run().add_picture(str(resolved), width=Inches(width))
+                except Exception:
+                    pass
 
         cap_text = f"Fig. {self._figure_index}. {caption}" if caption else f"Fig. {self._figure_index}."
         p = doc.add_paragraph(cap_text)

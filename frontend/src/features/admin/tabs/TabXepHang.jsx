@@ -52,7 +52,7 @@ const TabXepHang = ({ danhSachNguoiDung }) => {
                       ? <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-400">Premium</span> 
                       : <span className="rounded-full bg-slate-500/10 px-2 py-0.5 text-[11px] font-semibold text-slate-400">Miễn phí</span>}
                 </td>
-                <td className="py-3 font-mono text-cyan-200">{new Intl.NumberFormat('vi-VN').format(u.token_balance || 0)}</td>
+                <td className="py-3 font-mono text-purple-200">{new Intl.NumberFormat('vi-VN').format(u.token_balance || 0)}</td>
                 <td className="py-3 text-right text-lg font-bold text-white">{u.so_lan_chuyen_doi}</td>
               </tr>
             ))}

@@ -895,6 +895,48 @@ class WordASTParser:
         self.ir["metadata"]["keywords_str"] = ", ".join(kw_list)
         self.ir["metadata"]["total_formulas"] = self.total_formulas
 
+        # Post-process: merge consecutive figure blocks with the exact same caption
+        # This handles the case where IEEE document has images in separate paragraphs 
+        # but they belong to the same figure group with a single shared caption below them.
+        merged_body = []
+        for node in self.ir["body"]:
+            if not merged_body:
+                merged_body.append(node)
+                continue
+                
+            prev = merged_body[-1]
+            if prev.get("type") == "paragraph" and node.get("type") == "paragraph":
+                prev_text = prev.get("text", "")
+                curr_text = node.get("text", "")
+                
+                # Check if both are figures
+                if "\\begin{figure" in prev_text and "\\begin{figure" in curr_text:
+                    # Extract captions
+                    prev_cap_match = re.search(r"\\caption\{([^}]*)\}", prev_text)
+                    curr_cap_match = re.search(r"\\caption\{([^}]*)\}", curr_text)
+                    
+                    if prev_cap_match and curr_cap_match:
+                        prev_cap = prev_cap_match.group(1).strip()
+                        curr_cap = curr_cap_match.group(1).strip()
+                        
+                        # If captions are identical and non-empty
+                        if prev_cap and curr_cap and prev_cap == curr_cap:
+                            # Merge them!
+                            # Extract \includegraphics from curr_text
+                            curr_paths = re.findall(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", curr_text)
+                            
+                            # Insert these paths into prev_text before \caption
+                            for path in curr_paths:
+                                img_line = f"  \\includegraphics[width=\\columnwidth,height=0.4\\textheight,keepaspectratio]{{{path}}}\n"
+                                prev_text = prev_text.replace(f"\\caption{{{prev_cap}}}", f"{img_line}  \\caption{{{prev_cap}}}")
+                            
+                            prev["text"] = prev_text
+                            continue
+                            
+            merged_body.append(node)
+            
+        self.ir["body"] = merged_body
+
     def _extract_author_with_superscripts(self, p) -> str:
         """Extract author text preserving superscript markers as \\textsuperscript{}."""
         result = ""

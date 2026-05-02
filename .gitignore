@@ -102,3 +102,10 @@ backend/verify_out.txt
 .env.*
 backend/.env
 frontend/.env
+
+# Custom
+backend/database.sqlite
+MD_test/
+scratch/
+tests/
+frontend/public/app-release.apk

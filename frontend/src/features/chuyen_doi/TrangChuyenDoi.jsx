@@ -497,14 +497,22 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <NutBam
+              onClick={() => setModalNapTokenMo(true)}
+              bienThe="secondary"
+              icon={Coins}
+              className="!py-2 !px-4 !text-sm bg-primary-500/10 border-primary-500/30 text-primary-300 hover:bg-primary-500/20"
+            >
+              Nạp Token Nhanh
+            </NutBam>
             <NutBam
               onClick={() => navigate('/premium')}
               bienThe="secondary"
               icon={Crown}
-              className="!py-2 !px-4 !text-sm border-amber-500/30 text-amber-200"
+              className="!py-2 !px-4 !text-sm border-amber-500/30 text-amber-200 hover:bg-amber-500/10"
             >
-              Bảng Giá Premium
+              Gói Premium
             </NutBam>
             {laAdmin && (
               <NutBam
@@ -559,6 +567,18 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                 loiValidation={loiValidation}
                 dangTaiLen={trangThaiXuLy === 'dang_xu_ly'}
               />
+
+              {/* Convert Button */}
+              <NutBam
+                onClick={xuLyChuyenDoi}
+                icon={Zap}
+                kichThuoc="lg"
+                className="w-full"
+                disabled={!fileChon || trangThaiXuLy === 'dang_xu_ly'}
+                dangTai={trangThaiXuLy === 'dang_xu_ly'}
+              >
+                {trangThaiXuLy === 'dang_xu_ly' ? 'Đang chuyển đổi...' : 'Bắt đầu chuyển đổi'}
+              </NutBam>
 
               {/* Template Selector */}
               <div className="glass-card p-4 space-y-3">
@@ -694,17 +714,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                 </AnimatePresence>
               </div>
 
-              {/* Convert Button */}
-              <NutBam
-                onClick={xuLyChuyenDoi}
-                icon={Zap}
-                kichThuoc="lg"
-                className="w-full"
-                disabled={!fileChon || trangThaiXuLy === 'dang_xu_ly'}
-                dangTai={trangThaiXuLy === 'dang_xu_ly'}
-              >
-                {trangThaiXuLy === 'dang_xu_ly' ? 'Đang chuyển đổi...' : 'Bắt đầu chuyển đổi'}
-              </NutBam>
+
 
               {/* Feature badges */}
               <div className="flex flex-wrap gap-2 justify-center">
@@ -718,6 +728,17 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                     {f.label}
                   </span>
                 ))}
+              </div>
+
+              {/* Pricing Info */}
+              <div className="glass-card p-3 flex flex-col items-center justify-center text-center space-y-1 mt-4 border-amber-500/20 bg-amber-500/5">
+                <div className="flex items-center gap-1.5 text-amber-200/80 text-xs font-medium">
+                  <Coins className="w-3.5 h-3.5" />
+                  <span>Bảng giá chuyển đổi</span>
+                </div>
+                <div className="text-[11px] text-white/50">
+                  Mặc định: <span className="text-white font-semibold">1 Token / 1000 từ</span> &middot; Premium: <span className="text-primary-300 font-semibold">0.4 Token / 1000 từ</span>
+                </div>
               </div>
             </div>
 
@@ -1009,14 +1030,22 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                       {laLoiThieuToken ? (
                         <>
                           <NutBam
+                            onClick={() => setModalNapTokenMo(true)}
+                            icon={Coins}
+                            className="flex-1 bg-gradient-to-r from-primary-600 to-primary-500"
+                          >
+                            Nạp ngay
+                          </NutBam>
+                          <NutBam
                             onClick={() => navigate('/premium')}
                             icon={Crown}
-                            className="flex-1 bg-gradient-to-r from-amber-600 to-amber-500"
+                            bienThe="secondary"
+                            className="flex-1 border-amber-500/30 text-amber-300 hover:bg-amber-500/10"
                           >
-                            Bảng giá Premium
+                            Premium
                           </NutBam>
                           <NutBam onClick={xuLyChuyenDoiMoi} bienThe="secondary" icon={RefreshCw} className="flex-1">
-                            Chọn file khác
+                            Hủy
                           </NutBam>
                         </>
                       ) : (

@@ -58,6 +58,10 @@ class YeuCauDieuChinhToken(BaseModel):
     reason: str | None = None
 
 
+class YeuCauCapNhatTrangThai(BaseModel):
+    is_active: bool
+
+
 class YeuCauCapNhatCauHinhHeThong(BaseModel):
     token_min_cost_vnd: int | None = None
     free_plan_max_pages: int | None = None
@@ -223,7 +227,9 @@ def lay_danh_sach_nguoi_dung(
                 "token_balance": u.token_balance,
                 "premium_started_at": u.premium_started_at.isoformat() if u.premium_started_at else None,
                 "premium_expires_at": u.premium_expires_at.isoformat() if u.premium_expires_at else None,
-                "auth_provider": u.auth_provider,
+                "google_id": u.google_id,
+                "photo_url": u.photo_url,
+                "is_active": u.is_active,
                 "created_at": u.created_at.isoformat() if u.created_at else None,
                 "so_lan_chuyen_doi": db.query(models.ConversionHistory)
                 .filter(models.ConversionHistory.user_id == u.id)
@@ -294,8 +300,7 @@ def cap_nhat_premium_nguoi_dung(
         user.plan_type = "premium"
         user.premium_started_at = now
         user.premium_expires_at = now + timedelta(days=so_ngay)
-        if user.token_balance < 25000:
-            user.token_balance = 25000
+        # Token balance hoàn toàn tách bạch — admin tự quản lý qua endpoint token/grant
     else:
         user.plan_type = "free"
         user.premium_expires_at = None
@@ -319,6 +324,44 @@ def cap_nhat_premium_nguoi_dung(
             "token_balance": user.token_balance,
             "premium_started_at": user.premium_started_at.isoformat() if user.premium_started_at else None,
             "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None,
+        },
+    }
+
+
+@router.patch("/users/{user_id}/status")
+def cap_nhat_trang_thai_nguoi_dung(
+    user_id: int,
+    req: YeuCauCapNhatTrangThai,
+    request: Request,
+    db: Session = Depends(lay_db),
+    current_admin: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
+
+    if user.id == current_admin.id and not req.is_active:
+        raise HTTPException(status_code=400, detail="Không thể tự khóa tài khoản của chính mình")
+
+    trang_thai_cu = user.is_active
+    user.is_active = req.is_active
+
+    _ghi_audit_admin(
+        db=db,
+        actor_user_id=current_admin.id,
+        action="admin.update_status",
+        request=request,
+        target_user_id=user.id,
+        detail=f"from={trang_thai_cu};to={user.is_active}",
+    )
+
+    db.commit()
+    db.refresh(user)
+    return {
+        "thanh_cong": True,
+        "user": {
+            "id": user.id,
+            "is_active": user.is_active,
         },
     }
 
@@ -894,3 +937,50 @@ def xuat_bao_cao_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@router.post("/sync-payments")
+def sync_payments_admin(
+    request: Request,
+    db: Session = Depends(lay_db),
+    current_admin: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    """Đối soát tự động toàn bộ hóa đơn Pending với SePay."""
+    from ..services.sepay_sync import check_payment_status
+
+    pending_payments = db.query(models.Payment).filter(models.Payment.status == "pending").all()
+    count_success = 0
+
+    for p in pending_payments:
+        ok, tx_id = check_payment_status(p.id, p.amount_vnd)
+        if ok:
+            p.status = "completed"
+            p.updated_at = datetime.utcnow()
+            user = db.query(models.User).filter(models.User.id == p.user_id).first()
+            if user:
+                user.token_balance += p.token_amount
+                # Ghi ledger
+                import json
+                meta = json.dumps({"payment_id": p.id, "tx_id": tx_id})
+                db.add(
+                    models.TokenLedger(
+                        user_id=user.id,
+                        delta_token=p.token_amount,
+                        balance_after=user.token_balance,
+                        reason="payment_sync_sepay",
+                        meta_json=meta,
+                    )
+                )
+            count_success += 1
+
+    if count_success > 0:
+        _ghi_audit_admin(
+            db=db,
+            actor_user_id=current_admin.id,
+            action="admin.sync_payments",
+            request=request,
+            detail=f"synced_count={count_success}",
+        )
+        db.commit()
+
+    return {"thanh_cong": True, "synced_count": count_success}

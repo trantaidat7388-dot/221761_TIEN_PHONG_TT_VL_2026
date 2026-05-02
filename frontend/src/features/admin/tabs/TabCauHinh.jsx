@@ -45,7 +45,7 @@ const TabCauHinh = ({ cauHinhHeThong, setCauHinhHeThong, cauHinhMeta, setCauHinh
     <div className="max-w-4xl space-y-6">
       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5 shadow-sm">
         <h3 className="mb-1 text-lg font-semibold text-white flex items-center gap-2">
-          <Settings className="h-5 w-5 text-cyan-400" /> Tham Số Hệ Thống cơ bản
+          <Settings className="h-5 w-5 text-purple-400" /> Tham Số Hệ Thống cơ bản
         </h3>
         <p className="mb-6 text-sm text-slate-400">Du lieu dang doc/ghi truc tiep qua API backend /api/admin/system-config.</p>
         
@@ -53,12 +53,12 @@ const TabCauHinh = ({ cauHinhHeThong, setCauHinhHeThong, cauHinhMeta, setCauHinh
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-300">Giá Token tối thiểu (VNĐ)</label>
-              <input type="number" value={cauHinhHeThong.token_min_cost_vnd} onChange={(e) => capNhatGiaTriCauHinh('token_min_cost_vnd', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-2 text-white placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500" />
+              <input type="number" value={cauHinhHeThong.token_min_cost_vnd} onChange={(e) => capNhatGiaTriCauHinh('token_min_cost_vnd', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-2 text-white placeholder:text-slate-600 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500" />
               <p className="text-xs text-slate-500">Tỉ giá gốc quy đổi ra VNĐ cho tính toán dịch vụ.</p>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-300">Token đăng ký (Mặc định)</label>
-              <input type="number" value={cauHinhHeThong.free_plan_max_pages} onChange={(e) => capNhatGiaTriCauHinh('free_plan_max_pages', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-2 text-white placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500" />
+              <input type="number" value={cauHinhHeThong.free_plan_max_pages} onChange={(e) => capNhatGiaTriCauHinh('free_plan_max_pages', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-2 text-white placeholder:text-slate-600 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500" />
               <p className="text-xs text-slate-500">Số lượng Token tương đương số trang được dùng miễn phí.</p>
             </div>
             <div className="space-y-1.5">
@@ -68,18 +68,18 @@ const TabCauHinh = ({ cauHinhHeThong, setCauHinhHeThong, cauHinhMeta, setCauHinh
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-300">Giới hạn file Upload lớn nhất (MB)</label>
-              <input type="number" value={cauHinhHeThong.max_doc_upload_mb} onChange={(e) => capNhatGiaTriCauHinh('max_doc_upload_mb', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-2 text-white placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500" />
+              <input type="number" value={cauHinhHeThong.max_doc_upload_mb} onChange={(e) => capNhatGiaTriCauHinh('max_doc_upload_mb', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-2 text-white placeholder:text-slate-600 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500" />
               <p className="text-xs text-slate-500">Ngăn người dùng lợi dụng tài nguyên máy chủ.</p>
             </div>
             <div className="space-y-1.5 md:col-span-2">
               <label className="text-sm font-medium text-slate-300">Rate limit nhom Admin (request/phut)</label>
-              <input type="number" value={cauHinhHeThong.rate_limit_admin_per_minute} onChange={(e) => capNhatGiaTriCauHinh('rate_limit_admin_per_minute', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-2 text-white placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500" />
+              <input type="number" value={cauHinhHeThong.rate_limit_admin_per_minute} onChange={(e) => capNhatGiaTriCauHinh('rate_limit_admin_per_minute', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-2 text-white placeholder:text-slate-600 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500" />
               <p className="text-xs text-slate-500">Khuyen nghi restart backend sau khi cap nhat de ap dung cho middleware rate-limit.</p>
             </div>
           </div>
           
           <div className="pt-4 border-t border-white/10 flex justify-end">
-            <button disabled={dangLuuCauHinh} className="rounded-lg bg-cyan-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-cyan-500 transition-colors shadow-lg shadow-cyan-500/20 disabled:opacity-60" onClick={xuLyLuuCauHinhHeThong}>
+            <button disabled={dangLuuCauHinh} className="rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-purple-500 transition-colors shadow-lg shadow-purple-500/20 disabled:opacity-60" onClick={xuLyLuuCauHinhHeThong}>
               {dangLuuCauHinh ? 'Dang luu...' : 'Cập nhật Toàn hệ thống'}
             </button>
           </div>

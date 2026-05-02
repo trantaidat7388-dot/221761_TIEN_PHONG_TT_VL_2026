@@ -114,9 +114,7 @@ const TrangThanhToanPremium = () => {
     }
   }
 
-  const dieuChinhSoTien = (delta) => {
-    setSoTien((prev) => Math.max(10000, Number(prev || 0) + delta))
-  }
+
 
   const saoChep = async (text) => {
     try {
@@ -205,9 +203,36 @@ const TrangThanhToanPremium = () => {
                   </button>
                 </div>
 
-                <div className="mt-6 flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
-                  <p className="text-sm text-amber-200/90 font-medium">Đang chờ xác nhận quét mã... ({demGiay}s)</p>
+                <div className="mt-6 flex flex-col items-center gap-3 w-full max-w-sm">
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
+                    <p className="text-sm text-amber-200/90 font-medium">Đang chờ xác nhận quét mã... ({demGiay}s)</p>
+                  </div>
+                  
+                  <button 
+                    onClick={async () => {
+                      const loading = toast.loading('Đang kiểm tra giao dịch...');
+                      try {
+                        const kq = await kiemTraTrangThaiHoaDon(hoaDon.payment_id);
+                        if (kq.thanhCong && kq.data?.status === 'completed') {
+                          toast.success('Thanh toán thành công!', { id: loading });
+                          await lamMoiThongTinNguoiDung({ imLang: true });
+                          setThanhToanThanhCong(true);
+                        } else {
+                          toast.error('Hệ thống chưa nhận được tiền. Vui lòng đợi thêm hoặc bấm lại sau.', { id: loading });
+                        }
+                      } catch (e) { toast.error('Lỗi khi kiểm tra', { id: loading }); }
+                    }}
+                    className="w-full py-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold text-sm hover:bg-emerald-500/30 transition-all flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    Tôi đã chuyển khoản
+                  </button>
+
+                  <div className="flex items-center gap-2 opacity-30 grayscale hover:grayscale-0 transition-all">
+                    <img src="https://sepay.vn/logo/sepay-logo.png" alt="SePay" className="h-4 object-contain" onError={(e) => e.target.style.display='none'} />
+                    <span className="text-[10px] text-white font-medium uppercase tracking-widest">Secured by SePay</span>
+                  </div>
                 </div>
 
                 {chuaCauHinhNganHang && (
@@ -229,53 +254,30 @@ const TrangThanhToanPremium = () => {
             ) : (
               <div className="flex-1 flex flex-col justify-center">
                 <div className="rounded-xl border border-white/10 bg-white/5 p-5">
-                  <label className="text-white/70 text-base font-semibold">Chọn quy mô Gói Token</label>
+                  <label className="text-white/70 text-base font-semibold">Chọn gói Token để nạp</label>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {[10000, 25000, 50000, 100000].map((moc) => (
+                    {[
+                      { vnd: 10000, token: 100 },
+                      { vnd: 20000, token: 250 },
+                      { vnd: 50000, token: 700 },
+                      { vnd: 100000, token: 1500 },
+                    ].map((goi) => (
                       <button
-                        key={moc}
+                        key={goi.vnd}
                         type="button"
-                        onClick={() => setSoTien(moc)}
-                        className="rounded-lg border border-white/15 bg-slate-900/50 px-4 py-2 font-semibold text-white hover:bg-primary-500/30"
+                        onClick={() => { setSoTien(goi.vnd); xuLyTaoHoaDon(goi.vnd) }}
+                        className={`rounded-xl border px-4 py-3 font-semibold text-white hover:bg-primary-500/30 transition-all flex flex-col items-center gap-1 ${
+                          soTien === goi.vnd 
+                            ? 'border-primary-500 bg-primary-500/20' 
+                            : 'border-white/15 bg-slate-900/50'
+                        }`}
                       >
-                        {new Intl.NumberFormat('vi-VN').format(moc)} ₫
+                        <span className="text-amber-300 font-bold text-lg">{new Intl.NumberFormat('vi-VN').format(goi.token)}</span>
+                        <span className="text-[10px] text-white/40 uppercase">Token</span>
+                        <span className="text-xs text-white/60">{new Intl.NumberFormat('vi-VN').format(goi.vnd)} ₫</span>
                       </button>
                     ))}
                   </div>
-                  <div className="mt-4 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => dieuChinhSoTien(-10000)}
-                      className="h-12 w-12 rounded-xl border border-white/15 bg-slate-900/60 text-white/80 hover:bg-slate-900 flex items-center justify-center text-xl font-bold"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min={10000}
-                      step={10000}
-                      value={soTien}
-                      onChange={(e) => setSoTien(Number(e.target.value || 0))}
-                      className="w-full text-center rounded-xl border border-white/15 bg-slate-900/70 p-3 text-xl font-bold text-white focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => dieuChinhSoTien(10000)}
-                      className="h-12 w-12 rounded-xl border border-white/15 bg-slate-900/60 text-white/80 hover:bg-slate-900 flex items-center justify-center text-xl font-bold"
-                    >
-                      +
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => xuLyTaoHoaDon()}
-                    disabled={dangTaoHoaDon || Number(soTien) < 10000}
-                    className="mt-6 w-full rounded-xl bg-primary-600 p-4 text-lg font-extrabold text-white hover:bg-primary-500 disabled:opacity-60 inline-flex items-center justify-center gap-2 shadow-xl shadow-primary-500/20"
-                  >
-                    {dangTaoHoaDon ? <Loader2 className="w-5 h-5 animate-spin" /> : <QrCode className="w-5 h-5" />}
-                    Quét mã mua Gói ngay
-                  </button>
                 </div>
               </div>
             )}

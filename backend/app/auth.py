@@ -80,15 +80,21 @@ def lay_nguoi_dung_hien_tai(
     )
     try:
         payload = _giai_ma_voi_nhieu_khoa(token)
-        user_id: int = payload.get("sub")
+        user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-    except JWTError:
+    except (JWTError, ValueError):
         raise credentials_exception
 
     user = db.query(models.User).filter(models.User.id == int(user_id)).first()
     if user is None:
         raise credentials_exception
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.",
+        )
     return user
 
 

@@ -40,7 +40,7 @@ const TabTongQuan = ({ tongQuan, danhSachNguoiDung, danhSachPayments }) => {
 
     const pieDataPlanTypeObj = [
       { name: 'Kế hoạch Miễn phí', value: freeCount, color: '#94a3b8' },
-      { name: 'Khách hàng Premium', value: premiumCount, color: '#2dd4bf' }
+      { name: 'Khách hàng Premium', value: premiumCount, color: '#a855f7' }
     ];
 
     const revenueGroups = {};
@@ -66,10 +66,10 @@ const TabTongQuan = ({ tongQuan, danhSachNguoiDung, danhSachPayments }) => {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={Users} label="Tổng người dùng" value={tongQuan?.tong_nguoi_dung ?? '-'} color="text-cyan-300 bg-cyan-500/10" />
-        <StatCard icon={Shield} label="Quản trị viên" value={tongQuan?.tong_admin ?? '-'} color="text-emerald-300 bg-emerald-500/10" />
+        <StatCard icon={Users} label="Tổng người dùng" value={tongQuan?.tong_nguoi_dung ?? '-'} color="text-purple-300 bg-purple-500/10" />
+        <StatCard icon={Shield} label="Quản trị viên" value={tongQuan?.tong_admin ?? '-'} color="text-purple-400 bg-purple-500/10" />
         <StatCard icon={Coins} label="Khách hàng Premium" value={tongQuan?.tong_premium ?? '-'} color="text-violet-300 bg-violet-500/10" />
-        <StatCard icon={History} label="Tài liệu đã chuyển" value={tongQuan?.tong_ban_ghi_lich_su ?? '-'} color="text-amber-300 bg-amber-500/10" />
+        <StatCard icon={History} label="Tài liệu đã chuyển" value={tongQuan?.tong_ban_ghi_lich_su ?? '-'} color="text-fuchsia-300 bg-fuchsia-500/10" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 xl:grid-cols-4">
@@ -84,9 +84,9 @@ const TabTongQuan = ({ tongQuan, danhSachNguoiDung, danhSachPayments }) => {
                   <YAxis stroke="#cbd5e1" fontSize={11} tickMargin={8} allowDecimals={false} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
-                    itemStyle={{ color: '#bae6fd' }}
+                    itemStyle={{ color: '#d8b4fe' }}
                   />
-                  <Line type="monotone" dataKey="users" name="Tài khoản mới" stroke="#38bdf8" strokeWidth={3} dot={{ strokeWidth: 2, r: 4, fill: '#0f172a' }} />
+                  <Line type="monotone" dataKey="users" name="Tài khoản mới" stroke="#a855f7" strokeWidth={3} dot={{ strokeWidth: 2, r: 4, fill: '#0f172a' }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -126,7 +126,7 @@ const TabTongQuan = ({ tongQuan, danhSachNguoiDung, danhSachPayments }) => {
         {/* Doanh thu (Bar Chart) */}
         <div className="col-span-1 lg:col-span-3 xl:col-span-1 border border-white/5 bg-white/[0.02] p-5 shadow-sm rounded-xl">
           <h3 className="mb-4 text-sm font-semibold text-slate-300 uppercase tracking-wider">Doanh thu SePay (VNĐ)</h3>
-          <div className="mb-2 text-2xl font-black text-emerald-400">{fmtVND(paymentStats.totalRevenue)}</div>
+          <div className="mb-2 text-2xl font-black text-purple-400">{fmtVND(paymentStats.totalRevenue)}</div>
           <div className="text-xs text-slate-400 mb-4">{paymentStats.completed} hóa đơn hoàn tất, {paymentStats.pending} chưa xác nhận.</div>
           <div className="h-[170px] w-full">
             {chartDataRevenue.length > 0 ? (
@@ -135,10 +135,10 @@ const TabTongQuan = ({ tongQuan, danhSachNguoiDung, danhSachPayments }) => {
                   <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickMargin={5} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
-                    itemStyle={{ color: '#34d399' }}
+                    itemStyle={{ color: '#d8b4fe' }}
                     formatter={(value) => new Intl.NumberFormat('vi-VN').format(value) + ' VNĐ'}
                   />
-                  <Bar dataKey="revenue" name="Doanh thu" fill="#34d399" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="revenue" name="Doanh thu" fill="#a855f7" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -161,28 +161,28 @@ const TabTongQuan = ({ tongQuan, danhSachNguoiDung, danhSachPayments }) => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
               onClick={() => xuatBaoCaoAdmin('payments')}
-              className="flex items-center justify-between p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all group gap-3"
+              className="flex items-center justify-between p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 transition-all group gap-3"
             >
-              <div className="flex items-center gap-3 text-emerald-300 font-semibold">
-                <div className="p-2 bg-emerald-500/20 rounded-lg">
+              <div className="flex items-center gap-3 text-purple-300 font-semibold">
+                <div className="p-2 bg-purple-500/20 rounded-lg">
                   <Coins className="w-5 h-5" />
                 </div>
                 <span className="text-sm">Báo cáo Doanh thu</span>
               </div>
-              <Download className="w-4 h-4 text-emerald-400/50 group-hover:text-emerald-400 shrink-0" />
+              <Download className="w-4 h-4 text-purple-400/50 group-hover:text-purple-400 shrink-0" />
             </button>
 
             <button
               onClick={() => xuatBaoCaoAdmin('conversions')}
-              className="flex items-center justify-between p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all group gap-3"
+              className="flex items-center justify-between p-4 rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/20 hover:bg-fuchsia-500/20 transition-all group gap-3"
             >
-              <div className="flex items-center gap-3 text-cyan-300 font-semibold">
-                <div className="p-2 bg-cyan-500/20 rounded-lg">
+              <div className="flex items-center gap-3 text-fuchsia-300 font-semibold">
+                <div className="p-2 bg-fuchsia-500/20 rounded-lg">
                   <History className="w-5 h-5" />
                 </div>
                 <span className="text-sm">Báo cáo Chuyển đổi</span>
               </div>
-              <Download className="w-4 h-4 text-cyan-400/50 group-hover:text-cyan-400 shrink-0" />
+              <Download className="w-4 h-4 text-fuchsia-400/50 group-hover:text-fuchsia-400 shrink-0" />
             </button>
 
             <button

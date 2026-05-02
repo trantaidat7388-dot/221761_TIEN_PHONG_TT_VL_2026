@@ -6,9 +6,9 @@ const AdminSidebar = ({ sidebarOpen, activeTab, setActiveTab, TABS, navigate, xu
       {/* Logo */}
       <div className="flex items-center gap-2 border-b border-white/5 px-4 py-4">
         <img 
-          src="/logo_admin.png" 
+          src="/logo_admin_purple.png" 
           alt="W2L Logo" 
-          className="h-9 w-9 shrink-0 rounded-lg object-cover shadow-lg shadow-cyan-500/20" 
+          className="h-9 w-9 shrink-0 rounded-xl object-cover shadow-lg shadow-purple-500/20 ring-1 ring-white/10" 
         />
         {sidebarOpen && <span className="text-sm font-bold text-white">Admin Panel</span>}
       </div>
@@ -23,7 +23,7 @@ const AdminSidebar = ({ sidebarOpen, activeTab, setActiveTab, TABS, navigate, xu
               onClick={() => setActiveTab(tab.key)}
               className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-all
                 ${isActive
-                  ? 'bg-cyan-500/15 text-cyan-300 shadow-lg shadow-cyan-500/5'
+                  ? 'bg-purple-500/15 text-purple-300 shadow-lg shadow-purple-500/5'
                   : 'text-slate-400 hover:bg-white/5 hover:text-white'
                 }`}
               title={tab.label}

@@ -159,6 +159,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                         src={nguoiDung.photoURL}
                         alt="Avatar"
                         className="w-8 h-8 rounded-full"
+                        referrerPolicy="no-referrer"
                         onError={() => setAvatarLoi(true)}
                       />
                     ) : (
@@ -180,7 +181,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 mt-2 w-48 glass-card py-2 shadow-xl"
+                      className="absolute right-0 mt-2 w-56 bg-slate-900 border border-white/10 rounded-2xl py-2 shadow-2xl z-[100]"
                     >
                       <div className="px-4 py-2 border-b border-white/10">
                         <p className="text-white text-sm font-medium truncate">
@@ -297,6 +298,7 @@ const ThanhDieuHuong = ({ nguoiDung }) => {
                           src={nguoiDung.photoURL}
                           alt="Avatar"
                           className="w-10 h-10 rounded-full"
+                          referrerPolicy="no-referrer"
                           onError={() => setAvatarLoi(true)}
                         />
                       ) : (

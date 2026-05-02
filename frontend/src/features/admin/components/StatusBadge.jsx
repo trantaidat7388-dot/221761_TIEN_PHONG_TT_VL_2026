@@ -2,10 +2,10 @@ import { CheckCircle2, Clock, XCircle } from 'lucide-react';
 
 const StatusBadge = ({ status }) => {
   const configMap = {
-    completed: { icon: CheckCircle2, cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
+    completed: { icon: CheckCircle2, cls: 'bg-purple-500/10 text-purple-300 border-purple-500/20' },
     pending: { icon: Clock, cls: 'bg-amber-500/10 text-amber-300 border-amber-500/20' },
     failed: { icon: XCircle, cls: 'bg-red-500/10 text-red-300 border-red-500/20' },
-    success: { icon: CheckCircle2, cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
+    success: { icon: CheckCircle2, cls: 'bg-purple-500/10 text-purple-300 border-purple-500/20' },
   };
   const cfg = configMap[status] || configMap.pending;
   const Icon = cfg.icon;

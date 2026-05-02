@@ -65,6 +65,7 @@ def _serialize_user(user: models.User) -> dict:
         "premium_started_at": user.premium_started_at.isoformat() if user.premium_started_at else None,
         "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None,
         "auth_provider": user.auth_provider,
+        "photoURL": user.photo_url,
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
@@ -83,6 +84,7 @@ def _tao_auth_payload(user: models.User) -> dict:
             "token_balance": user.token_balance,
             "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None,
             "auth_provider": user.auth_provider,
+            "photoURL": user.photo_url,
         },
     }
 
@@ -115,6 +117,7 @@ def _xac_thuc_google_id_token(id_token: str) -> dict:
         "sub": google_sub,
         "email": google_email,
         "name": (payload.get("name") or "").strip(),
+        "picture": payload.get("picture", "").strip(),
     }
 
 
@@ -129,7 +132,7 @@ def _tao_username_tu_google(db: Session, email: str, display_name: str = "") -> 
     return candidate
 
 
-def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, google_name: str) -> models.User:
+def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, google_name: str, **kwargs) -> models.User:
     user = db.query(models.User).filter(models.User.google_id == google_sub).first()
 
     if user is None:
@@ -137,6 +140,8 @@ def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, g
         if user_by_email:
             user_by_email.google_id = google_sub
             user_by_email.auth_provider = "google"
+            if kwargs.get("picture"):
+                user_by_email.photo_url = kwargs.get("picture")
             user = user_by_email
         else:
             user = models.User(
@@ -148,6 +153,7 @@ def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, g
                 token_balance=FREE_PLAN_MAX_PAGES,
                 auth_provider="google",
                 google_id=google_sub,
+                photo_url=kwargs.get("picture"),
             )
             db.add(user)
 
@@ -220,7 +226,12 @@ def _lay_google_user_info_tu_authorization_code(code: str, redirect_uri: str = N
     if not email_verified:
         raise HTTPException(status_code=401, detail="Email Google chưa được xác minh")
 
-    return {"sub": google_sub, "email": google_email, "name": google_name}
+    return {
+        "sub": google_sub,
+        "email": google_email,
+        "name": google_name,
+        "picture": info.get("picture", "").strip()
+    }
 
 @router.post("/auth/register")
 def dang_ky(req: YeuCauDangKy, db: Session = Depends(lay_db)) -> dict:
@@ -292,7 +303,7 @@ def dang_nhap_voi_google(req: YeuCauDangNhapGoogle, db: Session = Depends(lay_db
     google_email = google_info["email"]
     google_name = google_info["name"]
 
-    user = _dong_bo_tai_khoan_google(db, google_sub, google_email, google_name)
+    user = _dong_bo_tai_khoan_google(db, google_sub, google_email, google_name, picture=google_info.get("picture"))
     return _tao_auth_payload(user)
 
 
@@ -331,29 +342,34 @@ def dang_nhap_google_redirect(request: Request) -> RedirectResponse:
 
 
 @router.get("/auth/google/callback")
-def google_callback(code: str, request: Request, db: Session = Depends(lay_db)) -> RedirectResponse:
+def google_callback(code: str, state: str = "", request: Request = None, db: Session = Depends(lay_db)):
     # Tự động chọn redirect_uri/frontend dựa trên host hoặc referer của request hiện tại
-    host = request.headers.get("host", "")
-    referer = request.headers.get("referer", "")
+    host = request.headers.get("host", "") if request else ""
+    referer = request.headers.get("referer", "") if request else ""
     
     redirect_uri = GOOGLE_REDIRECT_URI
     target_frontend = FRONTEND_URL
     
     if "word2latex.id.vn" in (host + referer).lower():
-        # Ưu tiên tên miền chính thức
         pass 
     elif any(x in (host + referer).lower() for x in ["localhost", "127.0.0.1"]):
         redirect_uri = "http://localhost:8000/api/auth/google/callback"
         target_frontend = "http://localhost:5173"
 
+    # KIỂM TRA ROUTE FLUTTER THÔNG QUA STATE
+    if state and not state.startswith("web_login_"):
+        return google_callback_flutter_logic(code, state, redirect_uri, db)
+
     try:
         # Đổi code lấy user info với redirect_uri tương ứng
         google_info = _lay_google_user_info_tu_authorization_code(code, redirect_uri=redirect_uri)
-        user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"])
+        user = _dong_bo_tai_khoan_google(
+            db, google_info["sub"], google_info["email"], google_info["name"], picture=google_info.get("picture")
+        )
 
         payload = _tao_auth_payload(user)
         token = payload["access_token"]
-        return RedirectResponse(url=f"{target_frontend.rstrip('/')}/?token={parse.quote(token)}")
+        return RedirectResponse(url=f"{target_frontend.rstrip('/')}/?token={parse.urlencode({'token': token})[6:]}")
     except HTTPException as e:
         logger.warning("[Google OAuth] Callback failed: %s", e.detail)
         return RedirectResponse(url=f"{target_frontend.rstrip('/')}/dang-nhap?error={parse.quote(e.detail or 'Lỗi đăng nhập Google')}")
@@ -441,14 +457,23 @@ def kiem_tra_phien_dang_nhap(
 
 
 @router.get("/auth/google/login/flutter")
-def dang_nhap_google_flutter_redirect(session_id: str) -> RedirectResponse:
+def dang_nhap_google_flutter_redirect(request: Request, session_id: str) -> RedirectResponse:
     """Redirect đến Google OAuth dành cho Flutter (session_id truyền qua state)."""
     if not GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=500, detail="Thiếu cấu hình GOOGLE_CLIENT_ID")
     if not session_id:
         raise HTTPException(status_code=400, detail="Thiếu session_id")
 
-    redirect_uri = GOOGLE_REDIRECT_URI_FLUTTER or GOOGLE_REDIRECT_URI
+    # Tự động chọn redirect_uri dựa trên host hoặc referer (giống web)
+    host = request.headers.get("host", "")
+    referer = request.headers.get("referer", "")
+    redirect_uri = GOOGLE_REDIRECT_URI
+    
+    if "word2latex.id.vn" in (host + referer).lower():
+        pass 
+    elif any(x in (host + referer).lower() for x in ["localhost", "127.0.0.1"]):
+        redirect_uri = "http://localhost:8000/api/auth/google/callback"
+
     query = parse.urlencode(
         {
             "client_id": GOOGLE_CLIENT_ID,
@@ -464,74 +489,13 @@ def dang_nhap_google_flutter_redirect(session_id: str) -> RedirectResponse:
     return RedirectResponse(url=f"https://accounts.google.com/o/oauth2/v2/auth?{query}")
 
 
-def _lay_google_user_info_flutter(code: str) -> dict:
-    """Đổi authorization code lấy user info, dùng redirect URI riêng cho Flutter."""
-    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        raise HTTPException(status_code=500, detail="Thiếu GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET")
-
-    redirect_uri = GOOGLE_REDIRECT_URI_FLUTTER or GOOGLE_REDIRECT_URI
-    token_payload = parse.urlencode(
-        {
-            "code": code,
-            "client_id": GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "redirect_uri": redirect_uri,
-            "grant_type": "authorization_code",
-        }
-    ).encode("utf-8")
-
-    try:
-        token_req = urlrequest.Request(
-            "https://oauth2.googleapis.com/token",
-            data=token_payload,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            method="POST",
-        )
-        with urlrequest.urlopen(token_req, timeout=10) as resp:
-            token_data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-    except urlrequest.HTTPError as e:
-        error_body = e.read().decode("utf-8", errors="ignore")
-        logger.error("[Cloud-Sync] Token exchange failed in _lay_google_user_info_flutter: %s - Body: %s", e, error_body)
-        raise HTTPException(status_code=401, detail=f"Google API Error: {error_body}")
-    except Exception as e:
-        logger.error("[Cloud-Sync] Unexpected error during token exchange: %s", e)
-        raise HTTPException(status_code=401, detail="Không thể đổi authorization code từ Google")
-
-    access_token = (token_data.get("access_token") or "").strip()
-    if not access_token:
-        raise HTTPException(status_code=401, detail="Google không trả về access_token")
-
-    try:
-        userinfo_req = urlrequest.Request(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"},
-            method="GET",
-        )
-        with urlrequest.urlopen(userinfo_req, timeout=10) as resp:
-            info = json.loads(resp.read().decode("utf-8", errors="ignore"))
-    except Exception:
-        raise HTTPException(status_code=401, detail="Không thể lấy thông tin user từ Google")
-
-    google_email = (info.get("email") or "").strip().lower()
-    google_sub = (info.get("sub") or "").strip()
-    email_verified = bool(info.get("email_verified"))
-    google_name = (info.get("name") or "").strip()
-
-    if not google_sub or not google_email:
-        raise HTTPException(status_code=401, detail="Google userinfo thiếu thông tin định danh")
-    if not email_verified:
-        raise HTTPException(status_code=401, detail="Email Google chưa được xác minh")
-
-    return {"sub": google_sub, "email": google_email, "name": google_name}
-
-
-@router.get("/auth/google/callback/flutter")
-def google_callback_flutter(
+def google_callback_flutter_logic(
     code: str,
-    state: str = "",
-    db: Session = Depends(lay_db),
+    state: str,
+    redirect_uri: str,
+    db: Session,
 ) -> HTMLResponse:
-    """Callback từ Google OAuth cho Flutter. Lưu JWT token vào login_sessions."""
+    """Callback xử lý riêng cho Flutter (không phải route trực tiếp)."""
     session_id = state.strip()
     logger.info("[Cloud-Sync] Flutter Callback received. Code length: %d, State/Session: %s", len(code) if code else 0, session_id)
     
@@ -544,9 +508,15 @@ def google_callback_flutter(
             status_code=400,
         )
 
-    # Đổi code lấy user info
-    google_info = _lay_google_user_info_flutter(code)
-    user = _dong_bo_tai_khoan_google(db, google_info["sub"], google_info["email"], google_info["name"])
+    try:
+        google_info = _lay_google_user_info_tu_authorization_code(code, redirect_uri=redirect_uri)
+    except HTTPException as e:
+        logger.error("[Cloud-Sync] User info extraction failed: %s", e.detail)
+        return HTMLResponse(content=f"<html><body><h2>Lỗi đăng nhập Google</h2><p>{e.detail}</p></body></html>", status_code=400)
+        
+    user = _dong_bo_tai_khoan_google(
+        db, google_info["sub"], google_info["email"], google_info["name"], picture=google_info.get("picture")
+    )
 
     # Tạo JWT token
     jwt_token = auth.tao_access_token({"sub": str(user.id)})
