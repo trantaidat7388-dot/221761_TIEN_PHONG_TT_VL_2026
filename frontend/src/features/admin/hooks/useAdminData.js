@@ -8,6 +8,7 @@ import {
   layDanhSachPaymentsAdmin,
   layCauHinhHeThongAdmin,
   layDanhSachTemplateAdmin,
+  layTokenLedgerToanHeThongAdmin,
 } from '../../../services/api'
 
 export const useAdminData = () => {
@@ -17,6 +18,7 @@ export const useAdminData = () => {
   const [danhSachLichSu, setDanhSachLichSu] = useState([])
   const [danhSachTemplate, setDanhSachTemplate] = useState([])
   const [danhSachAuditLogs, setDanhSachAuditLogs] = useState([])
+  const [danhSachTokenLedger, setDanhSachTokenLedger] = useState([])
   const [danhSachPayments, setDanhSachPayments] = useState([])
   const [cauHinhMeta, setCauHinhMeta] = useState(null)
   const [cauHinhHeThong, setCauHinhHeThong] = useState({
@@ -29,13 +31,14 @@ export const useAdminData = () => {
   const taiDuLieu = useCallback(async () => {
     setDangTai(true)
     try {
-      const [overviewRes, usersRes, historyRes, auditRes, paymentsRes, systemConfigRes] = await Promise.all([
+      const [overviewRes, usersRes, historyRes, auditRes, paymentsRes, systemConfigRes, ledgerRes] = await Promise.all([
         layTongQuanAdmin(),
         layDanhSachNguoiDungAdmin(),
         layLichSuToanHeThongAdmin(200),
         layAuditLogsAdmin(200),
         layDanhSachPaymentsAdmin(200),
         layCauHinhHeThongAdmin(),
+        layTokenLedgerToanHeThongAdmin(200),
       ])
       const templatesRes = await layDanhSachTemplateAdmin()
 
@@ -43,6 +46,7 @@ export const useAdminData = () => {
       if (usersRes.thanhCong) setDanhSachNguoiDung(usersRes.danhSach)
       if (historyRes.thanhCong) setDanhSachLichSu(historyRes.danhSach)
       if (auditRes.thanhCong) setDanhSachAuditLogs(auditRes.danhSach)
+      if (ledgerRes.thanhCong) setDanhSachTokenLedger(ledgerRes.danhSach)
       if (templatesRes.thanhCong) setDanhSachTemplate(templatesRes.danhSach)
       if (paymentsRes.thanhCong) setDanhSachPayments(paymentsRes.danhSach)
       if (systemConfigRes.thanhCong && systemConfigRes.data?.settings) {
@@ -68,6 +72,7 @@ export const useAdminData = () => {
     danhSachLichSu, setDanhSachLichSu,
     danhSachTemplate, setDanhSachTemplate,
     danhSachAuditLogs,
+    danhSachTokenLedger, setDanhSachTokenLedger,
     danhSachPayments, setDanhSachPayments,
     cauHinhMeta, setCauHinhMeta,
     cauHinhHeThong, setCauHinhHeThong,

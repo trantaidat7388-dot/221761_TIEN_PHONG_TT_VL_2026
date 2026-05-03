@@ -171,7 +171,7 @@ const NapTokenModal = ({ isOpen, onClose }) => {
                   
                   <div className="bg-white p-3 rounded-2xl shadow-2xl">
                     <img 
-                      src={`https://api.vietqr.io/image/${bankBin}-${bankAccount}-yXwL0O?accountName=${encodeURIComponent(bankName)}&amount=${hoaDon.amount_vnd}&addInfo=${encodeURIComponent(hoaDon.noidung_ck)}`} 
+                      src={`https://qr.sepay.vn/img?acc=${bankAccount}&bank=${bankName}&amount=${hoaDon.amount_vnd}&des=${encodeURIComponent(hoaDon.noidung_ck)}`} 
                       alt="QR" className="w-48 h-48 object-cover rounded-xl"
                       onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }}
                     />

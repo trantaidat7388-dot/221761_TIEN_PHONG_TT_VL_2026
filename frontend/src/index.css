@@ -45,6 +45,24 @@
   --topbar-bg: rgba(2, 6, 23, 0.85);
 }
 
+[data-theme="midnight-cyan"] {
+  --color-bg-primary: 0 0 0;           /* black */
+  --color-bg-secondary: 9 9 11;        /* zinc-950 */
+  --color-bg-tertiary: 24 24 27;       /* zinc-900 */
+  --color-bg-card: 255 255 255;
+  --color-border: 255 255 255;
+  --color-text-primary: 255 255 255;
+  --color-text-secondary: 207 250 254; /* cyan-100 */
+  --color-text-muted: 165 243 252;     /* cyan-200 */
+  --color-accent: 34 211 238;          /* cyan-400 */
+  --color-accent-light: 103 232 249;   /* cyan-300 */
+  --color-accent-glow: 34 211 238;
+
+  --gradient-bg: linear-gradient(-45deg, #000000, #09090b, #18181b, #083344);
+  --sidebar-bg: rgba(0, 0, 0, 0.95);
+  --topbar-bg: rgba(0, 0, 0, 0.85);
+}
+
 [data-theme="warm-slate"] {
   --color-bg-primary: 28 25 23;        /* stone-900 */
   --color-bg-secondary: 41 37 36;      /* stone-800 */
@@ -240,7 +258,7 @@ code, pre, .font-mono {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   LIGHT THEME OVERRIDES FOR HARDCODED COLORS
+   LIGHT & THEME OVERRIDES FOR HARDCODED COLORS (ADMIN PANEL)
    ═══════════════════════════════════════════════════════════════════ */
 [data-theme="light-pro"] .text-white { color: #111827 !important; }
 [data-theme="light-pro"] .text-slate-200 { color: #374151 !important; }
@@ -252,6 +270,15 @@ code, pre, .font-mono {
 [data-theme="light-pro"] .bg-white\/10 { background-color: rgba(0,0,0,0.05) !important; }
 [data-theme="light-pro"] .border-white\/5 { border-color: rgba(0,0,0,0.1) !important; }
 [data-theme="light-pro"] .border-white\/10 { border-color: rgba(0,0,0,0.15) !important; }
+
+[data-theme="warm-slate"] .bg-slate-950 { background-color: rgb(28 25 23) !important; }
+[data-theme="warm-slate"] .bg-slate-900 { background-color: rgb(41 37 36) !important; }
+
+[data-theme="midnight-purple"] .bg-slate-950 { background-color: rgb(2 6 23) !important; }
+[data-theme="midnight-purple"] .bg-slate-900 { background-color: rgb(15 23 42) !important; }
+
+[data-theme="midnight-cyan"] .bg-slate-950 { background-color: rgb(0 0 0) !important; }
+[data-theme="midnight-cyan"] .bg-slate-900 { background-color: rgb(9 9 11) !important; }
 
 /* Safe Area support for mobile devices */
 nav.fixed {

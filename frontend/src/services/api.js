@@ -579,12 +579,42 @@ export const layTokenLedgerTheoNguoiDungAdmin = async (userId, limit = 200) => {
   }
 }
 
+export const layTokenLedgerToanHeThongAdmin = async (limit = 200, userId = null) => {
+  try {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (userId) params.set('user_id', String(userId))
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/token-ledger?${params.toString()}`, { headers: taoHeaderXacThuc() })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) { const msg = await docLoiJsonTuResponse(response); throw new Error(msg) }
+    const data = await response.json()
+    return { thanhCong: true, danhSach: (data.danh_sach || []).map(item => ({ ...item, createdAt: chuanHoaNgayGioApi(item.created_at) })) }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message, danhSach: [] }
+  }
+}
+
 export const xoaNguoiDungAdmin = async (userId) => {
   try {
     const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/${userId}`, { method: 'DELETE', headers: taoHeaderXacThuc() })
     if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) { const msg = await docLoiJsonTuResponse(response); throw new Error(msg) }
     return { thanhCong: true }
+  } catch (error) {
+    return { thanhCong: false, loiMessage: error.message }
+  }
+}
+
+export const thucHienBulkUserActionAdmin = async (payload) => {
+  try {
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/admin/users/bulk-action`, {
+      method: 'POST',
+      headers: { ...taoHeaderXacThuc(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    if (response.status === 401) thongBaoPhienHetHan()
+    if (!response.ok) { const msg = await docLoiJsonTuResponse(response); throw new Error(msg) }
+    const data = await response.json()
+    return { thanhCong: true, data }
   } catch (error) {
     return { thanhCong: false, loiMessage: error.message }
   }
@@ -903,9 +933,10 @@ export default {
   layLichSuChuyenDoi, xoaLichSuChuyenDoi, capNhatThongTinTaiKhoan, layThongTinGoiPremium, xacNhanHoaDonThuCongDev, dangKyGoiPremium,
   taoHoaDonNapTien, kiemTraTrangThaiHoaDon, layTongQuanAdmin, layDanhSachNguoiDungAdmin, capNhatVaiTroNguoiDungAdmin,
   capNhatPremiumNguoiDungAdmin, congTokenNguoiDungAdmin, truTokenNguoiDungAdmin, layLichSuTheoNguoiDungAdmin,
-  layTokenLedgerTheoNguoiDungAdmin, xoaNguoiDungAdmin, layLichSuToanHeThongAdmin, xoaBanGhiLichSuAdmin,
+  layTokenLedgerTheoNguoiDungAdmin, layTokenLedgerToanHeThongAdmin, thucHienBulkUserActionAdmin, xoaNguoiDungAdmin, layLichSuToanHeThongAdmin, xoaBanGhiLichSuAdmin,
   layAuditLogsAdmin, xoaTemplateAdmin, layCauHinhHeThongAdmin, capNhatCauHinhHeThongAdmin, xuatBaoCaoAdmin,
   layDanhSachPaymentsAdmin, xacNhanPaymentThuCongAdmin, dangNhapVoiEmail, dangKyVoiEmail, dangXuat, theoDoiTrangThaiXacThuc,
   layThemeHienTai, layNoiDungLandingAdmin, capNhatNoiDungLandingAdmin, resetNoiDungLandingAdmin,
   layDanhSachTrangAdmin, taoTrangAdmin, capNhatTrangAdmin, xoaTrangAdmin, layNoiDungTrangPublic, layNoiDungLandingPublic
 }
+// force update cache

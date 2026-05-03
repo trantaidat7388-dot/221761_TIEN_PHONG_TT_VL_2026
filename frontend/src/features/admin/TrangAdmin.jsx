@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Users, Trophy, CreditCard, Files, History, Settings, Paintbrush, FileText } from 'lucide-react';
+import { BarChart3, Users, Trophy, CreditCard, Files, History, Settings, Paintbrush, FileText, Coins } from 'lucide-react';
 import { dungXacThuc } from '../../context/AuthContext';
 import { useAdminData } from './hooks/useAdminData';
 import { AdminSidebar, AdminTopBar } from './components';
 import {
   TabTongQuan, TabNguoiDung, TabXepHang, TabThanhToan,
   TabTemplate, TabLichSu, TabCauHinh,
-  TabQuanTriGiaoDien, TabChuyenDoiAdmin
+  TabQuanTriGiaoDien, TabChuyenDoiAdmin, TabTokenLedger
 } from './tabs';
 
 const TABS = [
@@ -18,6 +18,7 @@ const TABS = [
   { key: 'thanh-toan', label: 'Thanh toán', icon: CreditCard },
   { key: 'template', label: 'Template', icon: Files },
   { key: 'lich-su', label: 'Lịch sử', icon: History },
+  { key: 'token-ledger', label: 'Token Ledger', icon: Coins },
   { key: 'cau-hinh', label: 'Cấu hình', icon: Settings },
   { key: 'quan-tri-giao-dien', label: 'Quản trị Giao diện', icon: Paintbrush },
 ];
@@ -69,6 +70,7 @@ const TrangAdmin = () => {
           {activeTab === 'thanh-toan' && <TabThanhToan {...adminData} />}
           {activeTab === 'template' && <TabTemplate {...adminData} />}
           {activeTab === 'lich-su' && <TabLichSu {...adminData} />}
+          {activeTab === 'token-ledger' && <TabTokenLedger {...adminData} />}
           {activeTab === 'cau-hinh' && <TabCauHinh {...adminData} />}
           {activeTab === 'quan-tri-giao-dien' && <TabQuanTriGiaoDien />}
           {activeTab === 'chuyen-doi' && <TabChuyenDoiAdmin />}

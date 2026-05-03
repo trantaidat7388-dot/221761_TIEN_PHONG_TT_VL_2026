@@ -160,6 +160,10 @@ def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, g
         db.commit()
         db.refresh(user)
 
+    if not user.is_active:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.")
+
     return user
 
 
@@ -278,6 +282,9 @@ def dang_nhap(req: YeuCauDangNhap, db: Session = Depends(lay_db)) -> dict:
     user = db.query(models.User).filter(models.User.email == req.email).first()
     if not user or not auth.xac_minh_mat_khau(req.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
+
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.")
 
     token = auth.tao_access_token({"sub": str(user.id)})
     return {

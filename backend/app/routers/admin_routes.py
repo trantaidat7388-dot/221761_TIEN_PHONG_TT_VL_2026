@@ -62,6 +62,16 @@ class YeuCauCapNhatTrangThai(BaseModel):
     is_active: bool
 
 
+class YeuCauBulkUserAction(BaseModel):
+    user_ids: list[int]
+    action: str
+    amount: int | None = None
+    reason: str | None = None
+    role: str | None = None
+    premium_days: int | None = None
+    premium_enabled: bool | None = None
+
+
 class YeuCauCapNhatCauHinhHeThong(BaseModel):
     token_min_cost_vnd: int | None = None
     free_plan_max_pages: int | None = None
@@ -237,6 +247,131 @@ def lay_danh_sach_nguoi_dung(
             }
             for u in users
         ]
+    }
+
+
+@router.post("/users/bulk-action")
+def thuc_hien_bulk_action_nguoi_dung(
+    req: YeuCauBulkUserAction,
+    request: Request,
+    db: Session = Depends(lay_db),
+    current_admin: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    if not req.user_ids:
+        raise HTTPException(status_code=400, detail="Danh sach user_ids rong")
+
+    action = (req.action or "").strip().lower()
+    valid_actions = {"lock", "unlock", "grant_token", "deduct_token", "set_role", "set_premium"}
+    if action not in valid_actions:
+        raise HTTPException(status_code=400, detail=f"Action khong hop le: {action}")
+
+    users = db.query(models.User).filter(models.User.id.in_(req.user_ids)).all()
+    user_map = {u.id: u for u in users}
+    results = []
+    success_count = 0
+
+    for user_id in req.user_ids:
+        user = user_map.get(user_id)
+        if not user:
+            results.append({"user_id": user_id, "success": False, "message": "Khong tim thay nguoi dung"})
+            continue
+
+        try:
+            if action in {"lock", "unlock"}:
+                if user.id == current_admin.id and action == "lock":
+                    raise ValueError("Khong the tu khoa tai khoan admin")
+                user.is_active = action == "unlock"
+                _ghi_audit_admin(
+                    db=db,
+                    actor_user_id=current_admin.id,
+                    action=f"admin.bulk_{action}",
+                    request=request,
+                    target_user_id=user.id,
+                    detail=f"is_active={user.is_active}",
+                )
+
+            elif action == "set_role":
+                role_moi = (req.role or "").strip().lower()
+                if role_moi not in {"admin", "user"}:
+                    raise ValueError("Role chi chap nhan 'admin' hoac 'user'")
+                if user.id == current_admin.id and role_moi != "admin":
+                    raise ValueError("Khong the tu ha quyen admin")
+                role_cu = user.role
+                user.role = role_moi
+                _ghi_audit_admin(
+                    db=db,
+                    actor_user_id=current_admin.id,
+                    action="admin.bulk_set_role",
+                    request=request,
+                    target_user_id=user.id,
+                    detail=f"from={role_cu};to={role_moi}",
+                )
+
+            elif action == "set_premium":
+                if req.premium_enabled is None:
+                    raise ValueError("premium_enabled la bat buoc")
+                if req.premium_enabled:
+                    so_ngay = max(1, int(req.premium_days or 30))
+                    now = datetime.utcnow()
+                    user.plan_type = "premium"
+                    user.premium_started_at = now
+                    user.premium_expires_at = now + timedelta(days=so_ngay)
+                else:
+                    user.plan_type = "free"
+                    user.premium_expires_at = None
+                _ghi_audit_admin(
+                    db=db,
+                    actor_user_id=current_admin.id,
+                    action="admin.bulk_set_premium",
+                    request=request,
+                    target_user_id=user.id,
+                    detail=f"enabled={req.premium_enabled};days={req.premium_days}",
+                )
+
+            elif action in {"grant_token", "deduct_token"}:
+                amount = int(req.amount or 0)
+                if amount <= 0:
+                    raise ValueError("So token phai > 0")
+                if action == "deduct_token" and user.token_balance < amount:
+                    raise ValueError("So du token khong du")
+
+                delta = amount if action == "grant_token" else -amount
+                user.token_balance += delta
+                db.add(
+                    models.TokenLedger(
+                        user_id=user.id,
+                        delta_token=delta,
+                        balance_after=user.token_balance,
+                        reason="admin_grant" if action == "grant_token" else "admin_deduct",
+                        meta_json=req.reason or "",
+                    )
+                )
+                _ghi_audit_admin(
+                    db=db,
+                    actor_user_id=current_admin.id,
+                    action="admin.bulk_token_grant" if action == "grant_token" else "admin.bulk_token_deduct",
+                    request=request,
+                    target_user_id=user.id,
+                    detail=f"amount={amount};reason={req.reason or ''}",
+                )
+
+            results.append({
+                "user_id": user.id,
+                "success": True,
+                "token_balance": user.token_balance,
+                "role": user.role,
+                "plan_type": user.plan_type,
+                "is_active": user.is_active,
+            })
+            success_count += 1
+        except Exception as exc:
+            results.append({"user_id": user.id, "success": False, "message": str(exc)})
+
+    db.commit()
+    return {
+        "success_count": success_count,
+        "fail_count": len(results) - success_count,
+        "results": results,
     }
 
 
@@ -496,6 +631,40 @@ def lay_token_ledger_theo_nguoi_dung(
         "danh_sach": [
             {
                 "id": r.id,
+                "delta_token": r.delta_token,
+                "balance_after": r.balance_after,
+                "reason": r.reason,
+                "job_id": r.job_id,
+                "meta_json": r.meta_json,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in records
+        ]
+    }
+
+
+@router.get("/token-ledger")
+def lay_token_ledger_toan_he_thong(
+    limit: int = Query(200, ge=1, le=2000),
+    user_id: int | None = None,
+    db: Session = Depends(lay_db),
+    _: models.User = Depends(auth.yeu_cau_quyen_admin),
+) -> dict:
+    query = db.query(models.TokenLedger)
+    if user_id is not None:
+        query = query.filter(models.TokenLedger.user_id == user_id)
+
+    records = query.order_by(models.TokenLedger.created_at.desc()).limit(limit).all()
+    user_ids = list({r.user_id for r in records})
+    users = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(user_ids)).all()}
+
+    return {
+        "danh_sach": [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "username": users.get(r.user_id).username if users.get(r.user_id) else None,
+                "email": users.get(r.user_id).email if users.get(r.user_id) else None,
                 "delta_token": r.delta_token,
                 "balance_after": r.balance_after,
                 "reason": r.reason,

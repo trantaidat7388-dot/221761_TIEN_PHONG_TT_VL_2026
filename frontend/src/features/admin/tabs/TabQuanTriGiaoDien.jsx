@@ -461,8 +461,8 @@ const LandingPreview = ({ draft, previewMode, disabledSections }) => {
   const sections = (draft.section_order || []).filter(s => !disabledSections.has(s));
 
   return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.02] overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/[0.02]">
+    <div className="rounded-2xl border border-white/5 bg-white/5 overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/5">
         <div className="flex items-center gap-2.5">
           <Globe className="w-4 h-4 text-primary-400" />
           <span className="text-sm font-semibold text-white">Xem trước Landing Page</span>
@@ -470,7 +470,7 @@ const LandingPreview = ({ draft, previewMode, disabledSections }) => {
         <span className="text-[10px] text-white/30 uppercase font-bold tracking-widest">{previewMode}</span>
       </div>
 
-      <div className={`overflow-y-auto bg-[#0a0c10] transition-all duration-500 ${
+      <div className={`overflow-y-auto bg-slate-950 transition-all duration-500 ${
         previewMode === 'mobile' ? 'max-w-[375px] mx-auto rounded-b-2xl' : 'w-full'
       }`} style={{ height: '70vh' }}>
         <div className="p-4 space-y-3">
@@ -509,11 +509,11 @@ const PreviewBlock = ({ secId, meta, Icon, draft, previewMode }) => {
 
   if (secId === 'tinh_nang') {
     return (
-      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+      <div className="rounded-xl border border-white/5 bg-white/5 p-4">
         <p className="text-xs font-bold text-white/60 uppercase mb-3">Tính năng</p>
         <div className={`grid gap-2 ${isMobile ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {(draft.tinh_nang || []).slice(0, 4).map((f, i) => (
-            <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-white/[0.03]">
+            <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-white/5">
               <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center shrink-0"><Zap className="w-3 h-3 text-blue-400" /></div>
               <div><p className="text-xs font-semibold text-white/80">{f.title}</p><p className="text-[10px] text-white/30 line-clamp-1">{f.desc}</p></div>
             </div>
@@ -525,11 +525,11 @@ const PreviewBlock = ({ secId, meta, Icon, draft, previewMode }) => {
 
   if (secId === 'goi_premium') {
     return (
-      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+      <div className="rounded-xl border border-white/5 bg-white/5 p-4">
         <p className="text-xs font-bold text-white/60 uppercase mb-3">Bảng giá</p>
         <div className={`grid gap-2 ${isMobile ? 'grid-cols-1' : 'grid-cols-3'}`}>
           {(draft.goi_premium || []).slice(0, 3).map((g, i) => (
-            <div key={i} className="p-3 rounded-lg bg-white/[0.03] border border-white/5 text-center">
+            <div key={i} className="p-3 rounded-lg bg-white/5 border border-white/5 text-center">
               <p className="text-xs font-bold text-white/80">{g.name}</p>
               <p className="text-sm font-black text-primary-400 mt-1">{g.price}₫</p>
               <p className="text-[10px] text-white/30">{g.days} ngày</p>
@@ -542,11 +542,11 @@ const PreviewBlock = ({ secId, meta, Icon, draft, previewMode }) => {
 
   if (secId === 'faq') {
     return (
-      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+      <div className="rounded-xl border border-white/5 bg-white/5 p-4">
         <p className="text-xs font-bold text-white/60 uppercase mb-3">FAQ</p>
         <div className="space-y-1.5">
           {(draft.faq || []).slice(0, 3).map((f, i) => (
-            <div key={i} className="p-2 rounded-lg bg-white/[0.03]">
+            <div key={i} className="p-2 rounded-lg bg-white/5">
               <p className="text-xs font-semibold text-white/70">{f.q}</p>
               <p className="text-[10px] text-white/30 line-clamp-1 mt-0.5">{f.a}</p>
             </div>
@@ -558,7 +558,7 @@ const PreviewBlock = ({ secId, meta, Icon, draft, previewMode }) => {
 
   // Default section block
   return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 flex items-center gap-3">
+    <div className="rounded-xl border border-white/5 bg-white/5 p-4 flex items-center gap-3">
       <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${meta.color} flex items-center justify-center`}>
         <Icon className="w-4 h-4 text-white" />
       </div>

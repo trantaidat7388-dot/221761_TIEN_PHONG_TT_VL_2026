@@ -7,3 +7,4 @@ export { default as TabLichSu } from './TabLichSu';
 export { default as TabCauHinh } from './TabCauHinh';
 export { default as TabQuanTriGiaoDien } from './TabQuanTriGiaoDien';
 export { default as TabChuyenDoiAdmin } from './TabChuyenDoi';
+export { default as TabTokenLedger } from './TabTokenLedger';

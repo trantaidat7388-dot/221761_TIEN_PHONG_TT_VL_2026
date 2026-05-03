@@ -9,6 +9,7 @@ import { layThemeHienTai, capNhatCauHinhHeThongAdmin } from '../../../services/a
 const THEMES = {
   'dark-indigo': { name: 'Dark Indigo', emoji: '🟣', desc: 'Tông tím/indigo sang trọng', colors: ['#1e1b4b','#0d1321','#7c3aed','#a78bfa'] },
   'midnight-purple': { name: 'Midnight Purple', emoji: '🟣', desc: 'Tông tím neon/tối', colors: ['#020617','#3b0764','#a855f7','#d8b4fe'] },
+  'midnight-cyan': { name: 'Midnight Cyan', emoji: '🔵', desc: 'Tông tối/xanh lơ', colors: ['#000000','#09090b','#22d3ee','#67e8f9'] },
   'warm-slate': { name: 'Warm Slate', emoji: '🟠', desc: 'Tông ấm amber/stone', colors: ['#1c1917','#44403c','#f59e0b','#fbbf24'] },
   'light-pro': { name: 'Light Pro', emoji: '⚪', desc: 'Nền sáng chuyên nghiệp', colors: ['#f9fafb','#ffffff','#4f46e5','#6366f1'] },
 }
