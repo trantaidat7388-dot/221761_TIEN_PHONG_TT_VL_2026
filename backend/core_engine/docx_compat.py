@@ -42,11 +42,27 @@ def mo_tai_lieu_word(docx_path: str | None = None) -> Any:
 
 
 def _lay_toan_bo_van_ban(self) -> str:
-    return "".join(node.text for node in self._element.xpath(".//w:t") if node.text)
+    """Robust text extraction using namespace-agnostic XPath."""
+    try:
+        # local-name() matches the tag name regardless of prefix
+        res = "".join(node.text for node in self._element.xpath(".//*[local-name()='t']") if node.text)
+        return res if res is not None else ""
+    except Exception:
+        # Final fallback: use iter()
+        try:
+            res = "".join(node.text for node in self._element.iter() if node.tag.endswith('}t') and node.text)
+            return res if res is not None else ""
+        except Exception:
+            return ""
 
 
 def _lay_toan_bo_run(self) -> list[Run]:
-    return [Run(r, self) for r in self._element.xpath(".//w:r")]
+    """Robust run extraction using namespace-agnostic XPath."""
+    try:
+        return [Run(r, self) for r in self._element.xpath(".//*[local-name()='r']")]
+    except Exception:
+        # Final fallback: use iter()
+        return [Run(r, self) for r in self._element.iter() if r.tag.endswith('}r')]
 
 
 def ap_dung_ban_va_tuong_thich_docx() -> None:

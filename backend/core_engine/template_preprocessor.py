@@ -504,6 +504,24 @@ class TemplatePreprocessor:
             "\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n"
             "\\@ifundefined{Bbbk}{}{\\let\\Bbbk\\relax}\n"
             "\\@ifpackageloaded{amssymb}{}{\\usepackage{amssymb}}\n"
+            "\\usepackage{newunicodechar}\n"
+            "\\newunicodechar{≥}{\\ensuremath{\\geq}}\n"
+            "\\newunicodechar{≤}{\\ensuremath{\\leq}}\n"
+            "\\newunicodechar{≠}{\\ensuremath{\\neq}}\n"
+            "\\newunicodechar{±}{\\ensuremath{\\pm}}\n"
+            "\\newunicodechar{≈}{\\ensuremath{\\approx}}\n"
+            "\\newunicodechar{×}{\\ensuremath{\\times}}\n"
+            "\\newunicodechar{÷}{\\ensuremath{\\div}}\n"
+            "\\newunicodechar{…}{\\ldots}\n"
+            "\\newunicodechar{≔}{\\ensuremath{\\coloneqq}}\n"
+            "\\newunicodechar{∧}{\\ensuremath{\\land}}\n"
+            "\\newunicodechar{↦}{\\ensuremath{\\mapsto}}\n"
+            "\\newunicodechar{𝑇}{\\textit{T}}\n"
+            "\\newunicodechar{𝐿}{\\textit{L}}\n"
+            "\\newunicodechar{𝑁}{\\textit{N}}\n"
+            "\\newunicodechar{𝑖}{\\textit{i}}\n"
+            "\\newunicodechar{𝑘}{\\textit{k}}\n"
+            "\\newunicodechar{𝑛}{\\textit{n}}\n"
             "\\@ifpackageloaded{xurl}{}{\\usepackage{xurl}}\n"
             "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}\n"
             "\\@ifpackageloaded{graphicx}{}{\\usepackage{graphicx}}\n"
@@ -925,7 +943,7 @@ class TemplatePreprocessor:
 
         # Tìm điểm KẾT THÚC: ưu tiên References/bibliography, fallback \end{document}
         end_search_patterns = [
-            r'\\section\*?\{References\}',
+            r'\\section\*?\{(?:References|Bibliography|Tài liệu tham khảo|TÀI LIỆU THAM KHẢO)\}',
             r'\\begin\{thebibliography\}',
             r'\\bibliographystyle\{',
             r'\\bibliography\{',
@@ -1073,7 +1091,7 @@ class TemplatePreprocessor:
 
         # Bước 2: Nếu có \section*{References}, xóa TOÀN BỘ nội dung từ đó đến \end{document}
         # (bao gồm dummy guidance text, \color{red} warning, v.v.) và chỉ giữ references_block
-        ref_match = re.search(r'\\section\*?\s*\{References\}', tex)
+        ref_match = re.search(r'\\section\*?\s*\{(?:References|Bibliography|Tài liệu tham khảo|TÀI LIỆU THAM KHẢO)\}', tex, re.IGNORECASE)
         end_doc_match = re.search(r'\\end\{document\}', tex)
         if ref_match and end_doc_match and ref_match.start() < end_doc_match.start():
             tex = tex[:ref_match.start()] + '\n<< references_block >>\n\n' + tex[end_doc_match.start():]

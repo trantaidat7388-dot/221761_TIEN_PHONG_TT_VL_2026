@@ -170,6 +170,45 @@ def loc_ky_tu(text: str) -> str:
         ('\u2192', 'UNIPHxRARRx', r'\ensuremath{\rightarrow}'),
         ('\u2190', 'UNIPHxLARRx', r'\ensuremath{\leftarrow}'),
         ('\u2022', 'UNIPHxBULLETx', r'\ensuremath{\bullet}'),
+        ('\u2254', 'UNIPHxCOLEQx', r'\ensuremath{\coloneqq}'),
+        ('\u2208', 'UNIPHxINx', r'\ensuremath{\in}'),
+        ('\u2217', 'UNIPHxASTx', r'\ensuremath{\ast}'),
+        ('\u2227', 'UNIPHxLANDx', r'\ensuremath{\land}'),
+        ('\u2228', 'UNIPHxLORx', r'\ensuremath{\lor}'),
+        ('\u2032', 'UNIPHxPRIME', r'\ensuremath{^\prime}'),
+        ('\u2212', 'UNIPHxMINUSx', r'\ensuremath{-}'),
+        ('\u21A6', 'UNIPHxMAPSTOx', r'\ensuremath{\mapsto}'),
+        ('\u2211', 'UNIPHxSUMx', r'\ensuremath{\sum}'),
+        ('\u220F', 'UNIPHxPRODx', r'\ensuremath{\prod}'),
+        ('\u221E', 'UNIPHxINFx', r'\ensuremath{\infty}'),
+        ('\u2202', 'UNIPHxPARTx', r'\ensuremath{\partial}'),
+        ('\u2207', 'UNIPHxGRADx', r'\ensuremath{\nabla}'),
+        ('\u2200', 'UNIPHxFORALLx', r'\ensuremath{\forall}'),
+        ('\u2203', 'UNIPHxEXISTSx', r'\ensuremath{\exists}'),
+        ('\u2205', 'UNIPHxEMPTYx', r'\ensuremath{\emptyset}'),
+        ('\u2229', 'UNIPHxCAPx', r'\ensuremath{\cap}'),
+        ('\u222A', 'UNIPHxCUPx', r'\ensuremath{\cup}'),
+        ('\u223C', 'UNIPHxSIMx', r'\ensuremath{\sim}'),
+        ('\u2243', 'UNIPHxSIMEQx', r'\ensuremath{\simeq}'),
+        ('\u2245', 'UNIPHxCONGx', r'\ensuremath{\cong}'),
+        ('\u2261', 'UNIPHxEQUIVx', r'\ensuremath{\equiv}'),
+        ('\u226a', 'UNIPHxLLx', r'\ensuremath{\ll}'),
+        ('\u226b', 'UNIPHxGGx', r'\ensuremath{\gg}'),
+        ('\u2282', 'UNIPHxSUBSETx', r'\ensuremath{\subset}'),
+        ('\u2283', 'UNIPHxSUPSETx', r'\ensuremath{\supset}'),
+        ('\u2286', 'UNIPHxSUBSEQx', r'\ensuremath{\subseteq}'),
+        ('\u2287', 'UNIPHxSUPSEQx', r'\ensuremath{\supseteq}'),
+        ('\u221d', 'UNIPHxPROPx', r'\ensuremath{\propto}'),
+        ('\u2220', 'UNIPHxANGLEx', r'\ensuremath{\angle}'),
+        ('\u22a5', 'UNIPHxBOTx', r'\ensuremath{\bot}'),
+        ('\u22a4', 'UNIPHxTOPx', r'\ensuremath{\top}'),
+        ('\u2295', 'UNIPHxOPLUSx', r'\ensuremath{\oplus}'),
+        ('\u2297', 'UNIPHxOTIMESx', r'\ensuremath{\otimes}'),
+        ('\u2299', 'UNIPHxODOTx', r'\ensuremath{\odot}'),
+        ('\u00AC', 'UNIPHxNEGx', r'\ensuremath{\neg}'),
+        ('\u2020', 'UNIPHxDAGx', r'\ensuremath{\dagger}'),
+        ('\u2021', 'UNIPHxDDAGx', r'\ensuremath{\ddagger}'),
+        ('\u22C5', 'UNIPHxCDOTx', r'\ensuremath{\cdot}'),
     ]
     # Ký tự Unicode thay thẳng (không cần placeholder)
     simple_unicode = [
@@ -180,18 +219,55 @@ def loc_ky_tu(text: str) -> str:
         ('\u201C', "``"),    # Left double quote
         ('\u201D', "''"),    # Right double quote
         ('\u2026', '...'),   # ellipsis
+        ('\u2000', ' '),     # en quad
+        ('\u2001', ' '),     # em quad
+        ('\u2002', ' '),     # en space
+        ('\u2003', ' '),     # em space
+        ('\u2004', ' '),     # three-per-em space
+        ('\u2005', ' '),     # four-per-em space
+        ('\u2006', ' '),     # six-per-em space
+        ('\u2007', ' '),     # figure space
+        ('\u2008', ' '),     # punctuation space
+        ('\u2009', ' '),     # thin space
+        ('\u200A', ' '),     # hair space
+        ('\u200B', ''),      # zero width space
     ]
     
     ket_qua, pua_placeholders = _normalize_private_use_symbol_chars(text)
 
-    # Remove directional control chars and uncommon script noise that can break
-    # pdfLaTeX in otherwise Latin-based documents (e.g., stray Hebrew tokens).
+    # Remove directional control chars and uncommon script noise (Hebrew, Armenian, etc.)
     ket_qua = re.sub(r'[\u200e\u200f\u202a-\u202e\u2066-\u2069]', '', ket_qua)
-    ket_qua = re.sub(r'[\u0590-\u05FF]+', ' ', ket_qua)
+    ket_qua = re.sub(r'[\u0530-\u05FF]+', ' ', ket_qua) # Armenian + Hebrew range
+    
+    # Normalize Mathematical Alphanumeric Symbols (U+1D400-U+1D7FF) to standard letters
+    def normalize_math_chars(match):
+        c = match.group(0)
+        cp = ord(c)
+        # Bold A-Z, a-z
+        if 0x1D400 <= cp <= 0x1D419: return chr(ord('A') + (cp - 0x1D400))
+        if 0x1D41A <= cp <= 0x1D433: return chr(ord('a') + (cp - 0x1D41A))
+        # Italic A-Z, a-z
+        if 0x1D434 <= cp <= 0x1D44D: return chr(ord('A') + (cp - 0x1D434))
+        if 0x1D44E <= cp <= 0x1D467: return chr(ord('a') + (cp - 0x1D44E))
+        # Bold Italic A-Z, a-z
+        if 0x1D468 <= cp <= 0x1D481: return chr(ord('A') + (cp - 0x1D468))
+        if 0x1D482 <= cp <= 0x1D49B: return chr(ord('a') + (cp - 0x1D482))
+        # Script, Fraktur, Double-struck, Sans-serif etc.
+        # For simplicity, map most to their ASCII equivalents if possible, or space
+        if 0x1D49C <= cp <= 0x1D7FF:
+            # Try to find base letter by modular arithmetic if it follows a pattern, 
+            # otherwise just return the character itself or space
+            return ' '
+        return c
+        
+    ket_qua = re.sub(r'[\U0001D400-\U0001D7FF]', normalize_math_chars, ket_qua)
     
     # Thay Unicode đơn giản trước
     for ky_tu_u, thay_the_u in simple_unicode:
         ket_qua = ket_qua.replace(ky_tu_u, thay_the_u)
+    
+    # Thay tab (\t) thành \quad trong LaTeX
+    ket_qua = ket_qua.replace('\t', r'\quad ')
     
     # Thay Unicode phức tạp bằng placeholder ASCII
     for ky_tu_u, placeholder, _ in unicode_placeholders:
@@ -252,6 +328,20 @@ def loc_ky_tu(text: str) -> str:
         return rf'\url{{{url_nguyen_thuy}}}' + duoi_bi_cat
 
     ket_qua = re.sub(url_pattern, thay_the_url, ket_qua)
+    
+    # BƯỚC CUỐI: Xử lý triệt để các ký tự Unicode còn sót lại có thể gây lỗi LaTeX
+    # Nếu là XeLaTeX thì cho phép Unicode, nếu không thì escape
+    # Tuy nhiên một số ký tự đặc biệt (như 𝑇) vẫn gây lỗi ngay cả với XeLaTeX nếu font không hỗ trợ
+    def handle_leftover_unicode(match):
+        c = match.group(0)
+        # Một số ký tự Tiếng Việt phổ biến và các ký tự đặc biệt an toàn thì giữ lại
+        # Latin Extended Additional dải \u1E00-\u1EFF rất quan trọng cho Tiếng Việt
+        if re.match(r'[a-zA-Z0-9\sà-ỹÀ-ỸđĐ\u1E00-\u1EFF]', c): return c
+        # Còn lại thì bọc trong \ensuremath nếu là ký tự toán, hoặc bỏ qua
+        return f' '
+
+    # Chỉ áp dụng cho các ký tự ngoài dải ASCII và Tiếng Việt mở rộng
+    ket_qua = re.sub(r'[^\x00-\x7Fà-ỹÀ-ỸđĐ\u1E00-\u1EFF\s\\]', handle_leftover_unicode, ket_qua)
     
     return ket_qua
 

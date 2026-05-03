@@ -76,7 +76,7 @@ class WordASTParser:
             if not hasattr(node, "tag") or not isinstance(node.tag, str):
                 return
             tag = node.tag.split("}")[-1]
-            if tag == "p":
+            if tag in ("p", "oMathPara", "oMath"):
                 elements.append(("paragraph", Paragraph(node, self.doc)))
                 # Capture nested blocks only from explicit containers where paragraph
                 # text is semantically embedded (e.g., text boxes / content controls),
@@ -102,13 +102,23 @@ class WordASTParser:
             
         return elements
         
+    def _get_style_name(self, element: Any) -> str:
+        """Safely extract style name from a Paragraph object, handling missing styles or attribute errors."""
+        try:
+            if hasattr(element, "style") and element.style is not None:
+                name = getattr(element.style, "name", "")
+                return str(name or "")
+        except (AttributeError, KeyError, Exception):
+            pass
+        return ""
+
     def _is_abstract_label(self, text: str) -> bool:
-        norm = re.sub(r"^[\d\.]+\s*", "", text.strip().upper())
+        norm = re.sub(r"^[\d\.]+\s*", "", (text or "").strip().upper())
         return norm.startswith("ABSTRACT") or norm.startswith("TÓM TẮT") or norm.startswith("TOM TAT")
         
     def _is_keywords_label(self, text: str) -> bool:
         # ACM style often uses "Additional Keywords and Phrases:"
-        return bool(re.match(r'^(?:(?:ADDITIONAL\s+)?KEYWORDS?|TỪ KHÓA|TU KHOA|INDEX TERMS)\b', text.strip(), re.IGNORECASE))
+        return bool(re.match(r'^(?:(?:ADDITIONAL\s+)?KEYWORDS?|TỪ KHÓA|TU KHOA|INDEX TERMS)\b', (text or "").strip(), re.IGNORECASE))
 
     def _image_ext_from_content_type(self, content_type: str) -> str:
         ct = (content_type or '').lower()
@@ -173,23 +183,23 @@ class WordASTParser:
         return f"width={width_expr},keepaspectratio"
         
     def _is_body_label(self, text: str) -> bool:
-        norm = re.sub(r"^[\d\.]+\s*", "", text.strip().upper())
+        norm = re.sub(r"^[\d\.]+\s*", "", (text or "").strip().upper())
         for kw in ["INTRODUCTION", "GIỚI THIỆU", "GIOI THIEU", "MỞ ĐẦU", "CHAPTER 1", "BACKGROUND"]:
             if norm.startswith(kw):
                 return True
-        if re.match(r"^[IV]+\.\s+", text.strip()):
+        if re.match(r"^[IV]+\.\s+", (text or "").strip()):
             return True
         return False
 
     def _is_authors_label(self, text: str) -> bool:
-        norm = text.strip().upper()
+        norm = (text or "").strip().upper()
         for kw in ["AUTHORS", "TÁC GIẢ", "TAC GIA"]:
             if kw in norm and len(text) < 15:
                 return True
         return False
 
     def _is_references_label(self, text: str) -> bool:
-        norm = re.sub(r"^[\d\.]+\s*", "", text.strip().upper())
+        norm = re.sub(r"^[\d\.]+\s*", "", (text or "").strip().upper())
         # Avoid false positives like "References and Footnotes" in publisher templates.
         if re.match(r"^REFERENCES\s*[:\.]?$", norm):
             return True
@@ -226,6 +236,11 @@ class WordASTParser:
             return True
         if re.search(r'https?://|www\.', t):
             return True
+        # Catch common start patterns for bibliography entries like [1], 1., etc.
+        if re.match(r'^\[?\d+\]?\s+\.?[A-Z]', t):
+            return True
+        if re.match(r'^[A-Z][a-z]+,\s+[A-Z]\.', t): # Author Name, I.
+            return True
 
         # Author-like leading pattern: initials/names followed by comma.
         if re.match(r'^([A-Z]\.\s*){1,4}[A-Za-z\-\']+\s*,', t):
@@ -234,22 +249,9 @@ class WordASTParser:
         return False
 
     def _get_para_text_with_br(self, p) -> str:
-        """Helper to reliably extract text from a paragraph, replacing w:br with \\n.
-        This handles cases where windows IO flush delay or docx cache fails to yield proper text 
-        with formatting from p.text natively."""
-        try:
-            parts = []
-            from docx.oxml.ns import qn
-            for child in p._element:
-                if child.tag == qn('w:r'):
-                    for r_child in child:
-                        if r_child.tag == qn('w:t'):
-                            parts.append(r_child.text or '')
-                        elif r_child.tag == qn('w:br'):
-                            parts.append('\n')
-            return ''.join(parts).strip()
-        except:
-            return p.text.strip()
+        """Helper to reliably extract text from a paragraph, including OMML math equations.
+        Previously, iterating over p.runs ignored all math nodes."""
+        return self._parse_paragraph(p).get("text", "").strip()
 
     # ====== HEURISTIC: Table/Image detection (ported from legacy xu_ly_bang.py) ======
 
@@ -269,7 +271,7 @@ class WordASTParser:
                         continue
                     cells_da_kiem.add(cell_id)
                     tong_cell += 1
-                    cell_text = cell.text.strip()
+                    cell_text = (cell.text or "").strip()
                     co_anh = False
 
                     for para in cell.paragraphs:
@@ -300,7 +302,7 @@ class WordASTParser:
                 if so_cell_co_anh / tong_cell >= 0.3:
                     return True
         except Exception as e:
-            print(f'[Cảnh báo] la_bang_chua_anh (AST): {e}')
+            print(f'[WARNING] la_bang_chua_anh (AST): {e}')
         return False
 
     def _trich_xuat_anh_tu_bang(self, table: Table) -> List[str]:
@@ -338,7 +340,7 @@ class WordASTParser:
         try:
             for hang in table.rows:
                 for cell in hang.cells:
-                    text = cell.text.strip()
+                    text = (cell.text or "").strip()
                     match = re.match(r'^\(([a-z])\)(.*)$', text)
                     if match:
                         nhan = match.group(1)
@@ -363,7 +365,7 @@ class WordASTParser:
             if loai_prev != 'paragraph':
                 return None
 
-            text_prev = para_prev.text.strip()
+            text_prev = (para_prev.text or "").strip()
             if not text_prev:
                 return None
 
@@ -376,7 +378,7 @@ class WordASTParser:
             if idx_prev2 >= 0:
                 loai_prev2, para_prev2 = elements[idx_prev2]
                 if loai_prev2 == 'paragraph':
-                    text_prev2 = para_prev2.text.strip()
+                    text_prev2 = (para_prev2.text or "").strip()
 
             is_prev_table_line = bool(re.match(r'^(BẢNG|BANG|TABLE)\b', text_prev, re.IGNORECASE))
             is_prev2_table_label = bool(re.match(r'^(BẢNG|BANG|TABLE)\s*[IVXLCDM\d]+\s*$', text_prev2, re.IGNORECASE))
@@ -394,7 +396,7 @@ class WordASTParser:
                 used_nodes.add(idx_prev2)
                 return self._chuan_hoa_ten_caption(text_prev, kind='table')
         except Exception as e:
-            print(f"[Cảnh báo] _bat_caption_bang: {e}")
+            print(f"[WARNING] _bat_caption_bang: {e}")
         return None
 
     def _bat_caption_hinh_theo_style(self, elements: List[tuple], idx: int, used_nodes: set) -> str:
@@ -423,7 +425,7 @@ class WordASTParser:
             text = (phan_tu.text or '').strip()
             if not text:
                 continue
-            style_name = (phan_tu.style.name if phan_tu.style else '').lower()
+            style_name = self._get_style_name(phan_tu).lower()
             if 'heading 1' in style_name:
                 break
             is_caption_style = ('figure caption' in style_name) or ('caption' == style_name)
@@ -445,7 +447,7 @@ class WordASTParser:
             text = (phan_tu.text or '').strip()
             if not text:
                 continue
-            style_name = (phan_tu.style.name if phan_tu.style else '').lower()
+            style_name = self._get_style_name(phan_tu).lower()
             is_caption_style = ('figure caption' in style_name) or ('caption' == style_name)
             is_caption_marker = 'figure caption' in text.lower()
             if is_caption_style or is_caption_marker:
@@ -469,7 +471,7 @@ class WordASTParser:
                     break
                 if loai != 'paragraph':
                     continue
-                text = phan_tu.text.strip()
+                text = (phan_tu.text or "").strip()
                 if not text:
                     continue
                 # FIX 1: Support decimal chapter numbers like "Figure 3.1" and IEEE "Fig. 1."
@@ -478,10 +480,11 @@ class WordASTParser:
                     caption_text = self._chuan_hoa_ten_caption(text, kind='figure')
                     return caption_text
                 # Dừng nếu gặp section heading mới
-                if hasattr(phan_tu, 'style') and phan_tu.style and phan_tu.style.name and 'Heading' in phan_tu.style.name:
+                style_name = self._get_style_name(phan_tu)
+                if style_name and 'Heading' in style_name:
                     break
         except Exception as e:
-            print(f"[Cảnh báo] _bat_caption_hinh: {e}")
+            print(f"[WARNING] _bat_caption_hinh: {e}")
         return None
 
     def _chuan_hoa_ten_caption(self, text: str, kind: str) -> str:
@@ -506,11 +509,11 @@ class WordASTParser:
 
     def _is_title_paragraph(self, p: Paragraph, idx: int) -> bool:
         """Heuristic for title: usually bold, large, or specific style 'Title'."""
-        text = p.text.strip()
+        text = (p.text or "").strip()
         if not text or len(text) < 3: return False
         if "Short Title" in text or "ACM Reference Format" in text: return False
         
-        style_name = p.style.name if p.style else ""
+        style_name = self._get_style_name(p)
         style_lc = style_name.lower()
         if "title" in style_lc or "header" in style_lc:
             return True
@@ -522,7 +525,7 @@ class WordASTParser:
         except: pass
         
         runs = p.runs
-        all_bold = all(r.bold for r in runs if r.text.strip()) if runs else False
+        all_bold = all(r.bold for r in runs if (r.text or "").strip()) if runs else False
         large_font = any(r.font.size and r.font.size.pt >= 14 for r in runs) if runs else False
         
         if (aligned_center and all_bold) or (large_font and all_bold):
@@ -560,8 +563,9 @@ class WordASTParser:
                 if idx > 0:
                     prev_type, prev_el = elements[idx - 1]
                     if prev_type == 'paragraph':
-                        text = prev_el.text.strip()
-                        if text and re.match(r'^(BẢNG|BANG|TABLE)\b', text, re.IGNORECASE):
+                        text = (prev_el.text or "").strip()
+                        # Strictly match short table labels like "TABLE I" or "Table 1"
+                        if text and len(text) < 100 and re.match(r'^(BẢNG|BANG|TABLE)\s+[IVXLCDM\d]+\s*[:.\-]?\s*$', text, re.IGNORECASE):
                             used_nodes.add(idx - 1)
                         else:
                             # Two-line table caption pattern:
@@ -570,7 +574,7 @@ class WordASTParser:
                             if idx > 1:
                                 prev2_type, prev2_el = elements[idx - 2]
                                 if prev2_type == 'paragraph':
-                                    text2 = prev2_el.text.strip()
+                                    text2 = (prev2_el.text or "").strip()
                                     if text2 and re.match(r'^(BẢNG|BANG|TABLE)\s+[IVXLCDM\d]+\s*[:.\-]?\s*$', text2, re.IGNORECASE):
                                         used_nodes.add(idx - 2)
                                         if text:
@@ -590,13 +594,16 @@ class WordASTParser:
                             break
                         if a_type != 'paragraph':
                             continue
-                        a_text = a_el.text.strip()
+                        a_text = (a_el.text or "").strip()
                         if not a_text:
                             continue
-                        if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG|PIG)(?:\.|\b)', a_text, re.IGNORECASE):
+                        # Strictly match figure labels like "Fig. 1." or "Figure 2."
+                        # If the paragraph is very long, it's likely body text starting with "Figure X..."
+                        if len(a_text) < 300 and re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG|PIG)\s+[IVXLCDM\d\.]+\s*[:.\-]?\s*', a_text, re.IGNORECASE):
                             used_nodes.add(idx_after)
                             break
-                        if hasattr(a_el, 'style') and a_el.style and a_el.style.name and 'Heading' in a_el.style.name:
+                        style_name = self._get_style_name(a_el)
+                        if style_name and 'Heading' in style_name:
                             break
         
         for idx, (etype, element) in enumerate(elements):
@@ -611,18 +618,18 @@ class WordASTParser:
             style_cmd = ""
             
             if etype == "paragraph":
-                text = element.text.strip()
+                text = (element.text or "").strip()
                 has_img_para = bool(element._p.findall(f'.//{{{A_NAMESPACE}}}blip')) or bool(element._p.findall(r'.//{urn:schemas-microsoft-com:vml}imagedata'))
                 if not text and state == "pre_title" and (not has_img_para):
                     continue # Skip empty leading lines (but keep image-only paragraphs)
                 if text == "Short Title": continue
                 
-                style_name = element.style.name if element.style else ""
+                style_name = self._get_style_name(element)
                 style_cmd = MAP_STYLE.get(style_name, "")
                 
                 # Font features
                 for r in element.runs:
-                    if r.text.strip() and r.bold:
+                    if (r.text or "").strip() and r.bold:
                         is_bold = True
                         break
                 prediction = du_doan_loai_node(text, idx, is_bold)
@@ -659,7 +666,7 @@ class WordASTParser:
                     if (self._is_abstract_label(text) or prediction == "ABSTRACT" or style_name == "Abstract" or
                         self._is_keywords_label(text) or prediction == "KEYWORDS" or style_name in ("KeyWords", "Keywords", "CCSCONCEPTS") or
                         self._is_body_label(text) or prediction == "HEADING" or _la_style_heading(style_name) or
-                        (style_name in ("BodyText", "Body Text", "Normal") and len(text) > 100)):
+                        (style_name in ("BodyText", "Body Text", "Normal") and len(text) > 150)):
                         
                         if self._is_abstract_label(text) or prediction == "ABSTRACT" or style_name == "Abstract":
                             state = "abstract"
@@ -676,6 +683,10 @@ class WordASTParser:
                             state = "keywords"
                         else:
                             state = "body"
+                    
+                    # Safety: if abstract contains a table, it likely means the abstract block is over (IEEE style)
+                    if etype == "table":
+                        state = "body"
 
                 elif state == "keywords":
                     keyword_overflow = (
@@ -694,11 +705,14 @@ class WordASTParser:
                     if (self._is_body_label(text) or prediction == "HEADING" or _la_style_heading(style_name)):
                         state = "body"
 
-                # From body (or any state): detect references section
-                if state == "body":
-                    if (self._is_references_label(text) or
-                        style_name.lower() in ("referenceitem", "references", "bibliography")):
-                        state = "references"
+                # Global: detect references section (can transition from any state)
+                if (self._is_references_label(text) or
+                    style_name.lower() in ("referenceitem", "references", "bibliography")):
+                    state = "references"
+                    # If this is just the label, don't add it as a paragraph yet
+                    # (it will be skipped in the 'references' block below)
+                    if self._is_references_label(text):
+                        continue
 
                 # Action: Add to buffer or ir
                 if state == "title":
@@ -715,11 +729,11 @@ class WordASTParser:
                                 # "line 1: ...", "line 2: ..."; strip this wrapper.
                                 line_clean = re.sub(r'^line\s*\d+\s*:\s*', '', line_clean, flags=re.IGNORECASE)
                                 if line_clean:
-                                    authors_buf.append(line_clean)
+                                    authors_buf.append(loc_ky_tu(line_clean))
                         else:
                             cleaned = re.sub(r'^line\s*\d+\s*:\s*', '', text, flags=re.IGNORECASE).strip()
                             if cleaned:
-                                authors_buf.append(cleaned)
+                                authors_buf.append(loc_ky_tu(cleaned))
                 elif state == "abstract":
                     # FIX 3: Smart split — paragraph may contain BOTH "Abstract." and "Keywords:"
                     combined_match = re.search(
@@ -750,31 +764,51 @@ class WordASTParser:
                     if re.match(r'^\s*(?:BẢNG|BANG|TABLE)\s+[IVXLCDM\d]+\s*[:.\-]?\s*$', text, re.IGNORECASE):
                         continue
 
-                    node = self._parse_paragraph(element)
-                    node_text = node.get('text', '')
-                    # Post-process: nếu paragraph chứa standalone figure, tìm caption phía dưới
-                    if '\\includegraphics' in node_text and '\\begin{figure' in node_text:
-                        img_match = re.search(r'\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}', node_text)
-                        img_path = img_match.group(1).strip() if img_match else ""
-                        if img_path and img_path in seen_figure_paths:
-                            continue
-                        caption = self._bat_caption_hinh(elements, idx, used_nodes)
-                        if not caption:
-                            caption = self._bat_caption_hinh_theo_style(elements, idx, used_nodes)
-                        if caption:
-                            node['text'] = node_text.replace('\\caption{}', f'\\caption{{{caption}}}')
-                        if img_path:
-                            seen_figure_paths.add(img_path)
-                    self.ir["body"].append(node)
-                elif state == "references":
-                    # Skip the header label itself (e.g., "Tài Liệu Tham Khảo", "References")
-                    if (not self._is_references_label(text)) and self._looks_like_reference_entry(text):
+                    try:
                         node = self._parse_paragraph(element)
-                        node_text = node.get("text", "")
-                        if node_text.startswith("\\url{") and len(self.ir["references"]) > 0:
-                            self.ir["references"][-1]["text"] += " " + node_text
+                        node_text = node.get('text', '')
+                        # Post-process: nếu paragraph chứa standalone figure, tìm caption phía dưới
+                        if '\\includegraphics' in node_text and '\\begin{figure' in node_text:
+                            img_match = re.search(r'\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}', node_text)
+                            img_path = img_match.group(1).strip() if img_match else ""
+                            if img_path and img_path in seen_figure_paths:
+                                continue
+                            caption = self._bat_caption_hinh(elements, idx, used_nodes)
+                            if not caption:
+                                caption = self._bat_caption_hinh_theo_style(elements, idx, used_nodes)
+                            if caption:
+                                node['text'] = node_text.replace('\\caption{}', f'\\caption{{{caption}}}')
+                            if img_path:
+                                seen_figure_paths.add(img_path)
+                        self.ir["body"].append(node)
+                    except Exception as e:
+                        print(f"[WARNING] Lỗi parse paragraph {idx}: {e}")
+                        # Fallback: add raw text if parsing failed
+                        self.ir["body"].append({"type": "paragraph", "text": loc_ky_tu(text), "style": style_name})
+                elif state == "references":
+                    # Allow returning to body if we see a new heading (e.g. Appendix)
+                    # BUT only if it's NOT the references label itself!
+                    if (_la_style_heading(style_name) or prediction == "HEADING") and not self._is_references_label(text):
+                        state = "body"
+                        node = self._parse_paragraph(element)
+                        self.ir["body"].append(node)
+                        continue
+
+                    # Skip the header label itself (e.g., "Tài Liệu Tham Khảo", "References")
+                    if (not self._is_references_label(text)):
+                        if self._looks_like_reference_entry(text):
+                            node = self._parse_paragraph(element)
+                            node_text = node.get("text", "")
+                            if node_text.startswith("\\url{") and len(self.ir["references"]) > 0:
+                                self.ir["references"][-1]["text"] += " " + node_text
+                            else:
+                                self.ir["references"].append(node)
                         else:
-                            self.ir["references"].append(node)
+                            # If it doesn't look like a reference but we are in reference state,
+                            # it might be a continuation or just a non-standard reference.
+                            # We keep it as a body paragraph to avoid losing content.
+                            node = self._parse_paragraph(element)
+                            self.ir["body"].append(node)
                 
             elif etype == "table":
                 # Bypass: Nếu bảng đứng trước abstract, có thể đây là Author Table đặc thù của IEEE
@@ -796,15 +830,18 @@ class WordASTParser:
                         table_text = "\n".join(table_lines)
                         if len(table_text) < 1500 and not self._la_bang_chua_anh(element):
                             state = "authors"
-                            authors_buf.extend(table_lines)
+                            # Ensure table-based author content is sanitized
+                            authors_buf.extend([loc_ky_tu(ln) for ln in table_lines])
                             # Đánh dấu bảng này đã được dùng cho authors để tránh tự xuất hiện lại trong body (nếu được xử lý tiếp)
                             used_nodes.add(idx)
                             continue
                     except Exception as e:
                         print(f"[WARN] Error parsing potential IEEE author table: {e}")
                         
-                # Tables always force body
-                state = "body"
+                # Tables force body UNLESS we are already in references
+                if state != "references":
+                    state = "body"
+
                 eq_node = self._detect_equation_table(element)
                 if eq_node:
                     self.ir["body"].append(eq_node)
@@ -838,7 +875,19 @@ class WordASTParser:
                         table_node = self._parse_table(element)
                         if caption:
                             table_node["caption"] = caption
-                        self.ir["body"].append(table_node)
+                        
+                        if state == "references":
+                            # If we are in references state and see a table, maybe the refs are in the table!
+                            # Convert table cell text into reference entries if they look like it
+                            for row in table_node.get("data", []): # Corrected from "rows" to "data"
+                                for cell in row:
+                                    cell_text = cell.get("text", "")
+                                    if cell_text and self._looks_like_reference_entry(cell_text):
+                                        self.ir["references"].append({"type": "paragraph", "text": cell_text})
+                            # Also keep it in body as a table just in case
+                            self.ir["body"].append(table_node)
+                        else:
+                            self.ir["body"].append(table_node)
 
         extracted_title = " ".join(title_buf).strip()
         
@@ -963,12 +1012,12 @@ class WordASTParser:
                 return None
             
             # Check if last cell is equation number like (1), (2), (1a), (A1), etc.
-            last_text = cells[-1].text.strip()
+            last_text = (cells[-1].text or "").strip()
             if not re.match(r'^\(([A-Za-z0-9\.\-\*]+)\)$', last_text):
                 return None
             
             # The formula usually occupies all cells except the rightmost equation number.
-            formula_parts = [c.text.strip() for c in cells[:-1] if c.text.strip()]
+            formula_parts = [(c.text or "").strip() for c in cells[:-1] if (c.text or "").strip()]
             formula_text = " ".join(formula_parts)
             
             # Check if first cell(s) contain math-like content (=, ½, fractions, symbols)
@@ -1281,9 +1330,12 @@ class WordASTParser:
         
 
         
-        style_name = p.style.name if p.style else ""
+        try:
+            style_name = self._get_style_name(p)
+        except:
+            style_name = ""
         from .config import MAP_STYLE
-        style_cmd = MAP_STYLE.get(style_name, "")
+        style_cmd = MAP_STYLE.get(style_name or "", "")
         
         # Level detection for sections
         level = None
@@ -1344,9 +1396,9 @@ class WordASTParser:
                 try:
                     omml_str = etree.tostring(node, encoding='unicode')
                     omml_b64 = base64.b64encode(omml_str.encode('utf-8')).decode('utf-8')
-                    text += f" «OMML:{omml_b64}» "
+                    text += f"\n\\begin{{equation}}\n«OMML:{omml_b64}»\n\\end{{equation}}\n"
                 except Exception:
-                    text += f" ${latex_math}$ "
+                    text += f"\n\\begin{{equation}}\n{latex_math}\n\\end{{equation}}\n"
                 return
             
             if node.tag == f"{{{ns_m}}}oMath":
@@ -1362,20 +1414,55 @@ class WordASTParser:
                     text += f" ${latex_math}$ "
                 return
             elif node.tag == f"{{{ns_w}}}r":
-                # Convert run to text
+                # Robust run conversion: handle w:t, w:sym, w:instrText, w:br
                 run_obj = Run(node, p)
-                run_text = loc_ky_tu(run_obj.text)
-                if run_text.strip() and level is None:
+                run_text_acc = ""
+                
+                # Check formatting from run properties
+                is_bold = False
+                is_italic = False
+                try:
                     is_bold = bool(run_obj.bold)
                     is_italic = bool(run_obj.italic)
-                    if is_bold and is_italic:
-                        run_text = f"\\textbf{{\\textit{{{run_text}}}}}"
-                    elif is_bold:
-                        run_text = f"\\textbf{{{run_text}}}"
-                    elif is_italic:
-                        run_text = f"\\textit{{{run_text}}}"
-                text += run_text
-                # Keep traversing to find inline w:drawing or w:object inside the run
+                except: pass
+
+                for r_child in node:
+                    c_tag = r_child.tag.split("}")[-1] if hasattr(r_child, "tag") else ""
+                    full_tag = r_child.tag if hasattr(r_child, "tag") else ""
+                    
+                    if c_tag == "t":
+                        if r_child.text: run_text_acc += r_child.text
+                    elif c_tag == "sym":
+                        char_hex = r_child.get(f"{{{ns_w}}}char")
+                        if char_hex:
+                            try:
+                                run_text_acc += chr(int(char_hex, 16))
+                            except: pass
+                    elif c_tag == "instrText":
+                        if r_child.text: run_text_acc += r_child.text
+                    elif c_tag == "br":
+                        run_text_acc += "\n"
+                    elif c_tag == "tab":
+                        run_text_acc += "\t"
+                    elif c_tag == "drawing" or c_tag == "object" or c_tag == "pict":
+                        # Process inline graphic elements by recursing into them
+                        # But we need to flush current accumulated text first
+                        if run_text_acc:
+                            text += loc_ky_tu(run_text_acc)
+                            run_text_acc = ""
+                        traverse_node(r_child)
+                
+                if run_text_acc:
+                    run_text = loc_ky_tu(run_text_acc)
+                    if run_text.strip() and level is None:
+                        if is_bold and is_italic:
+                            run_text = f"\\textbf{{\\textit{{{run_text}}}}}"
+                        elif is_bold:
+                            run_text = f"\\textbf{{{run_text}}}"
+                        elif is_italic:
+                            run_text = f"\\textit{{{run_text}}}"
+                    text += run_text
+                return 
             elif node.tag == f"{{{ns_w}}}object":
                 ole_obj = node.find(f".//{{{ns_o}}}OLEObject")
                 if ole_obj is not None:
@@ -1482,12 +1569,18 @@ class WordASTParser:
 
         # Heuristics for headings
         if not level:
-            for pattern, latex_cmd in HEADING_PATTERNS:
-                if re.match(pattern, text, re.IGNORECASE):
-                    if latex_cmd == r"\section": level = 1
-                    elif latex_cmd == r"\subsection": level = 2
-                    elif latex_cmd == r"\subsubsection": level = 3
-                    break
+            try:
+                for pattern, latex_cmd in HEADING_PATTERNS:
+                    if not pattern or not isinstance(pattern, str):
+                        continue
+                    if re.match(pattern, text, re.IGNORECASE):
+                        if latex_cmd == r"\section": level = 1
+                        elif latex_cmd == r"\subsection": level = 2
+                        elif latex_cmd == r"\subsubsection": level = 3
+                        break
+            except Exception as e:
+                # Silently skip bad regex or unexpected text content
+                pass
 
         # IEEE-style heading detection fallback (Roman numerals, letter subsections)
         if not level:
@@ -1506,7 +1599,7 @@ class WordASTParser:
             
         # Standard paragraph
         # Ideally, we would preserve bold/italics here. For now, just raw text.
-        return {"type": "paragraph", "text": text, "has_math": has_math}
+        return {"type": "paragraph", "text": text or "", "has_math": has_math}
 
     def _lay_gridspan(self, tc) -> int:
         try:
@@ -1679,12 +1772,22 @@ class WordASTParser:
                 text_content = ""
                 if cell_obj:
                     cell_texts = []
+                    # Standard paragraphs
                     for p in cell_obj.paragraphs:
                         p_data = self._parse_paragraph(p, in_table=True)
                         cell_texts.append(p_data.get("text", ""))
+                    
+                    # Nested tables
+                    for nested_tbl in cell_obj.tables:
+                        for row in nested_tbl.rows:
+                            for cell in row.cells:
+                                for p in cell.paragraphs:
+                                    p_data = self._parse_paragraph(p, in_table=True)
+                                    cell_texts.append(p_data.get("text", ""))
+                    
                     text_content = "\n".join(cell_texts).strip()
                     if not text_content:
-                        text_content = loc_ky_tu(cell_obj.text.strip())
+                        text_content = loc_ky_tu((cell_obj.text or "").strip())
                     
                 row_data.append({
                     "type": "cell",

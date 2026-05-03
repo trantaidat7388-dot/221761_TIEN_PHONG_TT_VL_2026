@@ -1,8 +1,11 @@
 import jinja2
 import os
 import re
+import base64
+from lxml import etree
 from bisect import bisect_right
 from .utils import phat_hien_loai_tai_lieu
+from .xu_ly_toan import BoXuLyToan
 from .author_strategies import (
     IEEEAuthorStrategy,
     SpringerAuthorStrategy,
@@ -34,6 +37,7 @@ class JinjaLaTeXRenderer:
             autoescape=False # LaTeX needs raw strings, we escape via custom LocKyTu during AST parse
         )
 
+        self.bo_toan = BoXuLyToan()
         self.env.filters['tex_escape'] = self.escape_latex
 
     def escape_latex(self, text: str) -> str:
@@ -71,7 +75,7 @@ class JinjaLaTeXRenderer:
                 para_text = re.sub(r'[\u200b\u200c\u200d\ufeff\xa0]+', ' ', para_text)
                 para_text = re.sub(r'\s*\n+\s*', ' ', para_text)
                 para_text = re.sub(r'[ \t]{2,}', ' ', para_text).strip()
-                if doc_class == "springer":
+                if doc_class in ("springer", "ieee"):
                     promoted_eq = self._promote_inline_equation_paragraph(para_text)
                     if promoted_eq:
                         out.append(promoted_eq)
@@ -257,6 +261,56 @@ class JinjaLaTeXRenderer:
 
         return result
 
+    def _process_omml_math(self, text_with_omml: str) -> str:
+        """
+        Replaces all «OMML:base64» placeholders with actual LaTeX math.
+        If the placeholder is inside \begin{equation}...\end{equation}, it does not wrap it in $...$.
+        Otherwise, it wraps it in $...$.
+        """
+        if "«OMML:" not in text_with_omml:
+            return text_with_omml
+
+        def replace_inline(match):
+            b64_str = match.group(1)
+            try:
+                xml_str = base64.b64decode(b64_str).decode('utf-8')
+                omml_elem = etree.fromstring(xml_str.encode('utf-8'))
+                latex_math = self.bo_toan.omml_element_to_latex(omml_elem)
+                # Strip existing $ to avoid double delimiters
+                latex_math = latex_math.strip().strip('$').strip()
+                if not latex_math:
+                    latex_math = self.bo_toan.omml_to_text(omml_elem)
+                return f"${latex_math}$"
+            except Exception as e:
+                print(f"[Cảnh báo] Lỗi parse OMML sang LaTeX inline: {e}")
+                return " [Math Error] "
+
+        def replace_block(match):
+            b64_str = match.group(1)
+            try:
+                xml_str = base64.b64decode(b64_str).decode('utf-8')
+                omml_elem = etree.fromstring(xml_str.encode('utf-8'))
+                latex_math = self.bo_toan.omml_element_to_latex(omml_elem)
+                latex_math = latex_math.strip().strip('$').strip()
+                if not latex_math:
+                    latex_math = self.bo_toan.omml_to_text(omml_elem)
+                return latex_math
+            except Exception as e:
+                print(f"[Cảnh báo] Lỗi parse OMML sang LaTeX block: {e}")
+                return " "
+
+        def process_equation_env(match):
+            eq_block = match.group(0)
+            return re.sub(r"«OMML:([A-Za-z0-9+/=]+)»", replace_block, eq_block)
+            
+        # 1. Process OMML inside equation environments (block math)
+        text_with_omml = re.sub(r"\\begin\{equation\*?\}.*?\\end\{equation\*?\}", process_equation_env, text_with_omml, flags=re.DOTALL)
+        
+        # 2. Process remaining OMML blocks (inline math)
+        text_with_omml = re.sub(r"«OMML:([A-Za-z0-9+/=]+)»", replace_inline, text_with_omml)
+        
+        return text_with_omml
+
     def render(self, template_name: str, ir_data: dict, output_path: str, **kwargs):
         """
         Renders the IR data using the specified template file.
@@ -276,6 +330,8 @@ class JinjaLaTeXRenderer:
 
         # Pre-render body nodes so templates just drop << body >>
         body_tex = self.render_body_nodes(ir_data.get('body', []), doc_class=doc_class)
+        body_tex = self._process_omml_math(body_tex)
+        
         if doc_class == "ieee":
             body_tex = self._normalize_ieee_figure_placement(body_tex)
             body_tex = self._remove_float_barriers(body_tex)
@@ -287,6 +343,10 @@ class JinjaLaTeXRenderer:
         
         # Override author_block with format-appropriate version
         metadata = dict(ir_data.get('metadata', {}))
+        for key, value in metadata.items():
+            if isinstance(value, str):
+                metadata[key] = self._process_omml_math(value)
+                
         authors = metadata.get('authors', [])
         metadata['author_block'] = self._generate_author_block(authors, doc_class)
         
@@ -533,6 +593,11 @@ class JinjaLaTeXRenderer:
             inject_lines.append("\\fi")
         if not has_multirow:
             inject_lines.append("\\usepackage{multirow}")
+        
+        # Ensure mathtools is loaded for symbols like \coloneqq
+        if "mathtools" not in tex_content:
+            inject_lines.append("\\usepackage{mathtools}")
+            
         if "IEEEtran" in tex_content:
             inject_lines.append("\\raggedbottom")
             inject_lines.append("\\setlength{\\textfloatsep}{10pt plus 2pt minus 2pt}")

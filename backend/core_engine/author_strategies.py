@@ -5,13 +5,8 @@ def _escape_latex_text(text: str) -> str:
     """Escape LaTeX special chars in plain metadata fields (author/affiliation)."""
     if not text:
         return ""
-    # Preserve existing escaped sequences by only escaping unescaped symbols.
-    text = re.sub(r'(?<!\\)#', r'\\#', text)
-    text = re.sub(r'(?<!\\)%', r'\\%', text)
-    text = re.sub(r'(?<!\\)&', r'\\&', text)
-    text = re.sub(r'(?<!\\)_', r'\\_', text)
-    text = re.sub(r'(?<!\\)\$', r'\\$', text)
-    return text
+    from .utils import loc_ky_tu
+    return loc_ky_tu(text)
 
 
 def _split_affiliation_line(line: str) -> list:

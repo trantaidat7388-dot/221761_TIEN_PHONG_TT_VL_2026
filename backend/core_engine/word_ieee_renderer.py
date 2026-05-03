@@ -231,18 +231,18 @@ class IEEEWordRenderer:
                 continue
 
             # --- Abstract ---
-            if p.text.strip().startswith("Abstract—") or p.text.strip().startswith("Abstract-"):
+            if (p.text or "").strip().startswith("Abstract—") or (p.text or "").strip().startswith("Abstract-"):
                 if abstract:
                     self._replace_paragraph_text_keep_formatting(p, f"Abstract—{abstract}", italic=True)
                 continue
             
-            if p.text.strip() == "ABSTRACT":
+            if (p.text or "").strip() == "ABSTRACT":
                 # some old templates have just "ABSTRACT"
                 p.clear()
                 continue
 
             # --- Keywords ---
-            if p.text.strip().startswith("Keywords—") or p.text.strip().startswith("Index Terms—"):
+            if (p.text or "").strip().startswith("Keywords—") or (p.text or "").strip().startswith("Index Terms—"):
                 if keywords:
                     kw_str = ", ".join(keywords) + "."
                     self._replace_paragraph_text_keep_formatting(p, f"Index Terms—{kw_str}", italic=True)
@@ -278,7 +278,7 @@ class IEEEWordRenderer:
 
         # Locate INTRODUCTION
         for i, p in enumerate(all_paras):
-            text_upper = p.text.strip().upper()
+            text_upper = (p.text or "").strip().upper()
             if "INTRODUCTION" in text_upper and len(text_upper) < 30:
                 intro_idx = i
             if "REFERENCES" in text_upper and len(text_upper) < 30:
@@ -616,7 +616,7 @@ class IEEEWordRenderer:
             return
 
         # Steal format of first readable run
-        base_run = next((r for r in p.runs if r.text.strip()), p.runs[0])
+        base_run = next((r for r in p.runs if (r.text or "").strip()), p.runs[0])
         font_name = base_run.font.name or "Times New Roman"
         font_size = base_run.font.size
         is_bold = base_run.bold

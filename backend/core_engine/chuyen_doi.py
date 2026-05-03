@@ -11,6 +11,7 @@
 import os
 import re
 import shutil
+from typing import Any
 
 from docx.oxml.ns import qn
 from docx.table import Table
@@ -100,7 +101,7 @@ class ChuyenDoiWordSangLatex:
                 if os.path.exists(duong_dan_tam):
                     os.remove(duong_dan_tam)
             except Exception as e:
-                print(f'[Cảnh báo] Lỗi dọn dẹp file Word tạm: {e}')
+                print(f'[WARNING] Lỗi dọn dẹp file Word tạm: {e}')
 
         # Dọn dẹp thư mục làm việc ZIP tạm (nếu có)
         thu_muc_zip = getattr(self, "_thu_muc_zip_lam_viec", None)
@@ -109,7 +110,7 @@ class ChuyenDoiWordSangLatex:
                 if os.path.isdir(thu_muc_zip):
                     shutil.rmtree(thu_muc_zip, ignore_errors=True)
             except Exception as e:
-                print(f'[Cảnh báo] Lỗi dọn dẹp thư mục ZIP tạm: {e}')
+                print(f'[WARNING] Lỗi dọn dẹp thư mục ZIP tạm: {e}')
 
     # ĐỌC FILE
 
@@ -125,6 +126,16 @@ class ChuyenDoiWordSangLatex:
         self._temp_word_files = temp_files
         return self.tai_lieu
 
+    def _get_style_name(self, element: Any) -> str:
+        """Safely extract style name from a Paragraph object."""
+        try:
+            if hasattr(element, "style") and element.style is not None:
+                name = getattr(element.style, "name", "")
+                return str(name or "")
+        except (AttributeError, KeyError, Exception):
+            pass
+        return ""
+
     # XỬ LÝ RUN (formatting: bold, italic, màu, highlight, hyperlink)
 
     def lay_mau_chu(self, run):
@@ -139,7 +150,7 @@ class ChuyenDoiWordSangLatex:
                     b = rgb[2] / 255.0
                     return f"{r:.3f},{g:.3f},{b:.3f}"
         except Exception as e:
-            print(f'[Cảnh báo] Lỗi im lặng ở chuyen_doi.py dòng 196: {e}')
+            print(f'[WARNING] Lỗi im lặng ở chuyen_doi.py dòng 196: {e}')
             pass
         return None
 
@@ -160,7 +171,7 @@ class ChuyenDoiWordSangLatex:
                     if fill and fill.upper() not in ('AUTO', 'FFFFFF', '000000', 'NONE'):
                         return 'yellow'
         except Exception as e:
-            print(f'[Cảnh báo] Lỗi im lặng ở chuyen_doi.py dòng 216: {e}')
+            print(f'[WARNING] Lỗi im lặng ở chuyen_doi.py dòng 216: {e}')
             pass
         return None
 
@@ -177,7 +188,7 @@ class ChuyenDoiWordSangLatex:
                     if rId in rels:
                         return rels[rId].target_ref
         except Exception as e:
-            print(f"[Cảnh báo] Lỗi lay_hyperlink: {e}")
+            print(f"[WARNING] Lỗi lay_hyperlink: {e}")
         return None
 
     def lay_url_tu_hyperlink_elem(self, hyperlink_elem) -> str:
@@ -192,7 +203,7 @@ class ChuyenDoiWordSangLatex:
             if rId in rels:
                 return rels[rId].target_ref
         except Exception as e:
-            print(f"[Cảnh báo] Lỗi lay_url_tu_hyperlink_elem: {e}")
+            print(f"[WARNING] Lỗi lay_url_tu_hyperlink_elem: {e}")
         return None
 
     def xu_ly_run_thuong(self, run) -> str:
@@ -244,8 +255,8 @@ class ChuyenDoiWordSangLatex:
                                 latex_parts = []
                                 for om in omath_elems:
                                     lt = self.bo_toan.omml_element_to_latex(om)
-                                    if lt.strip():
-                                        latex_parts.append(lt.strip())
+                                    if (lt or "").strip():
+                                        latex_parts.append((lt or "").strip())
                                 if latex_parts:
                                     ket_qua += r'\[' + ' '.join(latex_parts) + r'\]'
                                 else:
@@ -253,25 +264,25 @@ class ChuyenDoiWordSangLatex:
                                     for elem in child.iter():
                                         t = elem.tag.split('}')[-1] if hasattr(elem, 'tag') else ''
                                         if t == 't' and elem.text:
-                                            ket_qua += elem.text
+                                            ket_qua += loc_ky_tu(elem.text)
                             else:
                                 # tag == 'oMath' → inline math
                                 lt = self.bo_toan.omml_element_to_latex(child)
-                                if lt.strip():
-                                    ket_qua += f'${lt.strip()}$'
+                                if (lt or "").strip():
+                                    ket_qua += f'${(lt or "").strip()}$'
                                 else:
                                     # Fallback: plain text
                                     for elem in child.iter():
                                         t = elem.tag.split('}')[-1] if hasattr(elem, 'tag') else ''
                                         if t == 't' and elem.text:
-                                            ket_qua += elem.text
+                                            ket_qua += loc_ky_tu(elem.text)
                         except Exception as _e_math:
-                            print(f'[Cảnh báo] Lỗi convert OMML → LaTeX inline: {_e_math}')
+                            print(f'[WARNING] Lỗi convert OMML → LaTeX inline: {_e_math}')
                             # Fallback an toàn: emit plain text
                             for elem in child.iter():
                                 t = elem.tag.split('}')[-1] if hasattr(elem, 'tag') else ''
                                 if t == 't' and elem.text:
-                                    ket_qua += elem.text
+                                    ket_qua += loc_ky_tu(elem.text)
                         continue
 
                     if tag == 'hyperlink':
@@ -314,7 +325,7 @@ class ChuyenDoiWordSangLatex:
 
             duyet_node(doan_van._element)
         except Exception as e:
-            print(f'[Cảnh báo] Lỗi im lặng ở chuyen_doi.py dòng 341: {e}')
+            print(f'[WARNING] Lỗi im lặng ở chuyen_doi.py dòng 341: {e}')
             ket_qua = "".join(self.xu_ly_run_thuong(run) for run in doan_van.runs)
 
         return ket_qua
@@ -352,7 +363,7 @@ class ChuyenDoiWordSangLatex:
             loai, phan_tu = self.danh_sach_phan_tu[idx_truoc]
             if loai != 'paragraph':
                 return None
-            text = phan_tu.text.strip()
+            text = (phan_tu.text or "").strip()
             if not text:
                 return None
             if re.match(r'^(BẢNG|BANG|TABLE)\b', text.strip(), re.IGNORECASE):
@@ -365,7 +376,7 @@ class ChuyenDoiWordSangLatex:
                 ).strip()
                 return caption_text
         except Exception as e:
-            print(f"[Cảnh báo] Lỗi bat_caption_bang: {e}")
+            print(f"[WARNING] Lỗi bat_caption_bang: {e}")
         return None
 
     def bat_caption_hinh(self) -> str:
@@ -381,7 +392,7 @@ class ChuyenDoiWordSangLatex:
                     break
                 if loai != 'paragraph':
                     continue
-                text = phan_tu.text.strip()
+                text = (phan_tu.text or "").strip()
                 if not text:
                     continue
                 if re.match(r'^(HÌNH|HINH|ẢNH|ANH|FIGURE|FIG)\b', text.strip(), re.IGNORECASE):
@@ -394,10 +405,11 @@ class ChuyenDoiWordSangLatex:
                     ).strip()
                     return caption_text
                 # Dừng nếu gặp section heading mới
-                if hasattr(phan_tu, 'style') and phan_tu.style and phan_tu.style.name and 'Heading' in phan_tu.style.name:
+                style_name = self._get_style_name(phan_tu)
+                if style_name and 'Heading' in style_name:
                     break
         except Exception as e:
-            print(f"[Cảnh báo] Lỗi bat_caption_hinh: {e}")
+            print(f"[WARNING] Lỗi bat_caption_hinh: {e}")
         return None
 
     # DANH SÁCH (itemize / enumerate)
@@ -446,9 +458,9 @@ class ChuyenDoiWordSangLatex:
 
     def xu_ly_doan_van(self, doan_van, che_do_inline: bool = False) -> str:
         # Xử lý đoạn văn; tự động inline ảnh nhỏ (icon) nếu đoạn có text dài kèm ảnh
-        ten_style = doan_van.style.name
-        text_raw = doan_van.text.strip().upper()
-        text_goc = doan_van.text.strip()
+        ten_style = self._get_style_name(doan_van)
+        text_raw = (doan_van.text or "").strip().upper()
+        text_goc = (doan_van.text or "").strip()
 
         if len(text_raw) > 0:
             self.dem_paragraph_thuc += 1
@@ -781,7 +793,7 @@ class ChuyenDoiWordSangLatex:
             if vi_tri_ke < len(self.danh_sach_phan_tu):
                 loai_ke, phan_tu_ke = self.danh_sach_phan_tu[vi_tri_ke]
                 if loai_ke == 'paragraph':
-                    text_ke = phan_tu_ke.text.strip()
+                    text_ke = (phan_tu_ke.text or "").strip()
                     # Nhan dien pattern (a) mo ta, (b) mo ta...
                     ket_qua = re.findall(r'\(([a-z])\)\s*([^(]*)', text_ke)
                     if ket_qua:
@@ -791,7 +803,7 @@ class ChuyenDoiWordSangLatex:
                                 caption += f" {mo_ta.strip()}"
                             danh_sach.append(loc_ky_tu(caption))
         except Exception as e:
-            print(f'[Cảnh báo] Lỗi im lặng ở chuyen_doi.py dòng 797: {e}')
+            print(f'[WARNING] Lỗi im lặng ở chuyen_doi.py dòng 797: {e}')
             pass
         return danh_sach
 
@@ -808,7 +820,7 @@ class ChuyenDoiWordSangLatex:
                 cy = int(extent.get('cy', 0))
                 return (cx, cy)
         except Exception as e:
-            print(f'[Cảnh báo] Lỗi im lặng ở chuyen_doi.py dòng 813: {e}')
+            print(f'[WARNING] Lỗi im lặng ở chuyen_doi.py dòng 813: {e}')
             pass
         return (0, 0)
 
@@ -891,7 +903,7 @@ class ChuyenDoiWordSangLatex:
                         self.dem_anh -= 1
                         continue
                 except Exception as e:
-                    print(f'[Cảnh báo] Lỗi im lặng ở chuyen_doi.py dòng 895: {e}')
+                    print(f'[WARNING] Lỗi im lặng ở chuyen_doi.py dòng 895: {e}')
                     # Nếu không mở được ảnh, xóa file và bỏ qua
                     try:
                         os.remove(duong_dan_anh)
@@ -1016,7 +1028,7 @@ class ChuyenDoiWordSangLatex:
             if loai == 'table' and idx > 0:
                 loai_truoc, pt_truoc = thu_tu_phan_tu[idx - 1]
                 if loai_truoc == 'paragraph':
-                    text_truoc = pt_truoc.text.strip()
+                    text_truoc = (pt_truoc.text or "").strip()
                     if text_truoc and re.match(r'^(BẢNG|BANG|TABLE)\b', text_truoc, re.IGNORECASE):
                         self.cac_doan_da_dung.add(idx - 1)
 
@@ -1050,12 +1062,12 @@ class ChuyenDoiWordSangLatex:
         """Heuristic: đoạn văn nằm trong 10 phần tử đầu, chữ to/đậm/canh giữa → Title."""
         if idx >= 10:
             return False
-        text = doan_van.text.strip()
+        text = (doan_van.text or "").strip()
         if not text or len(text) < 3:
             return False
 
         # Style tên "Title" hoặc "Title_document" do Word gán
-        ten_style = doan_van.style.name
+        ten_style = self._get_style_name(doan_van)
         if ten_style and ten_style.lower() in ('title', 'title_document'):
             return True
         # Kiểm tra qua MAP_STYLE: nếu style map sang \title → đây là title
@@ -1070,14 +1082,14 @@ class ChuyenDoiWordSangLatex:
             if alignment is not None and alignment == 1:  # WD_ALIGN_PARAGRAPH.CENTER
                 canh_giua = True
         except Exception as e:
-            print(f'[Cảnh báo] Lỗi im lặng ở chuyen_doi.py dòng 1153: {e}')
+            print(f'[WARNING] Lỗi im lặng ở chuyen_doi.py dòng 1153: {e}')
             pass
 
         # Toàn bộ run đều bold
         tat_ca_dam = False
         runs = doan_van.runs
         if runs:
-            tat_ca_dam = all(r.bold for r in runs if r.text.strip())
+            tat_ca_dam = all(r.bold for r in runs if (r.text or "").strip())
 
         # Font size lớn (>= 14pt)
         font_lon = False
@@ -1087,7 +1099,7 @@ class ChuyenDoiWordSangLatex:
                     font_lon = True
                     break
         except Exception as e:
-            print(f'[Cảnh báo] Lỗi im lặng ở chuyen_doi.py dòng 1169: {e}')
+            print(f'[WARNING] Lỗi im lặng ở chuyen_doi.py dòng 1169: {e}')
             pass
 
         # Kết hợp: canh giữa + đậm, hoặc font lớn + đậm
@@ -1098,7 +1110,7 @@ class ChuyenDoiWordSangLatex:
 
     def _la_nhan_vung(self, text: str, cac_nhan: list) -> bool:
         """Kiểm tra text có phải nhãn bắt đầu vùng hay không (Abstract, Keywords...)."""
-        text_upper = text.strip().upper()
+        text_upper = (text or "").strip().upper()
         # Loại bỏ số thứ tự đầu dòng nếu có: "1. ABSTRACT" → "ABSTRACT"
         text_upper = re.sub(r'^[\d\.]+\s*', '', text_upper).strip()
         for nhan in cac_nhan:
@@ -1123,13 +1135,13 @@ class ChuyenDoiWordSangLatex:
             'BACKGROUND', 'RELATED WORK', 'LITERATURE REVIEW',
             'METHODOLOGY', 'METHODS', 'PHƯƠNG PHÁP',
         ]
-        text_upper = text.strip().upper()
+        text_upper = (text or "").strip().upper()
         text_upper = re.sub(r'^[\d\.]+\s*', '', text_upper).strip()
         for nhan in cac_nhan:
             if text_upper == nhan or text_upper.startswith(nhan):
                 return True
         # Heading pattern: "I. ..." hoặc "1. ..."
-        if re.match(r'^[IV]+\.\s+', text.strip()):
+        if re.match(r'^[IV]+\.\s+', (text or "").strip()):
             return True
         return False
 
@@ -1165,7 +1177,7 @@ class ChuyenDoiWordSangLatex:
             if loai == 'table' and idx > 0:
                 loai_truoc, pt_truoc = thu_tu_phan_tu[idx - 1]
                 if loai_truoc == 'paragraph':
-                    text_truoc = pt_truoc.text.strip()
+                    text_truoc = (pt_truoc.text or "").strip()
                     if text_truoc and re.match(r'^(BẢNG|BANG|TABLE)\b', text_truoc, re.IGNORECASE):
                         self.cac_doan_da_dung.add(idx - 1)
 
@@ -1176,8 +1188,8 @@ class ChuyenDoiWordSangLatex:
 
             # ---- Xác định chuyển vùng (state transition) ----
             if loai == 'paragraph':
-                text_raw = phan_tu.text.strip()
-                ten_style_p = phan_tu.style.name if phan_tu.style else ''
+                text_raw = (phan_tu.text or "").strip()
+                ten_style_p = self._get_style_name(phan_tu)
                 style_cmd_p = MAP_STYLE.get(ten_style_p, '')
 
                 # === Phát hiện vùng dựa trên STYLE ACM trước (ưu tiên cao) ===
@@ -1927,7 +1939,7 @@ class ChuyenDoiWordSangLatex:
           - Render đầu ra vào thư mục đã giải nén (ghi đè file .tex chính)
           - Thư mục làm việc được lưu tại self._thu_muc_zip_lam_viec để caller đóng gói
         """
-        print(f"[*] Bắt đầu chuyển đổi (AST): {self.duong_dan_word}")
+        print(f"[*] Starting conversion (AST): {self.duong_dan_word}")
 
         # 1. Đọc và làm sạch Word
         self.doc_file_word()
@@ -1937,7 +1949,7 @@ class ChuyenDoiWordSangLatex:
         duong_dan_tex_chinh = self.duong_dan_template
 
         if self.duong_dan_template.lower().endswith('.zip'):
-            print("[*] Phát hiện template dạng ZIP, đang giải nén...")
+            print("[*] ZIP template detected, extracting...")
             thu_muc_lam_viec = giai_nen_mau_zip(self.duong_dan_template)
             duong_dan_tex_chinh = tim_file_tex_chinh(thu_muc_lam_viec)
             self._thu_muc_zip_lam_viec = thu_muc_lam_viec
@@ -1977,7 +1989,7 @@ class ChuyenDoiWordSangLatex:
 
         needs_autotag = not (has_body_tag and has_title_tag and has_author_tag and has_abstract_tag and has_keywords_tag)
         if needs_autotag:
-            print("[*] Template thiếu tag metadata/body, đang tự động gán tag (TexSoup)...")
+            print("[*] Template missing metadata/body tags, auto-tagging (TexSoup)...")
             config = {}
             config_path = os.path.join(template_dir, 'config.json')
             if os.path.exists(config_path):

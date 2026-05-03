@@ -32,7 +32,7 @@ class BoXuLyBang:
             toan_bo_text = ''
             for hang in bang.rows[:min(5, len(bang.rows))]:
                 for cell in hang.cells:
-                    toan_bo_text += cell.text.strip().upper() + ' '
+                    toan_bo_text += (cell.text or "").strip().upper() + ' '
 
             co_tu_khoa_toc = False
             tu_khoa_muc_luc = ['MỤC LỤC', 'TABLE OF CONTENTS']
@@ -55,11 +55,11 @@ class BoXuLyBang:
                     dem_dau_cham += 1
 
                 if len(hang.cells) >= 2:
-                    cell_cuoi = hang.cells[-1].text.strip()
+                    cell_cuoi = (hang.cells[-1].text or "").strip()
                     if cell_cuoi.isdigit() and 1 <= len(cell_cuoi) <= 4:
                         dem_so_trang_cuoi += 1
 
-                    cell_dau = hang.cells[0].text.strip().upper()
+                    cell_dau = (hang.cells[0].text or "").strip().upper()
                     if re.search(r'(CH[UƯ][ƠƯ]NG|CHAPTER|PH[ẦẦ]N|PART|M[ỤỦ]C)\s*\d', cell_dau):
                         dem_cau_truc_muc += 1
                     if re.search(r'^\d+\.?\d*\.?\s+[A-ZÀ-Ỹ]', cell_dau):
@@ -96,7 +96,7 @@ class BoXuLyBang:
                     cells_da_kiem.add(cell_id)
 
                     tong_cell += 1
-                    cell_text = cell.text.strip()
+                    cell_text = (cell.text or "").strip()
                     co_anh = False
 
                     for para in cell.paragraphs:
@@ -151,7 +151,7 @@ class BoXuLyBang:
             toan_bo_text = ''
             for hang in bang.rows[:min(10, len(bang.rows))]:
                 for cell in hang.cells:
-                    toan_bo_text += cell.text.strip().upper() + ' '
+                    toan_bo_text += (cell.text or "").strip().upper() + ' '
 
             tu_khoa_layout = [
                 'ARTICLE INFORMATION', 'ARTICLE TITLE', 'JOURNAL:',
@@ -178,7 +178,7 @@ class BoXuLyBang:
             text_dau = ""
             for hang in bang.rows[:2]:
                 for cell in hang.cells:
-                    text_dau += cell.text.upper() + " "
+                    text_dau += (cell.text or "").upper() + " "
 
             tu_khoa = [
                 "ARTICLE INFO", "ARTICLE INFORMATION", "ABSTRACT",
@@ -317,7 +317,7 @@ class BoXuLyBang:
             dem_so_thu_tu = 0
             for hang in bang.rows:
                 if len(hang.cells) >= 2:
-                    cell_cuoi = hang.cells[-1].text.strip()
+                    cell_cuoi = (hang.cells[-1].text or "").strip()
                     if re.match(r'^\(\d+\)$', cell_cuoi):
                         dem_so_thu_tu += 1
 
@@ -335,7 +335,7 @@ class BoXuLyBang:
         try:
             for hang in bang.rows:
                 for cell in hang.cells:
-                    text = cell.text.strip()
+                    text = (cell.text or "").strip()
                     if text and len(text) > 2:
                         for para in cell.paragraphs:
                             noi_dung = ""
@@ -424,12 +424,12 @@ class BoXuLyBang:
                                         )
 
                 if not omath_list and not cong_thuc_parts:
-                    text = para.text.strip()
+                    text = (para.text or "").strip()
                     if text:
                         cong_thuc_parts.append(loc_ky_tu(text))
 
             if not cong_thuc_parts:
-                cell_text = cell.text.strip()
+                cell_text = (cell.text or "").strip()
                 if cell_text:
                     cong_thuc_parts.append(loc_ky_tu(cell_text))
         except Exception as e:
@@ -444,7 +444,7 @@ class BoXuLyBang:
             for hang in bang.rows:
                 if len(hang.cells) >= 2:
                     cong_thuc = self.trich_xuat_omml_tu_cell(hang.cells[0])
-                    cell_so = hang.cells[1].text.strip()
+                    cell_so = (hang.cells[1].text or "").strip()
 
                     so_match = re.match(r'^\((\d+)\)$', cell_so)
                     if so_match:
@@ -503,7 +503,7 @@ class BoXuLyBang:
         try:
             for hang in bang.rows:
                 for cell in hang.cells:
-                    text = cell.text.strip()
+                    text = (cell.text or "").strip()
                     match = re.match(r'^\(([a-z])\)(.*)$', text)
                     if match:
                         nhan = match.group(1)

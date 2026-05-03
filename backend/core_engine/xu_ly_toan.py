@@ -95,19 +95,41 @@ class BoXuLyToan:
 
     def omml_element_to_latex(self, omath) -> str:
         # Chuyển một <m:oMath> element thành chuỗi LaTeX (XSLT → thủ công → Pandoc)
-        latex = self._via_xslt(omath)
-        if latex:
-            return latex
-
-        latex = self._via_manual_parser(omath)
-        if latex:
-            return latex
-
-        latex = self._via_pandoc(omath)
-        if latex:
-            return latex
-
-        return ""
+        latex = ""
+        found = False
+        
+        # 1. Thử XSLT
+        res = self._via_xslt(omath)
+        if res:
+            latex = res
+            found = True
+        
+        # 2. Thử Manual Parser
+        if not found:
+            res = self._via_manual_parser(omath)
+            if res:
+                latex = res
+                found = True
+        
+        # 3. Thử Pandoc
+        if not found:
+            res = self._via_pandoc(omath)
+            if res:
+                latex = res
+                found = True
+        
+        if not latex:
+            return ""
+            
+        # Post-process: Thay thế các ký tự Unicode toán học còn sót lại thành LaTeX commands
+        latex = self._replace_unicode_math(latex)
+            
+        # Post-process: Xử lý các ký tự đặc biệt LaTeX có thể gây lỗi trong môi trường toán
+        # Đặc biệt là dấu % (comment trong LaTeX)
+        # Bằng cách escape các dấu % không có dấu \ đứng trước
+        latex = re.sub(r'(?<!\\)%', r'\%', latex)
+        
+        return latex
 
     # HƯỚNG 1: XSLT  (OMML → MathML → LaTeX)
 
@@ -496,12 +518,39 @@ class BoXuLyToan:
 
     # TIỆN ÍCH
 
-    @staticmethod
-    def _replace_unicode_math(text: str) -> str:
+    def _replace_unicode_math(self, text: str) -> str:
         # Thay thế các ký tự Unicode toán học thành LaTeX commands
+        # Dùng cả OMML_CHAR_MAP và các map khác để đảm bảo sanitize triệt để
+        res = text
         for pattern, replacement in OMML_CHAR_MAP:
-            text = re.sub(pattern, replacement, text)
-        return text
+            res = re.sub(pattern, replacement, res)
+            
+        # Nary symbols
+        for char, replacement in NARY_SYMBOL_MAP.items():
+            res = res.replace(char, replacement)
+            
+        # Delimiters
+        for char, replacement in DELIMITER_MAP.items():
+            if len(char) == 1 and ord(char) > 127: # Chỉ thay các ký tự Unicode thực sự
+                res = res.replace(char, replacement)
+                
+        # Specific characters not handled by maps or needing explicit care
+        res = res.replace('\u2254', r'\coloneqq')
+        res = res.replace('\u2227', r'\land')
+        res = res.replace('\u2228', r'\lor')
+        res = res.replace('\u21A6', r'\mapsto')
+        res = res.replace('\u2026', r'\ldots')
+        res = res.replace('\u2212', r'-')
+        res = res.replace('\u2217', r'\ast')
+        res = res.replace('\u2264', r'\leq')
+        res = res.replace('\u2265', r'\geq')
+        res = res.replace('\u2260', r'\neq')
+        res = res.replace('\u2248', r'\approx')
+        res = res.replace('\u2208', r'\in')
+        res = res.replace('\u2209', r'\notin')
+        res = res.replace('\u221E', r'\infty')
+        
+        return res
 
     def omml_to_text(self, omath_elem) -> str:
         # Lấy plain-text từ OMML element (không format LaTeX)
@@ -510,7 +559,7 @@ class BoXuLyToan:
             for elem in omath_elem.iter():
                 tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
                 if tag == 't' and elem.text:
-                    text_parts.append(elem.text)
+                    text_parts.append(loc_ky_tu(elem.text))
             return ''.join(text_parts)
         except Exception as e:
             print(f'[Cảnh báo] Lỗi im lặng ở xu_ly_toan.py dòng 504: {e}')
