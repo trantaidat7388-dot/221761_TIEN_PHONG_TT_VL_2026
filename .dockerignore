@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+.env.local
+
+# Node
+node_modules/
+dist/
+build/
+.npm
+npm-debug.log*
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Git
+.git/
+.gitignore
+.github/
+
+# IDE
+.vscode/
+.idea/
+
+# Project specific
+backend/storage/temp_jobs/*
+backend/storage/output/*
+backend/app.db
+backend/word2latex.db
+backend/database.sqlite
+outputs/
+history/
+input_data/
+scratch/
+tests/
+.pytest_cache/
+.ruff_cache/

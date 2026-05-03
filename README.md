@@ -23,6 +23,7 @@
 - [Hướng Dẫn Cài Đặt](#hướng-dẫn-cài-đặt)
 - [Cấu Hình Biến Môi Trường](#cấu-hình-biến-môi-trường)
 - [Sử Dụng](#sử-dụng)
+- [Triển khai với Docker](#triển-khai-với-docker-khuyên-dùng-cho-production)
 - [Pipeline CLI](#pipeline-cli-không-cần-giao-diện)
 - [API Endpoints](#api-endpoints)
 - [Luồng Chuyển Đổi](#luồng-chuyển-đổi)
@@ -408,6 +409,46 @@ Xem hướng dẫn đầy đủ tại: [`HUONG_DAN_LAY_GOOGLE_OAUTH_KEY.md`](HUO
 3. Deploy backend.
 4. Chờ hết thời gian sống token (mặc định 7 ngày).
 5. Xóa khóa cũ khỏi `JWT_PREVIOUS_SECRET_KEYS`.
+
+---
+
+## Triển khai với Docker (Khuyên dùng cho Production)
+
+Sử dụng Docker là cách nhanh nhất và ổn định nhất để chạy dự án mà không cần cài đặt môi trường (Python, LaTeX, Node.js) lên máy chủ thật.
+
+### Quy trình khởi chạy 4 bước:
+
+1.  **Tải mã nguồn:**
+    ```bash
+    git clone https://github.com/trantaidat7388-dot/221761_TIEN_PHONG_TT_VL_2026.git
+    cd 221761_TIEN_PHONG_TT_VL_2026
+    ```
+
+2.  **Chuẩn bị file cấu hình:**
+    Copy file mẫu thành file `.env` (Sửa các tham số nếu cần):
+    ```bash
+    # Windows
+    copy backend/.env.example backend/.env
+    # Linux/macOS
+    cp backend/.env.example backend/.env
+    ```
+
+3.  **Khởi chạy với Docker Compose:**
+    Đảm bảo Docker Desktop đã bật, sau đó chạy lệnh:
+    ```bash
+    docker-compose up --build -d
+    ```
+
+4.  **Truy cập hệ thống:**
+    - **Giao diện web:** [http://localhost](http://localhost) (Cổng 80)
+    - **API Backend:** [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### Ưu điểm vượt trội của Docker:
+- ✅ **Đã bao gồm TeX Live Essential**: Bản rút gọn (vẫn đủ các gói quan trọng như algorithmic), tiết kiệm dung lượng ổ cứng.
+- ✅ **Tự động cập nhật (Hot Reload)**: Đã cấu hình Volume cho Backend, bạn chỉ cần sửa code ở máy thật, Docker sẽ tự cập nhật ngay lập tức.
+- ✅ **Cài đặt 1-Click**: Chỉ cần 1 lệnh duy nhất để chạy cả Frontend và Backend.
+- ✅ **Nhất quán**: Chạy ổn định trên mọi môi trường (Windows, Linux, VPS).
+- ✅ **Proxy & SSE**: Đã cấu hình sẵn Nginx làm proxy ngược, hỗ trợ xuất tiến trình thời gian thực (SSE).
 
 ---
 

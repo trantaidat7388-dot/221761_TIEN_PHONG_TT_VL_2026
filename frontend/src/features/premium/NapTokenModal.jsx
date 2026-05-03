@@ -171,13 +171,13 @@ const NapTokenModal = ({ isOpen, onClose }) => {
                   
                   <div className="bg-white p-3 rounded-2xl shadow-2xl">
                     <img 
-                      src={`https://qr.sepay.vn/img?acc=${bankAccount}&bank=${bankName}&amount=${hoaDon.amount_vnd}&des=${encodeURIComponent(hoaDon.noidung_ck)}`} 
+                      src={`https://img.vietqr.io/image/${bankBin}-${bankAccount}-compact2.png?amount=${hoaDon.amount_vnd}&addInfo=${encodeURIComponent(hoaDon.noidung_ck)}&accountName=${encodeURIComponent(bankName)}`} 
                       alt="QR" className="w-48 h-48 object-cover rounded-xl"
-                      onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }}
+                      onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex' }}
                     />
                     <div className="hidden w-48 h-48 bg-gray-100 items-center justify-center flex-col gap-2 rounded-xl text-gray-400">
                       <QrCode className="w-8 h-8" />
-                      <span className="text-[10px]">Chưa cấu hình</span>
+                      <span className="text-[10px] text-center px-2">Không tải được QR.<br/>Vui lòng chuyển khoản thủ công.</span>
                     </div>
                   </div>
 

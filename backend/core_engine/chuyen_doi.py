@@ -231,15 +231,47 @@ class ChuyenDoiWordSangLatex:
                     tag = child.tag.split('}')[-1] if hasattr(child, 'tag') else ''
                     
                     if tag in ('oMath', 'oMathPara'):
-                        # Cực kỳ quan trọng: Bỏ qua loc_ky_tu cho các khối toán OMML
-                        # để sau này hàm _xu_ly_doan_van_thong_thuong có thể .replace() chính xác
-                        text_parts = []
-                        for elem in child.iter():
-                            t = elem.tag.split('}')[-1] if hasattr(elem, 'tag') else ''
-                            if t == 't' and elem.text:
-                                text_parts.append(elem.text)
-                        
-                        ket_qua += ''.join(text_parts)
+                        # Convert OMML trực tiếp sang LaTeX ngay tại điểm phát hiện,
+                        # thay vì emit plain text rồi replace sau (replace sau hay bị sai encoding).
+                        try:
+                            # Tìm element <m:oMath> thực sự để convert
+                            if tag == 'oMathPara':
+                                # oMathPara chứa 1 hoặc nhiều oMath con → display math
+                                from .config import OMML_NAMESPACE
+                                omath_elems = child.findall(f'{{{OMML_NAMESPACE}}}oMath')
+                                if not omath_elems:
+                                    omath_elems = [child]
+                                latex_parts = []
+                                for om in omath_elems:
+                                    lt = self.bo_toan.omml_element_to_latex(om)
+                                    if lt.strip():
+                                        latex_parts.append(lt.strip())
+                                if latex_parts:
+                                    ket_qua += r'\[' + ' '.join(latex_parts) + r'\]'
+                                else:
+                                    # Fallback: plain text
+                                    for elem in child.iter():
+                                        t = elem.tag.split('}')[-1] if hasattr(elem, 'tag') else ''
+                                        if t == 't' and elem.text:
+                                            ket_qua += elem.text
+                            else:
+                                # tag == 'oMath' → inline math
+                                lt = self.bo_toan.omml_element_to_latex(child)
+                                if lt.strip():
+                                    ket_qua += f'${lt.strip()}$'
+                                else:
+                                    # Fallback: plain text
+                                    for elem in child.iter():
+                                        t = elem.tag.split('}')[-1] if hasattr(elem, 'tag') else ''
+                                        if t == 't' and elem.text:
+                                            ket_qua += elem.text
+                        except Exception as _e_math:
+                            print(f'[Cảnh báo] Lỗi convert OMML → LaTeX inline: {_e_math}')
+                            # Fallback an toàn: emit plain text
+                            for elem in child.iter():
+                                t = elem.tag.split('}')[-1] if hasattr(elem, 'tag') else ''
+                                if t == 't' and elem.text:
+                                    ket_qua += elem.text
                         continue
 
                     if tag == 'hyperlink':
@@ -566,20 +598,7 @@ class ChuyenDoiWordSangLatex:
         ket_qua = ""
 
         if che_do_inline:
-            cong_thuc_list = self.bo_toan.trich_xuat_omml(doan_van)
-            for text_goc_ct, latex_ct in cong_thuc_list:
-                if latex_ct.strip():
-                    clean_lt = latex_ct.strip()
-                    is_env = clean_lt.startswith(r'\begin{') and clean_lt.endswith(r'}')
-                    if clean_lt.startswith('\\[') and clean_lt.endswith('\\]'): clean_lt = clean_lt[2:-2].strip()
-                    elif clean_lt.startswith('\\(') and clean_lt.endswith('\\)'): clean_lt = clean_lt[2:-2].strip()
-                    elif clean_lt.startswith('$$') and clean_lt.endswith('$$'): clean_lt = clean_lt[2:-2].strip()
-                    elif clean_lt.startswith('$') and clean_lt.endswith('$'): clean_lt = clean_lt[1:-1].strip()
-                    
-                    if is_env:
-                        noi_dung = noi_dung.replace(text_goc_ct, clean_lt)
-                    else:
-                        noi_dung = noi_dung.replace(text_goc_ct, f'${clean_lt}$')
+            # Lưu ý: OMML math đã được convert trong xu_ly_noi_dung_doan_van.
 
             ket_qua_inline = []
             if danh_sach_anh:
@@ -628,21 +647,8 @@ class ChuyenDoiWordSangLatex:
             if not noi_dung.strip():
                 return ket_qua
 
-            # Xử lý OMML math (thay text gốc bằng inline $...$)
-            cong_thuc_list = self.bo_toan.trich_xuat_omml(doan_van)
-            for text_goc_ct, latex_ct in cong_thuc_list:
-                if latex_ct.strip():
-                    clean_lt = latex_ct.strip()
-                    is_env = clean_lt.startswith(r'\begin{') and clean_lt.endswith(r'}')
-                    if clean_lt.startswith('\\[') and clean_lt.endswith('\\]'): clean_lt = clean_lt[2:-2].strip()
-                    elif clean_lt.startswith('\\(') and clean_lt.endswith('\\)'): clean_lt = clean_lt[2:-2].strip()
-                    elif clean_lt.startswith('$$') and clean_lt.endswith('$$'): clean_lt = clean_lt[2:-2].strip()
-                    elif clean_lt.startswith('$') and clean_lt.endswith('$'): clean_lt = clean_lt[1:-1].strip()
-                    
-                    if is_env:
-                        noi_dung = noi_dung.replace(text_goc_ct, clean_lt)
-                    else:
-                        noi_dung = noi_dung.replace(text_goc_ct, f'${clean_lt}$')
+            # Lưu ý: OMML math đã được convert sang LaTeX ngay trong xu_ly_noi_dung_doan_van,
+            # không cần replace lại ở đây nữa.
 
             # Xác định heading (từ style hoặc từ nội dung)
             lenh_latex = MAP_STYLE.get(ten_style, '')
