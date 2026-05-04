@@ -23,7 +23,6 @@
 - [Hướng Dẫn Cài Đặt](#hướng-dẫn-cài-đặt)
 - [Cấu Hình Biến Môi Trường](#cấu-hình-biến-môi-trường)
 - [Sử Dụng](#sử-dụng)
-- [Triển khai với Docker](#triển-khai-với-docker-khuyên-dùng-cho-production)
 - [Pipeline CLI](#pipeline-cli-không-cần-giao-diện)
 - [API Endpoints](#api-endpoints)
 - [Luồng Chuyển Đổi](#luồng-chuyển-đổi)
@@ -40,7 +39,7 @@
 
 Kết quả đầu ra là một file **`.zip` sẵn dùng cho Overleaf**, bao gồm: file `.tex` hoàn chỉnh, toàn bộ ảnh được trích xuất, các file `.cls` / `.bst` / `.bib` phụ thuộc, và file **`.pdf` đã biên dịch**.
 
-> **Dự án nghiên cứu** — Phát triển bởi sinh viên Đại học, nhằm mục tiêu tự động hóa quy trình chuẩn bị bài báo khoa học từ bản thảo Word sang định dạng LaTeX chuẩn.
+> **Sản phẩm chuyển đổi tài liệu** — Tập trung tối ưu hóa quy trình chuẩn bị bài báo khoa học từ bản thảo Word sang định dạng LaTeX chuẩn.
 
 ---
 
@@ -76,12 +75,12 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 - **Xác thực JWT + Google OAuth** — Đăng nhập bằng tài khoản local hoặc Google, token HS256 (7 ngày).
 - **Hệ thống Token Economy** — Quản lý quota chuyển đổi theo token, hỗ trợ gói Premium.
 - **Thanh toán SePay (Polling Sync)** — Đối soát giao dịch tự động không cần Webhook, có state machine pending/failed/completed.
-- **Quản trị Admin** — Dashboard thống kê tương tác với **Recharts** giúp vẽ các biểu đồ phân tích (Tăng trưởng người dùng, tỷ trọng Free/Premium, biểu đồ Doanh thu SePay theo ngày), quản lý người dùng, template, hóa đơn và nhật ký thao tác (Audit Log).
+- **Quản trị Admin** — Dashboard quản lý user, audit log, cấp/thu hồi token.
 - **Lộ trình quản trị Admin** — Xem checklist, kiến trúc quyền và backlog tại `docs/admin-governance-roadmap.md`.
 - **Tài liệu SePay** — Luồng kỹ thuật tại `docs/sepay-payment-polling-sync.md`, hướng dẫn lấy key tại `HUONG_DAN_LAY_SEPAY_API_KEY.md`.
 - **Rate Limiting** — Giới hạn request theo nhóm (auth, convert, admin) để chống lạm dụng.
 - **Dọn dẹp tự động** — Thư mục job tạm và file output được xóa theo TTL cấu hình.
-- **Chạy hoàn toàn offline** — Không gọi API bên ngoài. Toàn bộ xử lý diễn ra trên máy cục bộ.
+- **Xử lý cục bộ nội dung tài liệu** — Nội dung Word/LaTeX được xử lý trên máy chủ của hệ thống; chỉ gọi dịch vụ bên ngoài khi dùng OAuth hoặc thanh toán.
 
 ---
 
@@ -89,126 +88,115 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 
 ```
 221761_TIEN_PHONG_TT_VL_2026/
-├── backend/                             # Thư mục chính chứa mã nguồn backend
-│   ├── app/                             # Lớp Web API (FastAPI)
-│   │   ├── main.py                      # Điểm khởi đầu ứng dụng (Khởi tạo FastAPI, Routes, Middleware)
-│   │   ├── config.py                    # Quản lý cấu hình dự án (đọc từ file .env)
-│   │   ├── database.py                  # Kết nối Database (SQLite + SQLAlchemy)
-│   │   ├── auth.py                      # Hàm tiện ích xác thực (JWT, hash password)
-│   │   ├── models/                      # Định nghĩa các mô hình dữ liệu (DB models)
-│   │   │   ├── __init__.py              # ORM entities (User, ConversionHistory, TokenLedger, AdminAuditLog)
-│   │   │   └── base_db.py              # Kết nối và thao tác với Database (export Base/Session/engine)
-│   │   ├── routers/                     # Chứa các file định nghĩa API endpoints (Routes)
-│   │   │   ├── auth_routes.py           # API xác thực (Login, Register, Google OAuth, JWT)
-│   │   │   ├── base.py                  # API cơ bản (Health check, root)
-│   │   │   ├── file_upload.py           # Facade tổng hợp API upload/download
-│   │   │   ├── chuyen_doi.py            # API xử lý chuyển đổi Word → LaTeX (SSE stream)
-│   │   │   ├── templates.py             # API quản lý mẫu LaTeX (upload/list/delete)
-│   │   │   └── admin_routes.py          # API quản trị hệ thống (user management, audit)
-│   │   ├── security/                    # Logic bảo mật
-│   │   │   └── security.py              # Xử lý JWT, Hashing password, quyền admin
-│   │   ├── services/                    # Các dịch vụ xử lý logic nghiệp vụ
-│   │   │   └── token_service.py         # Token economy (trừ/hoàn token, ledger)
-│   │   └── utils/                       # Các hàm tiện ích dùng trong logic app
-│   │       └── api_utils.py             # Helpers (dọn dẹp thư mục mồ côi, file utils)
-│   │
-│   ├── core_engine/                     # Engine chuyển đổi cốt lõi (Python thuần)
-│   │   ├── chuyen_doi.py                # Lớp điều phối ChuyenDoiWordSangLatex
-│   │   ├── ast_parser.py                # WordASTParser: XML Word → IR (JSON)
-│   │   ├── semantic_parser.py           # Bộ phân loại ngữ nghĩa heuristic
-│   │   ├── template_preprocessor.py     # Inject tag Jinja2 vào mẫu LaTeX
-│   │   ├── jinja_renderer.py            # JinjaLaTeXRenderer: IR + template → .tex
-│   │   ├── xu_ly_toan.py                # OMML → LaTeX (XSLT / Pandoc / manual parser)
-│   │   ├── xu_ly_ole_equation.py        # OLE Equation Editor 3.0 (MTEF binary) → LaTeX
-│   │   ├── xu_ly_anh.py                 # Lọc ảnh thông minh (entropy, cạnh, histogram)
-│   │   ├── xu_ly_bang.py                # Xử lý bảng (multirow, multicolumn, TOC filter)
-│   │   ├── word_loader.py               # Tiền xử lý file Word (.docm → .docx, Strict → Transitional)
-│   │   ├── author_strategies.py         # Strategy pattern cho phân tích tác giả
-│   │   ├── docx_compat.py               # Xử lý tương thích định dạng Word
-│   │   ├── utils.py                     # Biên dịch LaTeX, đóng gói ZIP
-│   │   ├── tex_log_parser.py            # Phân tích log LaTeX → lỗi có cấu trúc
-│   │   ├── config.py                    # Hằng số, namespace XML, Regex engine
-│   │   ├── publishers_manifest.json     # Manifest các nhà xuất bản hỗ trợ
-│   │   └── OMML2MML.XSL                 # XSLT stylesheet (OMML → MathML)
-│   │
-│   ├── storage/                         # Thư mục lưu trữ dữ liệu
-│   │   ├── custom_templates/            # Mẫu LaTeX hệ thống + người dùng tải lên
-│   │   └── temp_jobs/                   # Thư mục job đang chạy (tự dọn theo TTL)
-│   │
-│   ├── .env.example                     # File mẫu biến môi trường
-│   └── requirements.txt                 # Danh sách thư viện Python cần cài đặt
+├── backend/                              # Backend FastAPI + engine chuyển đổi
+│   ├── app/                              # Lớp Web API
+│   │   ├── main.py                       # Khởi tạo FastAPI app
+│   │   ├── config.py                     # Đọc cấu hình từ .env
+│   │   ├── database.py                   # Kết nối DB
+│   │   ├── auth.py                       # Tiện ích auth
+│   │   ├── models/
+│   │   │   ├── base_db.py
+│   │   │   └── __init__.py
+│   │   ├── routers/                      # API endpoints
+│   │   │   ├── auth_routes.py
+│   │   │   ├── base.py
+│   │   │   ├── file_upload.py
+│   │   │   ├── chuyen_doi.py
+│   │   │   ├── templates.py
+│   │   │   ├── payment_routes.py
+│   │   │   └── admin_routes.py
+│   │   ├── security/
+│   │   │   └── security.py
+│   │   ├── services/
+│   │   │   ├── token_service.py
+│   │   │   └── sepay_sync.py
+│   │   └── utils/
+│   │       └── api_utils.py
+│   ├── core_engine/                      # Pipeline Word -> LaTeX
+│   │   ├── chuyen_doi.py
+│   │   ├── ast_parser.py
+│   │   ├── semantic_parser.py
+│   │   ├── template_preprocessor.py
+│   │   ├── jinja_renderer.py
+│   │   ├── xu_ly_toan.py
+│   │   ├── xu_ly_ole_equation.py
+│   │   ├── xu_ly_anh.py
+│   │   ├── xu_ly_bang.py
+│   │   ├── word_loader.py
+│   │   ├── author_strategies.py
+│   │   ├── docx_compat.py
+│   │   ├── tex_log_parser.py
+│   │   ├── utils.py
+│   │   ├── config.py
+│   │   ├── publishers_manifest.json
+│   │   └── OMML2MML.XSL
+│   ├── storage/
+│   │   ├── custom_templates/             # Template hệ thống + template upload
+│   │   └── temp_jobs/                    # Job tạm, dọn theo TTL
+│   ├── run_schema_migration.py
+│   ├── requirements.txt
+│   ├── .env.example
+│   ├── .env.sepay.example
+│   └── .env                              # File local, không commit
 │
-├── frontend/                            # React 18 + Vite 5 SPA
+├── frontend/                             # React + Vite
 │   ├── src/
-│   │   ├── App.jsx                      # Router chính (/dang-nhap, /chuyen-doi, /lich-su)
-│   │   ├── main.jsx                     # Entry point React
-│   │   ├── index.css                    # Global styles (TailwindCSS)
-│   │   ├── components/                  # UI components dùng chung
-│   │   │   ├── ThanhDieuHuong.jsx       # Navigation bar
-│   │   │   ├── NutBam.jsx               # Button component
-│   │   │   ├── KhungThongBao.jsx        # Notification/alert component
-│   │   │   └── Loading.jsx              # Loading spinner
-│   │   ├── features/                    # Feature modules (tách theo chức năng)
-│   │   │   ├── xac_thuc/               # Trang đăng nhập / đăng ký
-│   │   │   ├── chuyen_doi/             # Trang chuyển đổi Word → LaTeX
-│   │   │   ├── lich_su/                # Trang lịch sử chuyển đổi
-│   │   │   ├── tai_khoan/              # Trang quản lý tài khoản
-│   │   │   ├── premium/               # Trang đăng ký Premium
-│   │   │   └── admin/                  # Trang quản trị (admin dashboard)
-│   │   ├── context/                     # React Context (AuthContext - JWT state)
-│   │   ├── services/                    # API client
-│   │   │   └── api.js                   # SSE streaming client + REST API calls
-│   │   ├── config/                      # Cấu hình frontend
-│   │   └── utils/                       # Hàm tiện ích frontend
-│   ├── tests-e2e/                       # Playwright E2E tests
-│   ├── package.json                     # Dependencies frontend
-│   └── vite.config.js                   # Cấu hình Vite
+│   │   ├── App.jsx
+│   │   ├── main.jsx
+│   │   ├── index.css
+│   │   ├── components/
+│   │   ├── config/
+│   │   ├── context/
+│   │   ├── services/
+│   │   ├── utils/
+│   │   └── features/
+│   │       ├── landing/
+│   │       ├── xac_thuc/
+│   │       ├── chuyen_doi/
+│   │       ├── lich_su/
+│   │       ├── tai_khoan/
+│   │       ├── premium/
+│   │       └── admin/
+│   ├── tests-e2e/                        # Playwright E2E
+│   ├── playwright.config.js
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── .env.example
+│   └── .env                              # File local cho frontend (VITE_*)
 │
-├── tests/                               # Unit tests (pytest) - 24 file test
-│   ├── conftest.py                      # Pytest fixtures
-│   ├── test_api_smoke.py                # Smoke test API endpoints
-│   ├── test_injection.py                # Test chống injection
-│   ├── test_compile.py                  # Test biên dịch LaTeX
-│   ├── test_token_deduct_refund.py      # Test token economy
-│   ├── test_rate_limit_auth.py          # Test rate limiting
-│   ├── test_admin_token_audit.py        # Test admin audit log
-│   └── ...                              # Và các test khác
+├── tests/                                # Bộ test pytest (50+ files)
+│   ├── conftest.py
+│   ├── test_api_smoke.py
+│   ├── test_compile.py
+│   ├── test_injection.py
+│   ├── test_payment_polling_sync.py
+│   ├── test_rate_limit_auth.py
+│   ├── test_rate_limit_convert_admin.py
+│   ├── test_token_deduct_refund.py
+│   └── ...
 │
-├── input_data/                          # Dữ liệu đầu vào mẫu (template Word)
-├── outputs/                             # Thư mục lưu kết quả chuyển đổi
+├── brain/                                # Thư mục làm việc/ghi chú nội bộ
+├── FIX/                                  # Ghi chú sửa lỗi và phân tích
+├── docs/                                 # Tài liệu kỹ thuật và roadmap
+├── input_data/                           # Dữ liệu Word đầu vào mẫu
+├── output/                               # Kết quả chuyển đổi (legacy)
+├── outputs/                              # Kết quả chuyển đổi
+├── images/                               # Ảnh minh họa / tài nguyên
 │
-├── run_api.py                           # Script khởi động nhanh API bằng Uvicorn
-├── run_conversion_pipeline.py           # Script chạy pipeline CLI (không cần web UI)
-├── start.bat                            # Trình khởi động 1-click (Windows)
-├── start.sh                             # Script khởi động cho Linux/macOS
-├── requirements.txt                     # Thư viện Python (core engine - CLI mode)
-├── pytest.ini                           # Cấu hình pytest
-├── .env                                 # Biến môi trường (DB Info, Secret Keys) - KHÔNG đẩy lên Git
-├── .gitignore                           # Danh sách file/thư mục bỏ qua khi push Git
-├── HUONG_DAN_LAY_GOOGLE_OAUTH_KEY.md    # Hướng dẫn lấy Google OAuth credentials
-└── README.md                            # Hướng dẫn chi tiết dự án (file này)
+├── run_api.py                            # Chạy API nhanh bằng Uvicorn
+├── run_conversion_pipeline.py            # Chạy pipeline CLI
+├── run_word_to_word_pipeline.py          # Chạy pipeline Word -> Word CLI
+├── start.bat                             # Khởi động nhanh trên Windows
+├── start.sh                              # Khởi động nhanh trên Linux/macOS
+├── requirements.txt                      # Dependencies root
+├── package-lock.json
+├── pytest.ini
+├── HUONG_DAN_LAY_GOOGLE_OAUTH_KEY.md
+├── HUONG_DAN_LAY_SEPAY_API_KEY.md
+└── README.md
 ```
 
-### Ánh xạ với cấu trúc bài tập mẫu
-
-| Cấu trúc mẫu (`api_base/`) | Dự án thực tế | Ghi chú |
-|---|---|---|
-| `app/main.py` | `backend/app/main.py` | Khởi tạo FastAPI, Routes, Middleware |
-| `app/config.py` | `backend/app/config.py` | Đọc cấu hình từ `.env` |
-| `app/models/base_db.py` | `backend/app/models/base_db.py` | Kết nối Database |
-| `app/routers/auth.py` | `backend/app/routers/auth_routes.py` | API xác thực (Login, JWT, Google OAuth) |
-| `app/routers/base.py` | `backend/app/routers/base.py` | API cơ bản (Health check) |
-| `app/routers/file_upload.py` | `backend/app/routers/file_upload.py` | API upload/download file |
-| `app/security/security.py` | `backend/app/security/security.py` | JWT, Hashing password |
-| `app/utils/helpers.py` | `backend/app/utils/api_utils.py` | Hàm tiện ích cho API |
-| `chatbot/` hoặc `ingestion/` | `backend/core_engine/` | Module xử lý chuyển đổi Word → LaTeX (18 file) |
-| `utils/upload_temp/` | `backend/storage/temp_jobs/` | Lưu trữ file tạm |
-| `test/` | `tests/` | 24 file unit test (pytest) |
-| `run_api.py` | `run_api.py` | Khởi động nhanh API bằng Uvicorn |
-| `start.sh` | `start.sh` + `start.bat` | Script khởi chạy (Linux + Windows) |
-| `.env` | `backend/.env` | Biến môi trường (secrets) |
-| `requirements.txt` | `backend/requirements.txt` | Danh sách thư viện Python |
-| `readme.md` | `README.md` | Hướng dẫn chi tiết dự án |
+> Lưu ý: Dự án không dùng file `.env` ở thư mục gốc. Biến môi trường được tách theo từng phần tại `backend/.env` và `frontend/.env`.
 
 ---
 
@@ -233,9 +221,7 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
     *   Hệ thống vẫn sinh file `.zip` mà không cần LaTeX.
     *   Tải lên [Overleaf](https://www.overleaf.com/) → Upload Project → tự động biên dịch PDF.
 
----
 
----
 
 ## Hướng Dẫn Cài Đặt
 
@@ -331,37 +317,25 @@ Copy-Item backend/.env.sepay.example backend/.env.sepay.local
 
 ## Cấu Hình Biến Môi Trường
 
-### Backend (`backend/.env`)
+### Backend (`backend/.env` — chỉ sử dụng file này)
 
 | Biến | Mặc định | Mô tả |
 |---|---|---|
 | `APP_ENV` | `development` | Chế độ chạy: `development` hoặc `production` |
 | `JWT_SECRET_KEY` | *(bắt buộc đổi)* | Khóa ký JWT (ít nhất 32 ký tự, bắt buộc ở production) |
-|  |  |  
-|  |  |  > **Ví dụ khóa mạnh:** `FAKNM8SByfmg5bwBZHV+PYx9d0gXcBkQOuyT38g1XrQ=` (base64, 44 ký tự)
-|  |  |  > Có thể sinh bằng Python: `import secrets; print(secrets.token_urlsafe(48))`
-|  |  |  > Không dùng password ngắn, UUID, hoặc chuỗi dễ đoán.
-| `JWT_PREVIOUS_SECRET_KEYS` | *(trống)* | Khóa cũ (phân tách bằng dấu phẩy) — dùng khi rotate key |
-| `CORS_ALLOW_ALL` | `0` | Đặt `1` cho phép mọi origin (chỉ dùng khi dev) |
-| `CORS_ORIGINS` | `http://localhost:5173,...` | Các origin được phép (phân tách bằng dấu phẩy) |
-| `LOG_LEVEL` | `INFO` | Mức log: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `MAX_DOC_UPLOAD_MB` | `10` | Giới hạn upload file Word (MB) |
-| `MAX_TEMPLATE_UPLOAD_MB` | `20` | Giới hạn upload template (MB) |
 | `GOOGLE_CLIENT_ID` | *(trống)* | Google OAuth Client ID |
 | `GOOGLE_CLIENT_SECRET` | *(trống)* | Google OAuth Client Secret |
 | `GOOGLE_REDIRECT_URI` | `http://localhost:8000/api/auth/google/callback` | Callback URL cho Google OAuth |
 | `FRONTEND_URL` | `http://localhost:5173` | URL frontend (để backend redirect kèm token) |
-| `SSE_CLEANUP_DELAY_SECONDS` | `3600` | Thời gian giữ job SSE trước khi dọn (giây) |
-| `LATEX_COMPILE_TIMEOUT_SECONDS` | `30` | Timeout biên dịch LaTeX (giây) |
-| `TEMP_TTL_HOURS` | `6` | Số giờ trước khi xóa thư mục job tạm |
-| `OUTPUT_TTL_HOURS` | `24` | Số giờ trước khi xóa file output |
-| `RATE_LIMIT_AUTH_PER_MINUTE` | `30` | Giới hạn request auth/phút |
-| `RATE_LIMIT_CONVERT_PER_MINUTE` | `20` | Giới hạn request convert/phút |
-| `RATE_LIMIT_ADMIN_PER_MINUTE` | `120` | Giới hạn request admin/phút |
-| `FREE_PLAN_MAX_PAGES` | `60` | Giới hạn gói thường: 60 trang (1 trang = 1 token) |
-| `ADMIN_USERNAME` | `admin` | Tên đăng nhập admin mặc định (tạo khi startup) |
-| `ADMIN_EMAIL` | `admin@word2latex.local` | Email admin mặc định (tạo khi startup) |
-| `ADMIN_PASSWORD` | `Admin@123456` | Mật khẩu admin mặc định (đổi ngay khi triển khai thực tế) |
+| `SEPAY_API_KEY` | *(trống)* | API key SePay (nạp token) |
+| `NAME_WEB` | `W2L` | Prefix nội dung chuyển khoản SePay |
+| `SECRET_XOR_KEY` | *(trống)* | Số nguyên dùng mã hóa nội dung SePay |
+| ... | ... | ... |
+
+> **Lưu ý:**
+> - Chỉ sử dụng file `backend/.env` cho backend. Không cần và không nên tạo file `.env` ở thư mục gốc dự án.
+> - Nếu lỡ tạo file `.env` ngoài root, hãy xóa để tránh nhầm lẫn.
+> - Khi deploy hoặc phát triển, luôn kiểm tra và chỉnh sửa biến môi trường trong `backend/.env`.
 
 ### Tài khoản Admin mặc định
 
@@ -394,14 +368,6 @@ Bạn có thể đổi các giá trị này trong `backend/.env` bằng các bi�
 
 Xem hướng dẫn đầy đủ tại: [`HUONG_DAN_LAY_GOOGLE_OAUTH_KEY.md`](HUONG_DAN_LAY_GOOGLE_OAUTH_KEY.md)
 
-#### Gợi ý chuẩn cho Avatar (AVT) khi đăng nhập Google
-
-- Bắt buộc giữ đủ scope: `openid email profile`.
-- Dùng Redirect Flow: `GET /api/auth/google/login` -> Google -> `GET /api/auth/google/callback` -> frontend `/?token=...`.
-- Sau khi frontend nhận token, gọi `GET /api/auth/me` để đồng bộ hồ sơ phiên hiện tại.
-- Nếu chưa lưu avatar trong DB, UI nên fallback bằng chữ cái đầu tên/email (tránh ô trống avatar).
-- Nếu bổ sung cột avatar về sau, ưu tiên lưu URL ảnh HTTPS từ Google userinfo và luôn có fallback initials trong giao diện.
-
 ### Quy trình rotate JWT key an toàn
 
 1. Tạo khóa mới → gán vào `JWT_SECRET_KEY`.
@@ -409,46 +375,6 @@ Xem hướng dẫn đầy đủ tại: [`HUONG_DAN_LAY_GOOGLE_OAUTH_KEY.md`](HUO
 3. Deploy backend.
 4. Chờ hết thời gian sống token (mặc định 7 ngày).
 5. Xóa khóa cũ khỏi `JWT_PREVIOUS_SECRET_KEYS`.
-
----
-
-## Triển khai với Docker (Khuyên dùng cho Production)
-
-Sử dụng Docker là cách nhanh nhất và ổn định nhất để chạy dự án mà không cần cài đặt môi trường (Python, LaTeX, Node.js) lên máy chủ thật.
-
-### Quy trình khởi chạy 4 bước:
-
-1.  **Tải mã nguồn:**
-    ```bash
-    git clone https://github.com/trantaidat7388-dot/221761_TIEN_PHONG_TT_VL_2026.git
-    cd 221761_TIEN_PHONG_TT_VL_2026
-    ```
-
-2.  **Chuẩn bị file cấu hình:**
-    Copy file mẫu thành file `.env` (Sửa các tham số nếu cần):
-    ```bash
-    # Windows
-    copy backend/.env.example backend/.env
-    # Linux/macOS
-    cp backend/.env.example backend/.env
-    ```
-
-3.  **Khởi chạy với Docker Compose:**
-    Đảm bảo Docker Desktop đã bật, sau đó chạy lệnh:
-    ```bash
-    docker-compose up --build -d
-    ```
-
-4.  **Truy cập hệ thống:**
-    - **Giao diện web:** [http://localhost](http://localhost) (Cổng 80)
-    - **API Backend:** [http://localhost:8000/docs](http://localhost:8000/docs)
-
-### Ưu điểm vượt trội của Docker:
-- ✅ **Đã bao gồm TeX Live Essential**: Bản rút gọn (vẫn đủ các gói quan trọng như algorithmic), tiết kiệm dung lượng ổ cứng.
-- ✅ **Tự động cập nhật (Hot Reload)**: Đã cấu hình Volume cho Backend, bạn chỉ cần sửa code ở máy thật, Docker sẽ tự cập nhật ngay lập tức.
-- ✅ **Cài đặt 1-Click**: Chỉ cần 1 lệnh duy nhất để chạy cả Frontend và Backend.
-- ✅ **Nhất quán**: Chạy ổn định trên mọi môi trường (Windows, Linux, VPS).
-- ✅ **Proxy & SSE**: Đã cấu hình sẵn Nginx làm proxy ngược, hỗ trợ xuất tiến trình thời gian thực (SSE).
 
 ---
 
@@ -504,96 +430,74 @@ Truy cập `http://localhost:5173` trên trình duyệt.
 
 ## Pipeline CLI (Không cần giao diện)
 
-Dự án này cung cấp hai pipeline chuyển đổi có thể chạy trực tiếp từ dòng lệnh mà không cần thông qua giao diện Web:
-1. **Chuyển đổi Word sang LaTeX**
-2. **Chuyển đổi định dạng Word sang Word (IEEE ↔ Springer)**
+Nếu không muốn vào web UI, có thể chạy pipeline chuyển đổi trực tiếp bằng script:
 
-Dưới đây là hướng dẫn chi tiết cách chạy 2 pipeline này.
+- **Input 1**: 1 file Word (`.docx` hoặc `.docm`)
+- **Input 2**: 1 file ZIP template LaTeX
+- **Output**: thư mục kết quả chứa `.tex` và `.zip` (tùy chọn thêm `.pdf`)
 
-### 1. Word sang LaTeX Pipeline
+### Lệnh chạy cơ bản
 
-Script `run_conversion_pipeline.py` cho phép chuyển đổi một tệp Word (`.docx` / `.docm`) thành mã nguồn LaTeX cùng với PDF bằng một tệp mẫu `.zip` định dạng LaTeX của nhà xuất bản.
-
-**Cú pháp cơ bản:**
-```bash
-python run_conversion_pipeline.py --word <đường_dẫn_file_word> --template-zip <đường_dẫn_template_latex.zip> --output-dir <thư_mục_kết_quả>
-```
-
-**Các đối số (Arguments):**
-*   `--word` (Bắt buộc): Đường dẫn đến tệp Word đầu vào (`.docx` hoặc `.docm`).
-*   `--template-zip` (Bắt buộc): Đường dẫn đến tệp mẫu LaTeX nén dạng `.zip`. Chứa file `.tex` mẫu, các file `.cls`, `.bst`, v.v.
-*   `--output-dir` (Bắt buộc): Thư mục đường dẫn để lưu luồng kết quả xuất ra.
-*   `--compile-pdf` (Tuỳ chọn): Nếu có, pipeline sẽ cố gắng biên dịch file `.tex` sinh ra thành một file `.pdf`. Xin lưu ý máy tính của bạn phải cài đặt TeX Live hoặc MiKTeX.
-*   `--keep-workdir` (Tuỳ chọn): Nếu có, thư mục xử lý công việc tạm thời (dạng `job_<tên>_<thời-gian>`) sẽ không bị xóa, giúp dễ dàng debug hơn.
-
-**Ví dụ (Windows PowerShell):**
 ```powershell
-# Chuyển đổi cơ bản và lấy tệp .zip, .tex kết quả
+# PowerShell (Windows)
 python run_conversion_pipeline.py `
-    --word "input_data/Template_word/conference-template-a4 (ieee).docx" `
-    --template-zip "input_data/IEEE_Conference_Template.zip" `
-    --output-dir outputs/latex_results
-
-# Chuyển đổi và tự động biên dịch PDF
-python run_conversion_pipeline.py `
-    --word "input_data/Template_word/conference-template-a4 (ieee).docx" `
-    --template-zip "input_data/IEEE_Conference_Template.zip" `
-    --output-dir outputs/latex_results `
-    --compile-pdf
+    --word input_data/Template_word/<ten_file_word>.docx `
+    --template-zip <duong_dan_template_zip>.zip `
+    --output-dir outputs/pipeline_cli
 ```
 
-**Ví dụ thực tế (Chạy thử ngay):**
-
-Nếu bạn muốn chuyển đổi file Word cụ thể tại `input_data/Template_word/` sang mẫu IEEE, hãy mở PowerShell và chạy:
-
-1. **Kích hoạt môi trường (Bắt buộc):**
-   ```powershell
-   .venv\Scripts\activate
-   ```
-
-2. **Chạy lệnh chuyển đổi:**
-   ```powershell
-    python run_conversion_pipeline.py `
-        --word "input_data/Template_word/conference-template-a4 (ieee).docx" `
-        --template-zip "input_data/IEEE_Conference_Template.zip" `
-        --output-dir "outputs/ieee_conversion_result" `
-        --compile-pdf
-   ```
-
-3. **Kết quả:**
-   Bạn sẽ nhận được file `.tex`, các file ảnh trích xuất và một file `.zip` (sẵn sàng cho Overleaf) cùng file `.pdf` tại thư mục `outputs/ieee_conversion_result`.
-
-### 2. Word sang Word Pipeline
-
-Script `run_word_to_word_pipeline.py` cho phép chuyển đổi bố cục và định dạng của một tệp Word đang có sang định dạng chuẩn của nhà xuất bản khác (IEEE hoặc Springer).
-
-**Cú pháp cơ bản:**
 ```bash
-python run_word_to_word_pipeline.py --input-word <đường_dẫn_file_word> --direction <hướng_chuyển_đổi> --output-dir <thư_mục_kết_quả>
+# Bash (Linux/macOS)
+python run_conversion_pipeline.py \
+    --word input_data/Template_word/<ten_file_word>.docx \
+    --template-zip <duong_dan_template_zip>.zip \
+    --output-dir outputs/pipeline_cli
 ```
 
-**Các đối số (Arguments):**
-*   `--input-word` (Bắt buộc): Đường dẫn đến file Word đầu vào.
-*   `--direction` (Bắt buộc): Chọn hướng biên dịch (`ieee-to-springer` hoặc `springer-to-ieee`).
-*   `--output-dir` (Bắt buộc): Thư mục để lưu file xuất ra.
-*   `--template-word` (Tuỳ chọn): Đường dẫn tới tệp Word Template chuẩn (vd: `.docm`). Nếu không truyền, hệ thống sẽ sử dụng mẫu mặc định.
+### Tùy chọn nâng cao
 
-**Ví dụ (Windows PowerShell):**
+```bash
+# Biên dịch PDF (cần xelatex/pdflatex trong PATH)
+python run_conversion_pipeline.py \
+    --word <file>.docx --template-zip <template>.zip \
+    --output-dir outputs/pipeline_cli --compile-pdf
+
+# Giữ thư mục job để debug
+python run_conversion_pipeline.py \
+    --word <file>.docx --template-zip <template>.zip \
+    --output-dir outputs/pipeline_cli --keep-workdir
+```
+
+## Pipeline Word -> Word CLI
+
+Script dành cho chuyển đổi trực tiếp giữa Springer Word và IEEE Word:
+
+- `springer-to-ieee`: Springer Word -> IEEE Word
+- `ieee-to-springer`: IEEE Word -> Springer Word
+
 ```powershell
-# Chuyển đổi IEEE sang Springer
 python run_word_to_word_pipeline.py `
-    --input-word "input_data/Template_word/conference-template-a4 (ieee).docx" `
+    --input-word input_data/Template_word/<ten_file>.docx `
     --direction ieee-to-springer `
-    --output-dir outputs/word_results
-
-# Chuyển đổi Springer sang IEEE
-python run_word_to_word_pipeline.py `
-    --input-word "input_data/Template_word/splnproc2510.docm" `
-    --direction springer-to-ieee `
-    --output-dir outputs/word_results_ieee
+    --output-dir outputs/word_to_word
 ```
 
-> **Lưu ý:** Hãy luôn đảm bảo đã kích hoạt môi trường ảo Python (`.venv\Scripts\activate`) trước khi chạy các script trên. Pipeline thao tác qua script trực tiếp trên máy không bị giới hạn tốc độ và bỏ qua hệ thống tính token.
+```bash
+python run_word_to_word_pipeline.py \
+    --input-word input_data/Template_word/<ten_file>.docx \
+    --direction springer-to-ieee \
+    --output-dir outputs/word_to_word
+```
+
+Tùy chọn template riêng:
+
+```bash
+python run_word_to_word_pipeline.py \
+    --input-word <file>.docm \
+    --direction ieee-to-springer \
+    --template-word input_data/Template_word/splnproc2510.docm \
+    --output-dir outputs/word_to_word
+```
 
 ---
 

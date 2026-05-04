@@ -523,7 +523,8 @@ class BoXuLyToan:
         # Dùng cả OMML_CHAR_MAP và các map khác để đảm bảo sanitize triệt để
         res = text
         for pattern, replacement in OMML_CHAR_MAP:
-            res = re.sub(pattern, replacement, res)
+            # Use a replacer function to avoid backslash-escape issues (e.g. "\pm").
+            res = re.sub(pattern, lambda _m, rep=replacement: rep, res)
             
         # Nary symbols
         for char, replacement in NARY_SYMBOL_MAP.items():

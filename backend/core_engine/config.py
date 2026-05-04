@@ -494,3 +494,9 @@ for _p in _office_paths:
     if _os.path.exists(_p):
         DEFAULT_OMML2MML_XSL = _p
         break
+
+# Fallback to bundled XSLT when Office is not installed.
+if DEFAULT_OMML2MML_XSL is None:
+    _local_xslt = _os.path.join(_os.path.dirname(__file__), "OMML2MML.XSL")
+    if _os.path.exists(_local_xslt):
+        DEFAULT_OMML2MML_XSL = _local_xslt

@@ -21,10 +21,12 @@ from .config import (
     W_NAMESPACE, R_NAMESPACE, A_NAMESPACE, REL_NAMESPACE,
     WP_NAMESPACE, WP14_NAMESPACE,
     MAP_STYLE, HEADING_PATTERNS, DEFAULT_OMML2MML_XSL,
+    OLE_NAMESPACE, VML_NAMESPACE,
 )
 from .xu_ly_anh import BoLocAnh
 from .xu_ly_bang import BoXuLyBang
 from .xu_ly_toan import BoXuLyToan
+from .xu_ly_ole_equation import ole_equation_to_latex
 from .utils import loc_ky_tu, giai_nen_mau_zip, tim_file_tex_chinh
 from .ast_parser import WordASTParser
 from .jinja_renderer import JinjaLaTeXRenderer
@@ -283,6 +285,113 @@ class ChuyenDoiWordSangLatex:
                                 t = elem.tag.split('}')[-1] if hasattr(elem, 'tag') else ''
                                 if t == 't' and elem.text:
                                     ket_qua += loc_ky_tu(elem.text)
+                        continue
+
+                    if tag == 'object':
+                        try:
+                            ole_obj = child.find(f'.//{{{OLE_NAMESPACE}}}OLEObject')
+                            if ole_obj is not None:
+                                prog_id = ole_obj.get('ProgID', '')
+                                if 'Equation' in prog_id:
+                                    r_id = ole_obj.get(f'{{{R_NAMESPACE}}}id')
+                                    if r_id and self.tai_lieu:
+                                        rel = self.tai_lieu.part.rels.get(r_id)
+                                        if rel is not None:
+                                            latex = ole_equation_to_latex(rel.target_part.blob)
+                                            if latex and latex.strip():
+                                                ket_qua += f'${latex.strip()}$'
+                                                continue
+
+                            imagedata = child.find(f'.//{{{VML_NAMESPACE}}}imagedata')
+                            if imagedata is not None:
+                                r_id = imagedata.get(f'{{{R_NAMESPACE}}}id')
+                                if r_id and self.tai_lieu:
+                                    part = self.tai_lieu.part.related_parts.get(r_id)
+                                    if part is not None:
+                                        self.dem_anh += 1
+                                        content_type = getattr(part, 'content_type', '')
+                                        ext = 'png'
+                                        if 'wmf' in content_type:
+                                            ext = 'wmf'
+                                        elif 'emf' in content_type:
+                                            ext = 'emf'
+                                        elif 'jpeg' in content_type:
+                                            ext = 'jpg'
+
+                                        ten_anh_goc = f'formula_{self.dem_anh}.{ext}'
+                                        if not os.path.exists(self.thu_muc_anh):
+                                            os.makedirs(self.thu_muc_anh, exist_ok=True)
+
+                                        duong_dan_anh = os.path.join(self.thu_muc_anh, ten_anh_goc)
+                                        with open(duong_dan_anh, 'wb') as f:
+                                            f.write(part.blob)
+
+                                        ten_anh = ten_anh_goc
+                                        if ext in ('wmf', 'emf'):
+                                            try:
+                                                from PIL import Image
+                                                img = Image.open(duong_dan_anh)
+                                                ten_anh = f'formula_{self.dem_anh}.png'
+                                                duong_dan_png = os.path.join(self.thu_muc_anh, ten_anh)
+                                                new_size = (img.size[0] * 3, img.size[1] * 3)
+                                                img_resized = img.resize(new_size, Image.LANCZOS)
+                                                img_resized.save(duong_dan_png)
+                                                os.remove(duong_dan_anh)
+                                            except Exception:
+                                                ten_anh = ten_anh_goc
+
+                                        ten_thu_muc = os.path.basename(self.thu_muc_anh)
+                                        ket_qua += rf"\includegraphics[height=1.5em]{{{ten_thu_muc}/{ten_anh}}}"
+                                        continue
+                        except Exception as _e_ole:
+                            print(f'[WARNING] Lỗi convert OLE Equation: {_e_ole}')
+                        continue
+
+                    if tag == 'pict':
+                        try:
+                            imagedata = child.find(f'.//{{{VML_NAMESPACE}}}imagedata')
+                            if imagedata is not None:
+                                r_id = imagedata.get(f'{{{R_NAMESPACE}}}id')
+                                if r_id and self.tai_lieu:
+                                    part = self.tai_lieu.part.related_parts.get(r_id)
+                                    if part is not None:
+                                        self.dem_anh += 1
+                                        content_type = getattr(part, 'content_type', '')
+                                        ext = 'png'
+                                        if 'wmf' in content_type:
+                                            ext = 'wmf'
+                                        elif 'emf' in content_type:
+                                            ext = 'emf'
+                                        elif 'jpeg' in content_type:
+                                            ext = 'jpg'
+
+                                        ten_anh_goc = f'formula_{self.dem_anh}.{ext}'
+                                        if not os.path.exists(self.thu_muc_anh):
+                                            os.makedirs(self.thu_muc_anh, exist_ok=True)
+
+                                        duong_dan_anh = os.path.join(self.thu_muc_anh, ten_anh_goc)
+                                        with open(duong_dan_anh, 'wb') as f:
+                                            f.write(part.blob)
+
+                                        ten_anh = ten_anh_goc
+                                        if ext in ('wmf', 'emf'):
+                                            try:
+                                                from PIL import Image
+                                                img = Image.open(duong_dan_anh)
+                                                ten_anh = f'formula_{self.dem_anh}.png'
+                                                duong_dan_png = os.path.join(self.thu_muc_anh, ten_anh)
+                                                new_size = (img.size[0] * 3, img.size[1] * 3)
+                                                img_resized = img.resize(new_size, Image.LANCZOS)
+                                                img_resized.save(duong_dan_png)
+                                                os.remove(duong_dan_anh)
+                                            except Exception:
+                                                ten_anh = ten_anh_goc
+
+                                        ten_thu_muc = os.path.basename(self.thu_muc_anh)
+                                        ket_qua += rf"\includegraphics[height=1.5em]{{{ten_thu_muc}/{ten_anh}}}"
+                                        continue
+                        except Exception as _e_pict:
+                            print(f'[WARNING] Lỗi convert pict: {_e_pict}')
                         continue
 
                     if tag == 'hyperlink':

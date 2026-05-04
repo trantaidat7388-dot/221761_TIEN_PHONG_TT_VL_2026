@@ -76,8 +76,10 @@ class WordASTParser:
             if not hasattr(node, "tag") or not isinstance(node.tag, str):
                 return
             tag = node.tag.split("}")[-1]
-            if tag in ("p", "oMathPara", "oMath"):
+            if tag == "p":
                 elements.append(("paragraph", Paragraph(node, self.doc)))
+            elif tag in ("oMathPara", "oMath"):
+                elements.append(("omml", node))
                 # Capture nested blocks only from explicit containers where paragraph
                 # text is semantically embedded (e.g., text boxes / content controls),
                 # avoiding broad recursion that can duplicate paragraphs.
@@ -617,6 +619,30 @@ class WordASTParser:
             style_name = ""
             style_cmd = ""
             
+            if etype == "omml":
+                try:
+                    omml_tag = element.tag.split('}')[-1] if hasattr(element, "tag") else ""
+                    is_block = omml_tag == "oMathPara"
+                    self.total_formulas += 1
+                    try:
+                        omml_str = etree.tostring(element, encoding='unicode')
+                        omml_b64 = base64.b64encode(omml_str.encode('utf-8')).decode('utf-8')
+                        if is_block:
+                            node_text = f"\\begin{{equation}}\n«OMML:{omml_b64}»\n\\end{{equation}}\n"
+                        else:
+                            node_text = f" «OMML:{omml_b64}» "
+                    except Exception:
+                        latex_math = self.bo_toan.omml_element_to_latex(element)
+                        if is_block:
+                            node_text = f"\\begin{{equation}}\n{latex_math}\n\\end{{equation}}\n"
+                        else:
+                            node_text = f" ${latex_math}$ "
+
+                    self.ir["body"].append({"type": "paragraph", "text": node_text, "has_math": True})
+                except Exception as e:
+                    print(f"[WARNING] Lỗi parse OMML element: {e}")
+                continue
+
             if etype == "paragraph":
                 text = (element.text or "").strip()
                 has_img_para = bool(element._p.findall(f'.//{{{A_NAMESPACE}}}blip')) or bool(element._p.findall(r'.//{urn:schemas-microsoft-com:vml}imagedata'))
@@ -1478,8 +1504,13 @@ class WordASTParser:
                                     has_math = True
                                     self.total_formulas += 1
                                     text += f" ${latex}$ "
+                                    return
                             except Exception:
                                 pass
+                # If OLE equation conversion failed, keep walking children so
+                # embedded preview images can be extracted as a fallback.
+                for child in node:
+                    traverse_node(child)
                 return
             elif node.tag == f"{{{ns_w}}}pict":
                 imagedata = node.find(f".//{{{ns_v}}}imagedata")
