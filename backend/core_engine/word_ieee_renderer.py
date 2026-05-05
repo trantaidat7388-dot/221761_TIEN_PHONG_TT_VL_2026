@@ -563,6 +563,28 @@ class IEEEWordRenderer:
                         for run in p.runs:
                             run.font.name = "Times New Roman"
                             run.font.size = Pt(8)
+
+        # Enforce visible grid borders for template-based tables.
+        try:
+            self._force_table_borders(temp_table)
+            for row in temp_table.rows:
+                for cell in row.cells:
+                    tc_pr = cell._tc.get_or_add_tcPr()
+                    tc_borders = OxmlElement("w:tcBorders")
+                    for border_name in ["top", "left", "bottom", "right", "insideH", "insideV"]:
+                        edge = OxmlElement(f"w:{border_name}")
+                        edge.set(qn("w:val"), "single")
+                        edge.set(qn("w:sz"), "4")
+                        edge.set(qn("w:space"), "0")
+                        edge.set(qn("w:color"), "000000")
+                        tc_borders.append(edge)
+                    existing_tc_borders = tc_pr.xpath('w:tcBorders')
+                    if existing_tc_borders:
+                        tc_pr.replace(existing_tc_borders[0], tc_borders)
+                    else:
+                        tc_pr.append(tc_borders)
+        except Exception:
+            pass
                             
         # Move XML element before anchor_p
         tbl_xml = temp_table._element
@@ -1920,6 +1942,8 @@ class IEEEWordRenderer:
     def _determine_cell_alignment(self, text: str, is_header: bool = False):
         value = (text or "").strip()
         if is_header:
+            if "\n" in value:
+                return WD_ALIGN_PARAGRAPH.LEFT
             return WD_ALIGN_PARAGRAPH.CENTER
         if not value:
             return WD_ALIGN_PARAGRAPH.LEFT
@@ -2184,7 +2208,12 @@ class IEEEWordRenderer:
 
     def _clean_cell_text(self, raw: str) -> str:
         """Clean a table cell text value: convert LaTeX to plain and remove escapes."""
-        text = self._latex_to_plain(raw)
+        raw_text = raw.replace("\r\n", "\n").replace("\r", "\n")
+        if "\n" in raw_text:
+            parts = [self._latex_to_plain(part) for part in raw_text.split("\n")]
+            text = "\n".join(parts)
+        else:
+            text = self._latex_to_plain(raw_text)
         # Remove LaTeX escape artifacts that _latex_to_plain may miss
         text = text.replace("\\%", "%")
         text = text.replace("\\&", "&")

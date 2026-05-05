@@ -76,6 +76,8 @@ REM STEP 4: ACTIVATE VENV & INSTALL DEPENDENCIES
 REM ============================================================
 echo [4/6] Installing Python dependencies...
 
+set "VENV_PY=%ROOT%.venv\Scripts\python.exe"
+
 if exist "%ROOT%.venv\Scripts\activate.bat" (
     echo       OK - Environment activated.
     call "%ROOT%.venv\Scripts\activate.bat"
@@ -91,7 +93,11 @@ if exist "%ROOT%.venv\Scripts\activate.bat" (
 )
 
 echo       Installing dependencies...
-pip install -r "%ROOT%backend\requirements.txt" --quiet --disable-pip-version-check
+if exist "%VENV_PY%" (
+    "%VENV_PY%" -m pip install -r "%ROOT%backend\requirements.txt" --quiet --disable-pip-version-check
+) else (
+    python -m pip install -r "%ROOT%backend\requirements.txt" --quiet --disable-pip-version-check
+)
 if %ERRORLEVEL% NEQ 0 (
     echo       ERROR: pip install failed. Check your Python environment.
     pause

@@ -128,7 +128,7 @@ class JinjaLaTeXRenderer:
                 out.append(f"\\begin{{{env_name}}}{table_pos}\n\\centering\n")
                 out.append(f"\\caption{{{table_caption}}}\\label{{tab{table_counter}}}\n")
                 out.append(f"\\resizebox{{{scale_width}}}{{!}}{{%.\n")
-                out.append("\\begingroup\\small\\setlength{\\tabcolsep}{3pt}\\renewcommand{\\arraystretch}{0.95}\n")
+                out.append("\\begingroup\\small\\setlength{\\tabcolsep}{3pt}\\setlength{\\arrayrulewidth}{0.4pt}\\renewcommand{\\arraystretch}{0.95}\n")
                 out.append(f"\\begin{{tabular}}{{{col_def}}}\n\\hline\n")
                 
                 # Track active multirow spans: col_index -> remaining rows
@@ -153,7 +153,7 @@ class JinjaLaTeXRenderer:
 
                         colspan = max(1, int(cell.get("colspan", 1) or 1))
                         rowspan = max(1, int(cell.get("rowspan", 1) or 1))
-                        text = cell.get("text") or ""
+                        text = self._normalize_table_cell_linebreaks(cell.get("text") or "")
                         if is_header_row and text.strip() and "\\textbf{" not in text:
                             text = f"\\textbf{{{text}}}"
 
@@ -260,6 +260,12 @@ class JinjaLaTeXRenderer:
         )
 
         return result
+
+    def _normalize_table_cell_linebreaks(self, text: str) -> str:
+        if not text:
+            return ""
+        cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
+        return cleaned.replace("\n", r"\\ ")
 
     def _process_omml_math(self, text_with_omml: str) -> str:
         """

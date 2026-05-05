@@ -658,6 +658,7 @@ class BoXuLyBang:
             latex += rf"  \caption{{{caption_clean}}}" + "\n"
         
         latex += rf"  \resizebox{{{scale_width}}}{{!}}{{%." + "\n"
+        latex += r"  \setlength{\arrayrulewidth}{0.4pt}" + "\n"
         latex += rf"  \begin{{tabular}}{{{cot}}}" + "\n"
         
         # Dùng \hline thay vì \toprule
@@ -703,6 +704,7 @@ class BoXuLyBang:
 
                 noi_dung = self.xu_ly_doan_van_trong_cell(cell_obj) if cell_obj else ""
                 token = noi_dung.strip()
+                token = token.replace("\r\n", "\n").replace("\r", "\n").replace("\n", r"\\ ")
 
                 if rowspan > 1:
                     token = rf"\multirow{{{rowspan}}}{{*}}{{{token}}}"
