@@ -294,8 +294,8 @@ const TrangChuyenDoiLatexToWord = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
-            <div className="space-y-5">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+            <div className="space-y-5 min-w-0">
               <div className="flex items-center gap-2 text-white/80">
                 <FileCode2 className="w-5 h-5 text-cyan-200" />
                 <span className="font-medium">Gói LaTeX đầu vào</span>
@@ -358,11 +358,11 @@ const TrangChuyenDoiLatexToWord = () => {
               )}
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-3">
-                <div className="text-white font-semibold">Checklist giữ format</div>
-                <div className="text-sm text-white/70 space-y-2">
-                  <div>• Gói ZIP nên có `main.tex` + thư mục ảnh</div>
+                <div className="text-white font-semibold text-sm">Checklist giữ format</div>
+                <div className="text-sm text-white/70 space-y-2 leading-relaxed">
+                  <div>• Gói ZIP nên có <code className="text-xs bg-white/10 px-1 rounded">main.tex</code> + thư mục ảnh</div>
                   <div>• Giữ nguyên style IEEE/Springer gốc</div>
                   <div>• Tránh macro tự định nghĩa phức tạp</div>
                   <div>• Ưu tiên ảnh PNG/JPG thay vì EPS</div>

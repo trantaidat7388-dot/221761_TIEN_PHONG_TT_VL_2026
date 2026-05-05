@@ -841,7 +841,7 @@ class WordASTParser:
                     except Exception as e:
                         print(f"[WARNING] Lỗi parse paragraph {idx}: {e}")
                         # Fallback: add raw text if parsing failed
-                        self.ir["body"].append({"type": "paragraph", "text": loc_ky_tu(text), "style": style_name})
+                        self.ir["body"].append({"type": "paragraph", "text": loc_ky_tu(text) if self.mode != "word2word" else text, "style": style_name})
                 elif state == "references":
                     # Allow returning to body if we see a new heading (e.g. Appendix)
                     # BUT only if it's NOT the references label itself!
@@ -880,7 +880,7 @@ class WordASTParser:
                                 if cell_id in seen_cells:
                                     continue
                                 seen_cells.add(cell_id)
-                                cell_text = "\n".join([self._get_para_text_with_br(p) for p in cell.paragraphs if self._get_para_text_with_br(p)]).strip()
+                                cell_text = "\n".join([p.text.strip() for p in cell.paragraphs if p.text.strip()]).strip()
                                 if cell_text:
                                     table_lines.extend([line.strip() for line in cell_text.split('\n') if line.strip()])
                                         
@@ -1506,13 +1506,15 @@ class WordASTParser:
                         # Process inline graphic elements by recursing into them
                         # But we need to flush current accumulated text first
                         if run_text_acc:
-                            text += loc_ky_tu(run_text_acc)
+                            # In word2word mode, preserve raw Unicode text (no LaTeX escaping).
+                            text += loc_ky_tu(run_text_acc) if self.mode != "word2word" else run_text_acc
                             run_text_acc = ""
                         traverse_node(r_child)
                 
                 if run_text_acc:
-                    run_text = loc_ky_tu(run_text_acc)
-                    if run_text.strip() and level is None:
+                    # In word2word mode, preserve raw Unicode text instead of LaTeX-escaping.
+                    run_text = loc_ky_tu(run_text_acc) if self.mode != "word2word" else run_text_acc
+                    if run_text.strip() and level is None and self.mode != "word2word":
                         if is_bold and is_italic:
                             run_text = f"\\textbf{{\\textit{{{run_text}}}}}"
                         elif is_bold:
@@ -1612,6 +1614,20 @@ class WordASTParser:
                 
         traverse_node(p._p)
         text = text.strip()
+
+        # Fix tab-layout equations parsed as normal text (prevents \textit and \quad corruption)
+        raw_p_text = getattr(p, "text", "")
+        if raw_p_text and re.match(r'^\t.*\t\([\w\.\-\*]+\)$', raw_p_text):
+            m = re.match(r'^\t(.*)\t\(([\w\.\-\*]+)\)$', raw_p_text)
+            if m:
+                eq_text = m.group(1).strip()
+                eq_num = m.group(2).strip()
+                formula_text = eq_text.replace('½', '\\frac{1}{2}')
+                formula_text = formula_text.replace('×', '\\times')
+                formula_text = formula_text.replace('−', '-')
+                text = f"\\begin{{equation}}\n{formula_text}\n\\tag{{{eq_num}}}\n\\end{{equation}}"
+                has_math = True
+                level = None
         
         # Merge multiple figures inside the same paragraph into a single figure block
         # This handles paragraphs with several inline images that each got their own

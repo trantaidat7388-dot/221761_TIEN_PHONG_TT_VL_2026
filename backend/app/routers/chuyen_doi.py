@@ -12,12 +12,15 @@ import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from copy import deepcopy
 import re
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Query, BackgroundTasks, Request, Depends, Body
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
+from docx import Document
+from docx.oxml.ns import qn
 
 from ..config import TEMP_FOLDER, OUTPUTS_FOLDER, MAX_DOC_UPLOAD_MB, SSE_CLEANUP_DELAY_SECONDS
 from ..utils.api_utils import xoa_thu_muc_an_toan, don_dep_sau_15_phut, don_dep_sau_thoi_gian, _resolve_template_path
@@ -33,7 +36,7 @@ from backend.core_engine.word_ieee_renderer import IEEEWordRenderer
 from backend.core_engine.word_springer_renderer import SpringerWordRenderer
 from backend.core_engine.utils import (
     don_dep_file_rac, bien_dich_latex, tim_file_tex_chinh,
-    giai_nen_mau_zip, dong_goi_thu_muc_dau_ra
+    giai_nen_mau_zip, dong_goi_thu_muc_dau_ra, sua_docx_co_macro
 )
 from backend.core_engine.tex_log_parser import phan_tich_log_latex
 
@@ -53,7 +56,7 @@ DEFAULT_SPRINGER_WORD_TEMPLATE = (
     Path(__file__).resolve().parents[3]
     / "input_data"
     / "Template_word"
-    / "test_output_springer.docx"
+    / "splnproc2510.docm"
 )
 
 
@@ -83,6 +86,70 @@ def _tim_duong_dan_pandoc() -> str | None:
             return local_pandoc
 
     return None
+
+
+def _ensure_docx_reference_template(template_path: Path, job_folder: Path) -> Path:
+    if template_path.suffix.lower() != ".docm":
+        return template_path
+
+    cleaned_path = job_folder / f"{template_path.stem}_cleaned.docx"
+    try:
+        shutil.copy2(template_path, cleaned_path)
+        sua_docx_co_macro(str(cleaned_path))
+        return cleaned_path
+    except Exception as e:
+        logger.warning("Khong the tao reference docx tu docm", exc_info=e)
+        return template_path
+
+
+def _copy_sectpr(dst, src) -> None:
+    dst.clear()
+    for key, value in src.attrib.items():
+        dst.set(key, value)
+    for child in src:
+        dst.append(deepcopy(child))
+
+
+def _sync_docx_layout_from_reference(output_docx: Path, reference_docx: Path) -> None:
+    try:
+        ref_doc = Document(str(reference_docx))
+        out_doc = Document(str(output_docx))
+    except Exception as e:
+        logger.warning("Khong the mo docx de dong bo layout", exc_info=e)
+        return
+
+    ref_body = ref_doc._element.body
+    ref_sect_pr = None
+    for child in ref_body:
+        if child.tag == qn("w:sectPr"):
+            ref_sect_pr = child
+            break
+
+    if ref_sect_pr is None:
+        return
+
+    out_body = out_doc._element.body
+    sect_pr_nodes = out_body.xpath(".//w:sectPr", namespaces=out_body.nsmap)
+    if not sect_pr_nodes:
+        out_body.append(deepcopy(ref_sect_pr))
+    else:
+        for node in sect_pr_nodes:
+            _copy_sectpr(node, ref_sect_pr)
+
+    try:
+        out_doc.save(str(output_docx))
+    except Exception as e:
+        logger.warning("Khong the luu docx sau khi dong bo layout", exc_info=e)
+
+
+def _postprocess_pandoc_docx(output_docx: Path, reference_docx: Path) -> None:
+    # NOTE: Do NOT run sua_docx_co_macro on the Pandoc output.
+    # Pandoc produces clean .docx files without macros; the ZIP rewrite
+    # in sua_docx_co_macro can corrupt the document structure and cause
+    # "Word found unreadable content" errors.  Macro cleanup is only
+    # needed for the reference template (.docm) and is handled by
+    # _ensure_docx_reference_template.
+    _sync_docx_layout_from_reference(output_docx, reference_docx)
 
 
 def _ghi_lich_su_chuyen_doi(
@@ -680,6 +747,8 @@ async def chuyen_doi_latex_sang_word(
         xoa_thu_muc_an_toan(job_folder)
         raise HTTPException(status_code=500, detail="Không tìm thấy template Word mặc định trên server")
 
+    reference_docx = _ensure_docx_reference_template(template_path, job_folder)
+
     output_docx_name = f"{safe_name}_{timestamp}_{target_template}.docx"
     output_docx_path = job_folder / output_docx_name
 
@@ -698,7 +767,7 @@ async def chuyen_doi_latex_sang_word(
         "--resource-path",
         resource_path,
         "--reference-doc",
-        str(template_path),
+        str(reference_docx),
     ]
 
     try:
@@ -720,6 +789,8 @@ async def chuyen_doi_latex_sang_word(
         err_msg = proc.stderr.strip() or proc.stdout.strip() or "Không thể chuyển đổi LaTeX → Word"
         xoa_thu_muc_an_toan(job_folder)
         raise HTTPException(status_code=400, detail=err_msg)
+
+    _postprocess_pandoc_docx(output_docx_path, reference_docx)
 
     try:
         shutil.copy2(output_docx_path, OUTPUTS_FOLDER / output_docx_name)

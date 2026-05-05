@@ -1296,6 +1296,17 @@ class IEEEWordRenderer:
 
     def _add_equation_node(self, doc: Document, raw_text: str) -> None:
         """Render an equation node as centered OMML or stylized text."""
+        # Handle tab-layout equations from IEEE Word re-parsing:
+        # Pattern: \t<equation text>\t(N)
+        tab_eq_match = re.match(r"^\t(.+?)\t(\([A-Za-z0-9.\-]+\))\s*$", raw_text)
+        if tab_eq_match and "«OMML:" not in raw_text and "\\begin{" not in raw_text:
+            eq_text = tab_eq_match.group(1).strip()
+            eq_num = tab_eq_match.group(2).strip()
+            p = doc.add_paragraph()
+            self._apply_ieee_equation_tab_layout(p, doc, eq_text, eq_num)
+            doc.add_paragraph("")
+            return
+
         # Check for OMML marker first
         omml_match = re.search(r"«OMML:([A-Za-z0-9+/=]+)»", raw_text)
         
@@ -1645,6 +1656,11 @@ class IEEEWordRenderer:
     def _strip_remaining_latex(self, text: str) -> str:
         """Remove any remaining LaTeX commands from a text fragment."""
         s = text
+        # Convert LaTeX-style quotes to proper Unicode quotes
+        s = s.replace("``", "\u201C")  # left double quote
+        s = s.replace("''", "\u201D")  # right double quote
+        # Convert escaped underscores back to plain underscores
+        s = s.replace("\\_", "_")
         # Remove inline math $...$ but keep content
         s = re.sub(r"\$([^$]*)\$", lambda m: self._latex_math_to_readable(m.group(1)), s)
         # Remove remaining unknown commands but keep arguments
@@ -1669,6 +1685,20 @@ class IEEEWordRenderer:
 
         s = str(text)
         s = s.replace("\\\\", "\n")
+
+        # Convert LaTeX-style quotes to proper Unicode quotes early
+        # Must be done BEFORE stripping commands, as `` and '' are literal tokens.
+        s = s.replace("``", "\u201C")  # left double quote
+        s = s.replace("''", "\u201D")  # right double quote
+        # Convert escaped underscores/special chars back to plain chars
+        s = s.replace("\\_", "_")
+        s = s.replace("\\&", "&")
+        s = s.replace("\\%", "%")
+        s = s.replace("\\#", "#")
+        s = s.replace("\\$", "$")
+        # LaTeX dashes
+        s = s.replace("---", "\u2014")  # em dash
+        s = s.replace("--", "\u2013")   # en dash
 
         # Handle inline math: convert to readable
         s = re.sub(r"\$([^$]+)\$", lambda m: self._latex_math_to_readable(m.group(1)), s)
@@ -1794,6 +1824,10 @@ class IEEEWordRenderer:
             without_markers = re.sub(r"[\\\s{}\[\]()]+", "", without_markers)
             if not without_markers:
                 return True
+        # Detect tab-layout equations from IEEE Word output:
+        # Pattern: \t<equation text>\t(N) where (N) is an equation number.
+        if "\t" in text and re.search(r"\t\(\s*[A-Za-z0-9.\-]+\s*\)\s*$", text):
+            return True
         return False
 
     def _to_subscript(self, text: str) -> str:

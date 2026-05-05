@@ -308,10 +308,13 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
             if node_type == "paragraph":
                 raw_text = str(node.get("text") or "")
+                has_omml = "«OMML:" in raw_text
                 plain = self._latex_to_plain(raw_text).strip()
-                if not plain: continue
-                if self._is_duplicate_table_title_paragraph(plain, body_nodes, idx): continue
-                if re.match(r"^\s*(?:TABLE|BANG|BẢNG)\s+[IVXLCDM\d]+\s*[:.\-]?\s*$", plain, re.IGNORECASE): continue
+                # Don't skip paragraphs that contain OMML math — their plain text may be empty
+                # but the OMML XML carries the real content.
+                if not plain and not has_omml: continue
+                if plain and self._is_duplicate_table_title_paragraph(plain, body_nodes, idx): continue
+                if plain and re.match(r"^\s*(?:TABLE|BANG|BẢNG)\s+[IVXLCDM\d]+\s*[:.\-]?\s*$", plain, re.IGNORECASE): continue
 
                 if self._is_equation_like_paragraph(raw_text):
                     self._insert_springer_equation_before(doc, anchor_p, raw_text)
@@ -323,7 +326,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
                     prev_rendered_type = "figure"
                     continue
 
-                if re.match(r"^Fig\.?\s*\d+\.?", plain, re.IGNORECASE):
+                if plain and re.match(r"^Fig\.?\s*\d+\.?", plain, re.IGNORECASE):
                     cap_clean = self._normalize_springer_caption(plain, "figure")
                     fig_idx_match = re.match(r"^Fig\.?\s*(\d+)\.?", plain, re.IGNORECASE)
                     self._figure_index = int(fig_idx_match.group(1)) if fig_idx_match else self._figure_index + 1
@@ -352,7 +355,11 @@ class SpringerWordRenderer(IEEEWordRenderer):
                     p.paragraph_format.space_before = Pt(12)
                 
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                p.add_run(plain)
+                # Use _add_rich_runs for paragraphs with inline OMML math to preserve formulas
+                if has_omml:
+                    self._add_rich_runs(p, raw_text)
+                else:
+                    p.add_run(plain)
                 prev_rendered_type = "paragraph"
 
     def _insert_springer_heading_before(self, anchor_p, text: str, level: int) -> None:
@@ -517,6 +524,22 @@ class SpringerWordRenderer(IEEEWordRenderer):
         p.add_run(cap_text)
 
     def _insert_springer_equation_before(self, doc: Document, anchor_p, raw_text: str) -> None:
+        # Handle tab-layout equations from IEEE Word re-parsing:
+        # Pattern: \t<equation text>\t(N)
+        tab_eq_match = re.match(r"^\t(.+?)\t(\([A-Za-z0-9.\-]+\))\s*$", raw_text)
+        if tab_eq_match and "«OMML:" not in raw_text and "\\begin{" not in raw_text:
+            eq_text = tab_eq_match.group(1).strip()
+            eq_num = tab_eq_match.group(2).strip()
+            p = anchor_p.insert_paragraph_before()
+            eq_style = self._pick_style_name(["equation", "Equation"])
+            if eq_style:
+                try: p.style = eq_style
+                except: pass
+            p.add_run("\t")
+            p.add_run(eq_text)
+            p.add_run(f"\t{eq_num}")
+            return
+
         omml_match = re.search(r"«OMML:([A-Za-z0-9+/=]+)»", raw_text)
         tag_match = re.search(r"\\tag\{([^\}]*)\}", raw_text)
         if tag_match:
@@ -836,15 +859,16 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 continue
 
             raw_text = str(node.get("text") or "")
+            has_omml = "«OMML:" in raw_text
             plain = self._latex_to_plain(raw_text).strip()
-            if not plain:
+            if not plain and not has_omml:
                 continue
 
-            if self._is_duplicate_table_title_paragraph(plain, body_nodes, idx):
+            if plain and self._is_duplicate_table_title_paragraph(plain, body_nodes, idx):
                 continue
 
             # Drop orphan IEEE caption labels that should be merged into table captions.
-            if re.match(r"^\s*(?:TABLE|BANG|BẢNG)\s+[IVXLCDM\d]+\s*[:.\-]?\s*$", plain, re.IGNORECASE):
+            if plain and re.match(r"^\s*(?:TABLE|BANG|BẢNG)\s+[IVXLCDM\d]+\s*[:.\-]?\s*$", plain, re.IGNORECASE):
                 continue
 
             if self._is_equation_like_paragraph(raw_text):
@@ -856,7 +880,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 continue
 
             # Some IEEE extractions produce plain caption paragraph instead of figure node.
-            if re.match(r"^Fig\.?\s*\d+\.?", plain, re.IGNORECASE):
+            if plain and re.match(r"^Fig\.?\s*\d+\.?", plain, re.IGNORECASE):
                 cap_clean = self._normalize_springer_caption(plain, "figure")
                 fig_idx_match = re.match(r"^Fig\.?\s*(\d+)\.?", plain, re.IGNORECASE)
                 fig_idx = int(fig_idx_match.group(1)) if fig_idx_match else max(1, self._figure_index + 1)
@@ -884,7 +908,11 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 except Exception:
                     pass
             p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-            p.add_run(plain)
+            # Use _add_rich_runs for paragraphs with inline OMML math to preserve formulas
+            if has_omml:
+                self._add_rich_runs(p, raw_text)
+            else:
+                p.add_run(plain)
 
     def _is_duplicate_table_title_paragraph(self, plain: str, body_nodes: List[Dict[str, Any]], idx: int) -> bool:
         next_node = body_nodes[idx + 1] if idx + 1 < len(body_nodes) else None
@@ -1058,6 +1086,21 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
     def _add_equation_node(self, doc: Document, raw_text: str) -> None:
         """Render equation using Springer equation paragraph style when available."""
+        # Handle tab-layout equations from IEEE Word re-parsing:
+        tab_eq_match = re.match(r"^\t(.+?)\t(\([A-Za-z0-9.\-]+\))\s*$", raw_text)
+        if tab_eq_match and "«OMML:" not in raw_text and "\\begin{" not in raw_text:
+            eq_text = tab_eq_match.group(1).strip()
+            eq_num = tab_eq_match.group(2).strip()
+            p = doc.add_paragraph()
+            eq_style = self._pick_style_name(["equation", "Equation"])
+            if eq_style:
+                try: p.style = eq_style
+                except: pass
+            p.add_run("\t")
+            p.add_run(eq_text)
+            p.add_run(f"\t{eq_num}")
+            return
+
         omml_match = re.search(r"«OMML:([A-Za-z0-9+/=]+)»", raw_text)
         tag_match = re.search(r"\\tag\{([^}]*)\}", raw_text)
         if tag_match:
