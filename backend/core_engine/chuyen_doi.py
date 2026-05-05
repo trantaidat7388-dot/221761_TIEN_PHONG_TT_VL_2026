@@ -478,6 +478,19 @@ class ChuyenDoiWordSangLatex:
             if re.match(r'^(BẢNG|BANG|TABLE)\b', text.strip(), re.IGNORECASE):
                 self.cac_doan_da_dung.add(idx_truoc)
                 caption_text = loc_ky_tu(text)
+                # Remove Word SEQ field-code artifacts: "TableSEQ Table * ARABIC1"
+                caption_text = re.sub(
+                    r"^(?:TableSEQ|Table\s*SEQ)\s*Table\s*\\?\*\s*ARABIC\s*\d*\s*",
+                    "",
+                    caption_text,
+                    flags=re.IGNORECASE,
+                )
+                caption_text = re.sub(
+                    r"^SEQ\s*Table\s*\\?\*\s*ARABIC\s*\d*\s*",
+                    "",
+                    caption_text,
+                    flags=re.IGNORECASE,
+                )
                 # Strip prefix "Table X:" / "Bảng X." để tránh duplicate với LaTeX tự sinh
                 caption_text = re.sub(
                     r'^(Bảng|Bảng|Table|TABLE|Bang|BANG)\s*\d+\s*[:\.\-–—]?\s*',

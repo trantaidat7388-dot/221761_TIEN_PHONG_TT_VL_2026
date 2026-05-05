@@ -2159,6 +2159,19 @@ class IEEEWordRenderer:
     def _normalize_table_caption(self, caption: str) -> str:
         text = (caption or "").strip()
         original = text
+        # Strip Word field-code artifacts like: "TableSEQ Table * ARABIC1"
+        text = re.sub(
+            r"^(?:TableSEQ|Table\s*SEQ)\s*Table\s*\\?\*\s*ARABIC\s*\d*\s*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r"^SEQ\s*Table\s*\\?\*\s*ARABIC\s*\d*\s*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
         text = re.sub(r"^TABLE\s+[IVXLCDM]+(?:\.|:)\s*", "", text, flags=re.IGNORECASE)
         text = re.sub(r"^Table\s+\d+(?:\.|:)\s*", "", text, flags=re.IGNORECASE)
         normalized = text.strip(" .:-")

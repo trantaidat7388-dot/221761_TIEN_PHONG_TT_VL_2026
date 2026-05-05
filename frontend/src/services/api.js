@@ -205,6 +205,30 @@ export const chuyenDoiWordSpringer = async (file, templateFile = null) => {
   }
 }
 
+export const chuyenDoiLatexSangWord = async (file, targetTemplate = 'ieee') => {
+  try {
+    if (!file) throw new Error('Vui lòng chọn file LaTeX')
+    const formData = new FormData()
+    formData.append('file', file)
+    const url = `${DIA_CHI_API_GOC}/api/chuyen-doi-latex-word?target_template=${encodeURIComponent(targetTemplate)}`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: taoHeaderXacThuc(),
+      body: formData,
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || !data?.thanh_cong) {
+      return { thanhCong: false, loiMessage: data?.error || data?.detail || 'Chuyển đổi LaTeX sang Word thất bại' }
+    }
+    return {
+      thanhCong: true,
+      data: { jobId: data.job_id || '', tenFileWord: data.ten_file_word || '', wordUrl: data.word_url || '', metadata: data.metadata || {} }
+    }
+  } catch (loi) {
+    return { thanhCong: false, loiMessage: loi.message || 'Không thể kết nối đến server' }
+  }
+}
+
 export const taiFileWordTheoJob = async (jobId, tenFileWordFallback = '') => {
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')

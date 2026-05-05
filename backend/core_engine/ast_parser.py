@@ -499,6 +499,20 @@ class WordASTParser:
         if not caption_text:
             return caption_text
 
+        # Strip Word field-code artifacts like: "TableSEQ Table * ARABIC1"
+        caption_text = re.sub(
+            r"^(?:TableSEQ|Table\s*SEQ)\s*Table\s*\\?\*\s*ARABIC\s*\d*\s*",
+            "",
+            caption_text,
+            flags=re.IGNORECASE,
+        )
+        caption_text = re.sub(
+            r"^SEQ\s*Table\s*\\?\*\s*ARABIC\s*\d*\s*",
+            "",
+            caption_text,
+            flags=re.IGNORECASE,
+        )
+
         if kind == 'table':
             # Examples stripped: "Table 1:", "TABLE 3.1 -", "BANG 2.", "TABLE I" (IEEE)
             pattern = r'^(Bảng|BANG|Bang|Table|TABLE)\.?\s*[\dIIVX]+(\.\d+)*\s*[:\.\-–—]?\s*'
@@ -789,6 +803,23 @@ class WordASTParser:
                     # Suppress orphan table labels that are part of captions and should not become body text.
                     if re.match(r'^\s*(?:BẢNG|BANG|TABLE)\s+[IVXLCDM\d]+\s*[:.\-]?\s*$', text, re.IGNORECASE):
                         continue
+                    # Suppress Word SEQ field-code artifacts that show up as standalone caption lines.
+                    if re.match(
+                        r'^\s*(?:BẢNG|BANG|TABLE)\s*SEQ\s*TABLE\s*\\?\*\s*ARABIC\s*\d*\s*.*$',
+                        text,
+                        re.IGNORECASE,
+                    ):
+                        continue
+                    # Suppress inline table caption paragraphs when the next element is a table.
+                    idx_next = idx + 1
+                    if idx_next < len(elements):
+                        loai_next, _ = elements[idx_next]
+                        if loai_next == "table" and re.match(
+                            r'^\s*(?:BẢNG|BANG|TABLE)\s*[IVXLCDM\d]+\b.*$',
+                            text,
+                            re.IGNORECASE,
+                        ):
+                            continue
 
                     try:
                         node = self._parse_paragraph(element)
@@ -1465,7 +1496,8 @@ class WordASTParser:
                                 run_text_acc += chr(int(char_hex, 16))
                             except: pass
                     elif c_tag == "instrText":
-                        if r_child.text: run_text_acc += r_child.text
+                        # Skip field-code instructions (e.g., SEQ Table * ARABIC).
+                        continue
                     elif c_tag == "br":
                         run_text_acc += "\n"
                     elif c_tag == "tab":

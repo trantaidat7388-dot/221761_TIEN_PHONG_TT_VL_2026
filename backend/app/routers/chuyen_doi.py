@@ -8,6 +8,8 @@ import time
 import json
 import shutil
 import logging
+import os
+import subprocess
 from datetime import datetime
 from pathlib import Path
 import re
@@ -51,13 +53,36 @@ DEFAULT_SPRINGER_WORD_TEMPLATE = (
     Path(__file__).resolve().parents[3]
     / "input_data"
     / "Template_word"
-    / "splnproc2510.docm"
+    / "test_output_springer.docx"
 )
 
 
 def _la_file_word_hop_le(ten_file: str) -> bool:
     ten = (ten_file or "").lower()
     return ten.endswith('.docx') or ten.endswith('.docm')
+
+
+def _la_file_latex_hop_le(ten_file: str) -> bool:
+    ten = (ten_file or "").lower()
+    return ten.endswith('.tex') or ten.endswith('.zip')
+
+
+def _tim_duong_dan_pandoc() -> str | None:
+    pandoc = shutil.which("pandoc")
+    if pandoc:
+        return pandoc
+
+    pandoc_env = os.environ.get("PANDOC_PATH")
+    if pandoc_env and os.path.isfile(pandoc_env):
+        return pandoc_env
+
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        local_pandoc = os.path.join(local_appdata, "Pandoc", "pandoc.exe")
+        if os.path.isfile(local_pandoc):
+            return local_pandoc
+
+    return None
 
 
 def _ghi_lich_su_chuyen_doi(
@@ -597,6 +622,124 @@ async def chuyen_doi_ieee_word_sang_springer_word(
     finally:
         if not da_thanh_cong:
             xoa_thu_muc_an_toan(job_folder)
+
+
+@router.post("/chuyen-doi-latex-word")
+async def chuyen_doi_latex_sang_word(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    target_template: str = Query("ieee", description="ieee hoặc springer"),
+) -> JSONResponse:
+    """Convert LaTeX (.tex/.zip) into Word using IEEE/Springer reference templates via Pandoc."""
+
+    ten_file = (file.filename or "").lower()
+    if not _la_file_latex_hop_le(ten_file):
+        raise HTTPException(status_code=400, detail="Chi chap nhan file .tex hoac .zip")
+
+    if target_template not in {"ieee", "springer"}:
+        raise HTTPException(status_code=400, detail="target_template chi nhan 'ieee' hoac 'springer'")
+
+    pandoc_path = _tim_duong_dan_pandoc()
+    if not pandoc_path:
+        raise HTTPException(status_code=500, detail="Không tìm thấy pandoc. Vui lòng cài đặt pandoc hoặc đặt biến môi trường PANDOC_PATH.")
+
+    contents = await file.read()
+    if len(contents) > MAX_DOC_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File quá lớn. Kích thước tối đa {MAX_DOC_UPLOAD_MB}MB")
+
+    job_id = str(uuid.uuid4())
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    original_name = Path(file.filename or "document").stem
+    safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in original_name).lstrip(" -_") or "document"
+
+    job_folder = TEMP_FOLDER / f"job_{job_id}"
+    job_folder.mkdir(parents=True, exist_ok=True)
+
+    input_tex_path = None
+    zip_path = None
+    try:
+        if ten_file.endswith('.zip'):
+            zip_path = job_folder / "latex_input.zip"
+            with open(zip_path, "wb") as f:
+                f.write(contents)
+            giai_nen_mau_zip(str(zip_path), str(job_folder))
+            input_tex_path = Path(tim_file_tex_chinh(str(job_folder)))
+        else:
+            input_tex_path = job_folder / f"{safe_name}_{timestamp}.tex"
+            with open(input_tex_path, "wb") as f:
+                f.write(contents)
+    except FileNotFoundError as e:
+        xoa_thu_muc_an_toan(job_folder)
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        if zip_path and zip_path.exists():
+            zip_path.unlink(missing_ok=True)
+
+    template_path = DEFAULT_IEEE_WORD_TEMPLATE if target_template == "ieee" else DEFAULT_SPRINGER_WORD_TEMPLATE
+    if not template_path.exists():
+        xoa_thu_muc_an_toan(job_folder)
+        raise HTTPException(status_code=500, detail="Không tìm thấy template Word mặc định trên server")
+
+    output_docx_name = f"{safe_name}_{timestamp}_{target_template}.docx"
+    output_docx_path = job_folder / output_docx_name
+
+    tex_dir = str(input_tex_path.parent)
+    resource_path = os.pathsep.join({tex_dir, str(job_folder)})
+    cmd = [
+        pandoc_path,
+        str(input_tex_path),
+        "-o",
+        str(output_docx_path),
+        "--from",
+        "latex",
+        "--to",
+        "docx",
+        "--standalone",
+        "--resource-path",
+        resource_path,
+        "--reference-doc",
+        str(template_path),
+    ]
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=tex_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8',
+            errors='ignore',
+            timeout=180,
+        )
+    except subprocess.TimeoutExpired:
+        xoa_thu_muc_an_toan(job_folder)
+        raise HTTPException(status_code=400, detail="Chuyển đổi LaTeX → Word quá lâu. Vui lòng thử lại.")
+
+    if proc.returncode != 0 or not output_docx_path.exists():
+        err_msg = proc.stderr.strip() or proc.stdout.strip() or "Không thể chuyển đổi LaTeX → Word"
+        xoa_thu_muc_an_toan(job_folder)
+        raise HTTPException(status_code=400, detail=err_msg)
+
+    try:
+        shutil.copy2(output_docx_path, OUTPUTS_FOLDER / output_docx_name)
+    except Exception as e:
+        logger.warning("Không thể copy DOCX LaTeX->Word sang outputs", exc_info=e)
+
+    background_tasks.add_task(don_dep_sau_15_phut, job_folder)
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "thanh_cong": True,
+            "job_id": job_id,
+            "ten_file_word": output_docx_name,
+            "word_url": f"/api/tai-ve-word/{job_id}",
+            "metadata": {
+                "template": target_template,
+            },
+        },
+    )
 
 
 @router.post("/chuyen-doi-stream")
