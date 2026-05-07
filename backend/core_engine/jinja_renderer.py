@@ -2,7 +2,7 @@ import jinja2
 import os
 import re
 import base64
-from lxml import etree
+from lxml import etree  # type: ignore
 from bisect import bisect_right
 from .utils import phat_hien_loai_tai_lieu
 from .xu_ly_toan import BoXuLyToan
@@ -268,7 +268,7 @@ class JinjaLaTeXRenderer:
         return cleaned.replace("\n", r"\\ ")
 
     def _process_omml_math(self, text_with_omml: str) -> str:
-        """
+        r"""
         Replaces all «OMML:base64» placeholders with actual LaTeX math.
         If the placeholder is inside \begin{equation}...\end{equation}, it does not wrap it in $...$.
         Otherwise, it wraps it in $...$.
@@ -326,7 +326,12 @@ class JinjaLaTeXRenderer:
         
         # Detect document class to generate format-appropriate output behavior
         try:
-            template_path = os.path.join(self.env.loader.searchpath[0], template_name)
+            from jinja2 import FileSystemLoader
+            loader = self.env.loader
+            if isinstance(loader, FileSystemLoader):
+                template_path = os.path.join(loader.searchpath[0], template_name)
+            else:
+                template_path = template_name
             with open(template_path, 'r', encoding='utf-8', errors='ignore') as f:
                 template_src = f.read()
         except Exception:
@@ -580,7 +585,7 @@ class JinjaLaTeXRenderer:
         return "pdflatex"
 
     def _normalize_tex_preamble(self, tex_content: str) -> str:
-        """Normalize preamble so pdfLaTeX avoids OT1 pitfalls (e.g., \DJ unavailable)."""
+        r"""Normalize preamble so pdfLaTeX avoids OT1 pitfalls (e.g., \DJ unavailable)."""
         tex_content = tex_content.replace(
             "\\usepackage[OT1]{fontenc}",
             "\\usepackage[T1]{fontenc}",
