@@ -554,7 +554,13 @@ class JinjaLaTeXRenderer:
         return re.sub(r"^[ \t]*\\FloatBarrier[ \t]*\n?", "", body_tex, flags=re.MULTILINE)
 
     def _choose_magic_engine(self, tex_content: str) -> str:
-        """Choose a safe TeX engine hint for editors/Overleaf based on content."""
+        """Choose a safe TeX engine hint for editors/Overleaf based on content.
+        
+        Priority:
+        1. Packages requiring XeLaTeX (fontspec, unicode-math, polyglossia)
+        2. Explicit pdfTeX in documentclass options
+        3. Default to pdflatex (fallback to xelatex happens during compilation if needed)
+        """
         if re.search(r"\\usepackage\{fontspec\}", tex_content):
             return "xelatex"
         if re.search(r"\\usepackage\{unicode-math\}", tex_content):
@@ -569,10 +575,8 @@ class JinjaLaTeXRenderer:
             if any(o in ("pdftex", "pdflatex") for o in options):
                 return "pdflatex"
 
-        # Fallback for multilingual content: non-ASCII often compiles more safely
-        # with XeLaTeX than pdfLaTeX.
-        if re.search(r"[^\x00-\x7f]", tex_content):
-            return "xelatex"
+        # Default to pdflatex. If it fails with encoding/Unicode issues,
+        # the compilation process will automatically retry with xelatex.
         return "pdflatex"
 
     def _normalize_tex_preamble(self, tex_content: str) -> str:

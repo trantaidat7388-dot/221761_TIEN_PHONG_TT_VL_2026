@@ -3,4 +3,3 @@
 export { default as KhuVucKeoTha } from './KhuVucKeoTha'
 export { default as TrangChuyenDoi } from './TrangChuyenDoi'
 export { default as TrangChuyenDoiWordToWord } from './TrangChuyenDoiWordToWord'
-export { default as TrangChuyenDoiLatexToWord } from './TrangChuyenDoiLatexToWord'
