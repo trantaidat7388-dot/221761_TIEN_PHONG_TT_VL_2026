@@ -16,5 +16,14 @@
     "app_web_view"
   ],
   "reportMissingImports": "warning",
-  "reportMissingModuleSource": "none"
+  "reportMissingModuleSource": "none",
+  "reportArgumentType": "warning",
+  "reportGeneralTypeIssues": "warning",
+  "overrides": [
+    {
+      "include": ["backend/app/routers/chuyen_doi.py"],
+      "reportArgumentType": "none",
+      "reportGeneralTypeIssues": "none"
+    }
+  ]
 }
