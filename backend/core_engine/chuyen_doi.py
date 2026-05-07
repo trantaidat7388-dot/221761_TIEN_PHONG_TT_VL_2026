@@ -11,7 +11,7 @@
 import os
 import re
 import shutil
-from typing import Any
+from typing import Any, Optional
 
 from docx.oxml.ns import qn
 from docx.table import Table
@@ -43,7 +43,7 @@ class ChuyenDoiWordSangLatex:
 
     def __init__(self, duong_dan_word: str, duong_dan_template: str,
                  duong_dan_dau_ra: str, thu_muc_anh: str = 'images',
-                 mode: str = 'demo', duong_dan_xslt_omml: str = None):
+                 mode: str = 'demo', duong_dan_xslt_omml: Optional[str] = None):
         # Khởi tạo các đường dẫn và trạng thái ban đầu
         self.duong_dan_word = duong_dan_word
         self.duong_dan_template = duong_dan_template
@@ -80,8 +80,10 @@ class ChuyenDoiWordSangLatex:
         self.danh_sach_author = []   # Tạm lưu author + affil
 
         # --- Semantic Mapping: dữ liệu đã phân loại từ Word ---
-        self.parsed_data = {
+        self.parsed_data: dict[str, Any] = {
             'title': '',
+            'authors': [],
+            'author_block': '',
             'abstract': '',
             'keywords': '',
             'body': '',
@@ -140,7 +142,7 @@ class ChuyenDoiWordSangLatex:
 
     # XỬ LÝ RUN (formatting: bold, italic, màu, highlight, hyperlink)
 
-    def lay_mau_chu(self, run):
+    def lay_mau_chu(self, run) -> Optional[str]:
         # Lấy mã màu chữ (RGB) từ run, trả về chuỗi "r,g,b" hoặc None
         try:
             font = run.font
@@ -156,7 +158,7 @@ class ChuyenDoiWordSangLatex:
             pass
         return None
 
-    def lay_highlight(self, run) -> str:
+    def lay_highlight(self, run) -> Optional[str]:
         # Lấy màu highlight (nền) của run, trả về tên màu hoặc None
         try:
             if run.font.highlight_color is not None:
@@ -177,7 +179,7 @@ class ChuyenDoiWordSangLatex:
             pass
         return None
 
-    def lay_hyperlink(self, run) -> str:
+    def lay_hyperlink(self, run) -> Optional[str]:
         # Trích xuất URL hyperlink từ run (nếu run nằm trong w:hyperlink)
         try:
             parent = run._element.getparent()
@@ -193,7 +195,7 @@ class ChuyenDoiWordSangLatex:
             print(f"[WARNING] Lỗi lay_hyperlink: {e}")
         return None
 
-    def lay_url_tu_hyperlink_elem(self, hyperlink_elem) -> str:
+    def lay_url_tu_hyperlink_elem(self, hyperlink_elem) -> Optional[str]:
         # Lấy URL từ thẻ w:hyperlink dựa vào r:id và rels của document
         try:
             rId = hyperlink_elem.get(qn('r:id'))
@@ -334,7 +336,15 @@ class ChuyenDoiWordSangLatex:
                                                 ten_anh = f'formula_{self.dem_anh}.png'
                                                 duong_dan_png = os.path.join(self.thu_muc_anh, ten_anh)
                                                 new_size = (img.size[0] * 3, img.size[1] * 3)
-                                                img_resized = img.resize(new_size, Image.LANCZOS)
+                                                resample_filter = getattr(Image, 'LANCZOS', None)
+                                                if resample_filter is None:
+                                                    resampling = getattr(Image, 'Resampling', None)
+                                                    if resampling is not None:
+                                                        resample_filter = getattr(resampling, 'LANCZOS', None)
+                                                if resample_filter is not None:
+                                                    img_resized = img.resize(new_size, resample=resample_filter)
+                                                else:
+                                                    img_resized = img.resize(new_size)
                                                 img_resized.save(duong_dan_png)
                                                 os.remove(duong_dan_anh)
                                             except Exception:
@@ -381,7 +391,15 @@ class ChuyenDoiWordSangLatex:
                                                 ten_anh = f'formula_{self.dem_anh}.png'
                                                 duong_dan_png = os.path.join(self.thu_muc_anh, ten_anh)
                                                 new_size = (img.size[0] * 3, img.size[1] * 3)
-                                                img_resized = img.resize(new_size, Image.LANCZOS)
+                                                resample_filter = getattr(Image, 'LANCZOS', None)
+                                                if resample_filter is None:
+                                                    resampling = getattr(Image, 'Resampling', None)
+                                                    if resampling is not None:
+                                                        resample_filter = getattr(resampling, 'LANCZOS', None)
+                                                if resample_filter is not None:
+                                                    img_resized = img.resize(new_size, resample=resample_filter)
+                                                else:
+                                                    img_resized = img.resize(new_size)
                                                 img_resized.save(duong_dan_png)
                                                 os.remove(duong_dan_anh)
                                             except Exception:
@@ -463,7 +481,7 @@ class ChuyenDoiWordSangLatex:
 
         return ket_qua
 
-    def bat_caption_bang(self) -> str:
+    def bat_caption_bang(self) -> Optional[str]:
         # Bắt caption thật của bảng từ paragraph ngay phía trên
         try:
             idx_truoc = self.vi_tri_hien_tai - 1
@@ -501,7 +519,7 @@ class ChuyenDoiWordSangLatex:
             print(f"[WARNING] Lỗi bat_caption_bang: {e}")
         return None
 
-    def bat_caption_hinh(self) -> str:
+    def bat_caption_hinh(self) -> Optional[str]:
         # Bắt caption thật của hình từ paragraph phía dưới (tìm tối đa 5 đoạn)
         try:
             for buoc in range(1, 6):
@@ -536,7 +554,7 @@ class ChuyenDoiWordSangLatex:
 
     # DANH SÁCH (itemize / enumerate)
 
-    def lay_thong_tin_danh_sach(self, doan_van):
+    def lay_thong_tin_danh_sach(self, doan_van) -> tuple[Optional[str], int]:
         # Lấy numId và ilvl từ paragraph properties (danh sách đánh số/gạch đầu dòng)
         pPr = doan_van._element.pPr
         if pPr is None:
@@ -552,8 +570,10 @@ class ChuyenDoiWordSangLatex:
         ilvl = int(ilvl_elem.get(qn('w:val'))) if ilvl_elem is not None else 0
         return numId, ilvl
 
-    def xac_dinh_loai_danh_sach(self, numId: str) -> str:
+    def xac_dinh_loai_danh_sach(self, numId: Optional[str]) -> str:
         # Xác định loại danh sách (itemize mặc định) từ numId
+        if not numId:
+            return 'itemize'
         if numId in self.danh_sach_numId:
             return self.danh_sach_numId[numId]
         self.danh_sach_numId[numId] = 'itemize'
@@ -829,7 +849,7 @@ class ChuyenDoiWordSangLatex:
 
         return ket_qua
 
-    def tao_latex_hinh(self, ten_anh: str, caption: str = None, trong_bang: bool = False) -> str:
+    def tao_latex_hinh(self, ten_anh: str, caption: Optional[str] = None, trong_bang: bool = False) -> str:
         # Sinh mã LaTeX cho ảnh. Nếu trong_bang=True: chỉ center+includegraphics (tránh "Not in outer par mode").
         ten_thu_muc = os.path.basename(self.thu_muc_anh)
         if trong_bang:
@@ -853,10 +873,11 @@ class ChuyenDoiWordSangLatex:
         latex += r"\end{figure}" + "\n\n"
         return latex
 
-    def tao_latex_nhom_hinh(self, danh_sach_anh: list, danh_sach_caption: list = None, caption: str = None, trong_bang: bool = False) -> str:
+    def tao_latex_nhom_hinh(self, danh_sach_anh: list, danh_sach_caption: Optional[list[str]] = None, caption: Optional[str] = None, trong_bang: bool = False) -> str:
         # Gom nhiều ảnh. Nếu trong_bang=True: chỉ center+includegraphics (tránh "Not in outer par mode").
         if not danh_sach_anh:
             return ""
+        danh_sach_caption = danh_sach_caption or []
         ten_thu_muc = os.path.basename(self.thu_muc_anh)
         so_anh = len(danh_sach_anh)
         do_rong = f"{0.9 / so_anh:.2f}" if so_anh > 1 else "0.48"
@@ -1115,7 +1136,10 @@ class ChuyenDoiWordSangLatex:
         # Lấy danh sách phần tử (paragraph / table) theo thứ tự trong body,
         # bao gồm cả các phần tử nằm trong Content Control (sdt)
         from docx.table import Table
-        body = self.tai_lieu.element.body
+        tai_lieu = self.tai_lieu
+        if tai_lieu is None:
+            return []
+        body = tai_lieu.element.body
         thu_tu = []
 
         def duyet_node(node):
@@ -1123,9 +1147,9 @@ class ChuyenDoiWordSangLatex:
                 return
             tag = node.tag.split('}')[-1]
             if tag == 'p':
-                thu_tu.append(('paragraph', Paragraph(node, self.tai_lieu)))
+                thu_tu.append(('paragraph', Paragraph(node, tai_lieu)))
             elif tag == 'tbl':
-                thu_tu.append(('table', Table(node, self.tai_lieu)))
+                thu_tu.append(('table', Table(node, tai_lieu)))
             else:
                 # Duyệt đệ quy để tìm p và tbl nằm trong các thẻ bao (như sdt, txbxContent)
                 for child in node:
@@ -1970,7 +1994,7 @@ class ChuyenDoiWordSangLatex:
         ket_qua = re.sub(r'\\begin\{highlights\}.*?\\end\{highlights\}', '', ket_qua, flags=re.DOTALL)
         try:
             from TexSoup import TexSoup
-            soup = TexSoup(ket_qua)
+            soup: Any = TexSoup(ket_qua)
             
             # 1. Title
             title = self.parsed_data.get('title', '').strip()
@@ -1984,7 +2008,7 @@ class ChuyenDoiWordSangLatex:
                             t.args[-1].contents = [title + thanks_str]
             
             # 2. Author
-            author_block = self.parsed_data.get('author_block', '').strip()
+            author_block = str(self.parsed_data.get('author_block') or '').strip()
             if author_block:
                 authors = []
                 for a_tag in ['author', 'Author']:
