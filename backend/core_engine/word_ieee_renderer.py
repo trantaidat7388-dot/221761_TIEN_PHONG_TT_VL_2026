@@ -1,32 +1,38 @@
-"""IEEE Word Renderer — converts IR data into an IEEE-formatted Word document.
+"""Bộ render Word IEEE — chuyển dữ liệu IR thành tài liệu Word theo định dạng IEEE.
 
-Strategy (Plan A — Refactor Renderer):
-  When an uploaded IEEE template is provided the renderer **clears the template body**
-  (preserving page layout / section properties) and **rebuilds all content from scratch**
-  using the template's inherent styles.  This avoids the fragile fill-in-place approach
-  that broke when IR node count differed from template paragraph count.
+Chiến lược (Phương án A — Tái cấu trúc renderer):
+    Khi có template IEEE được tải lên, renderer sẽ **xóa phần body của template**
+    (giữ nguyên bố cục trang / thuộc tính section) và **xây dựng lại toàn bộ nội dung từ đầu**
+    bằng chính style có sẵn của template. Cách này tránh kiểu điền tại chỗ dễ vỡ
+    khi số lượng node IR không khớp với số paragraph của template.
 
-  Rich-text formatting embedded as LaTeX commands in the IR (e.g. \\textbf{...})
-  is parsed and mapped to python-docx Run properties so that bold/italic/hyperlinks
-  are preserved in the output Word document.
+    Định dạng rich-text nhúng dưới dạng lệnh LaTeX trong IR (ví dụ \\textbf{...})
+    sẽ được parse và ánh xạ sang thuộc tính Run của python-docx để giữ lại
+    bold/italic/hyperlink trong tài liệu Word đầu ra.
 
-  IEEE compliance v2 (Apr 2026):
-  - Table borders: top/bottom/insideH only (no left/right/insideV), thin (sz=4)
-  - References: 'Heading 5' unnumbered heading + 'references' auto-numbered style
-  - Author block: Word columns + 'Author' style paragraphs (not table)
-  - All headings prefer template styles over manual formatting
-  - Bullet list support via 'bullet list' style
+    Tuân thủ IEEE v2 (04/2026):
+    - Viền bảng: chỉ top/bottom/insideH (không left/right/insideV), mảnh (sz=4)
+    - References: heading không đánh số kiểu 'Heading 5' + style 'references' tự đánh số
+    - Khối tác giả: dùng cột Word + các paragraph style 'Author' (không dùng bảng)
+    - Mọi heading ưu tiên style của template hơn là format thủ công
+    - Hỗ trợ danh sách gạch đầu dòng qua style 'bullet list'
 """
+
+# pyright: reportAttributeAccessIssue=false, reportGeneralTypeIssues=false, reportArgumentType=false, reportCallIssue=false, reportInvalidStringEscapeSequence=false
 
 import re
 import os
 import base64
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from lxml import etree
+from typing import Any, Dict, List, Optional, Tuple, cast
+try:
+    from lxml import etree  # type: ignore
+except Exception:
+    import xml.etree.ElementTree as etree  # type: ignore
 
 from docx import Document
+from docx.document import Document as DocxDocument
 from docx.enum.section import WD_SECTION
 from docx.enum.section import WD_ORIENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_BREAK
@@ -38,16 +44,19 @@ from docx.table import Table
 
 from .word_loader import mo_tai_lieu_word_co_fallback
 
+# Typing alias for XML nodes (lxml/etree types are not always recognized by Pylance)
+XMLNode = Any
+
 
 # ---------------------------------------------------------------------------
-# Regex helpers
+# Các tiện ích regex
 # ---------------------------------------------------------------------------
 _FIG_PATH_RE = re.compile(r"\\includegraphics(?:\[[^\]]*\])?{([^}]+)}")
 _CAPTION_RE = re.compile(r"\\caption{([^}]*)}")
 _LABEL_RE = re.compile(r"\\label{[^}]*}")
 _FIG_ENV_RE = re.compile(r"\\begin{(figure\*?)}", re.IGNORECASE)
 
-# LaTeX rich-text token patterns — used to convert IR text to Word runs
+# Mẫu token rich-text LaTeX dùng để đổi text IR thành các run Word
 _RICH_TEXT_TOKENS = re.compile(
     r"(\\textbf\{|\\textit\{|\\texttt\{|\\emph\{|\\underline\{"
     r"|\\textsuperscript\{|\\textsubscript\{"
@@ -56,14 +65,14 @@ _RICH_TEXT_TOKENS = re.compile(
     r"|\{|\})"
 )
 
-# IEEE heading roman numerals
+# Số La Mã cho heading IEEE
 _ROMAN_MAP = [
     (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
     (100, "C"), (90, "XC"), (50, "L"), (40, "XL"),
     (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
 ]
 
-# IEEE conference two-column content width approximation on A4 with current margins.
+# Xấp xỉ độ rộng nội dung hai cột IEEE trên khổ A4 với margin hiện tại.
 _IEEE_COLUMN_WIDTH_INCH = 3.45
 _IEEE_TWO_COL_GUTTER_INCH = 0.24
 _IEEE_BODY_LINE_SPACING = 1.0
@@ -84,10 +93,10 @@ def _to_roman(n: int) -> str:
 class IEEEWordRenderer:
     """Render IR output into an IEEE-formatted Word document.
 
-    The renderer supports two modes:
-      1) **From-scratch**: creates a new blank document with IEEE-like styling.
-      2) **Template-based**: opens an uploaded IEEE .docx template, clears the body
-         and rebuilds all content using the template's styles/page-layout.
+        Renderer hỗ trợ hai chế độ:
+            1) **Tạo mới từ đầu**: tạo một tài liệu trống mới với style giống IEEE.
+            2) **Dựa trên template**: mở template IEEE .docx được tải lên, xóa body
+                 và dựng lại toàn bộ nội dung bằng style/bố cục của template.
     """
 
     def render(
@@ -116,7 +125,7 @@ class IEEEWordRenderer:
             self._figure_index = 0
             self._table_index = 0
             self._section_index = 0
-            self._subsection_counters: Dict[int, int] = {}  # section_idx -> sub count
+            self._subsection_counters: Dict[int, int] = {}  # section_idx -> số subsection
             self._image_root_dir = Path(image_root_dir) if image_root_dir else Path(output_path).parent
             self._available_styles = {s.name for s in doc.styles if getattr(s, "name", None)}
             self._render_metrics: Dict[str, int] = {
@@ -155,20 +164,20 @@ class IEEEWordRenderer:
                     pass
 
     # ========================================================================
-    # Plan B: Find and Replace In-Place (Maintains 100% IEEE Template Layout)
+    # Phương án B: Tìm và thay tại chỗ (giữ nguyên 100% bố cục template IEEE)
     # ========================================================================
 
     def _rebuild_on_uploaded_template(
         self,
-        doc: Document,
+        doc: DocxDocument,
         metadata: Dict[str, Any],
         body_nodes: List[Dict[str, Any]],
         references: List[Dict[str, Any]],
     ) -> None:
-        """Rebuild content using uploaded template styles while removing template guide text.
+        """Dựng lại nội dung bằng style của template tải lên đồng thời xóa text hướng dẫn của template.
 
-        We preserve document/section settings (margins, columns, page size) by keeping
-        the trailing sectPr in the body XML and recreating only user content.
+        Ta giữ nguyên thiết lập document/section (margin, cột, khổ trang) bằng cách giữ
+        sectPr ở cuối body XML và chỉ tạo lại phần nội dung người dùng.
         """
         self._clear_document_body_preserve_layout(doc)
         self._add_title_section(doc, metadata)
@@ -180,8 +189,8 @@ class IEEEWordRenderer:
         self._add_body(doc, body_nodes)
         self._add_references(doc, references)
 
-    def _clear_document_body_preserve_layout(self, doc: Document) -> None:
-        """Remove all paragraphs/tables but keep section properties for layout fidelity."""
+    def _clear_document_body_preserve_layout(self, doc: DocxDocument) -> None:
+        """Xóa mọi paragraph/bảng nhưng giữ section properties để bảo toàn bố cục."""
         body = doc._element.body
         children = list(body)
         sect_pr = None
@@ -198,21 +207,21 @@ class IEEEWordRenderer:
 
     def _fill_into_existing_template(
         self,
-        doc: Document,
+        doc: DocxDocument,
         metadata: Dict[str, Any],
         body_nodes: List[Dict[str, Any]],
         references: List[Dict[str, Any]],
     ) -> None:
-        """Fills data into the IEEE template by finding key anchor paragraphs
-        and replacing their text while preserving their formatting, columns, and section breaks."""
+        """Điền dữ liệu vào template IEEE bằng cách tìm các paragraph neo quan trọng
+        rồi thay nội dung của chúng nhưng vẫn giữ định dạng, cột và ngắt section."""
 
-        # 1. Fill Metadata (Title, Authors, Abstract, Keywords)
+        # 1. Điền Metadata (Title, Authors, Abstract, Keywords)
         self._replace_metadata(doc, metadata)
 
-        # 2. Fill Body & References
+        # 2. Điền Body và References
         self._replace_body_and_refs(doc, body_nodes, references)
 
-    def _replace_metadata(self, doc: Document, metadata: Dict[str, Any]) -> None:
+    def _replace_metadata(self, doc: DocxDocument, metadata: Dict[str, Any]) -> None:
         title = (metadata.get("title") or "").strip()
         abstract = self._latex_to_plain(metadata.get("abstract") or "")
         keywords = [self._latex_to_plain(str(k)) for k in (metadata.get("keywords") or [])]
@@ -363,7 +372,7 @@ class IEEEWordRenderer:
         for fig in figures:
             self._insert_figure_before(anchor_p, fig)
 
-    def _insert_equation_before(self, doc: Document, anchor_p, raw_text: str) -> None:
+    def _insert_equation_before(self, doc: DocxDocument, anchor_p, raw_text: str) -> None:
         """Render an equation node as centered OMML or stylized text before an anchor using an invisible table for layout."""
         # Check for OMML marker first
         omml_match = re.search(r"«OMML:([A-Za-z0-9+/=]+)»", raw_text)
@@ -656,7 +665,7 @@ class IEEEWordRenderer:
         if italic:
             new_run.italic = True
 
-    def _iter_all_paragraphs(self, doc: Document):
+    def _iter_all_paragraphs(self, doc: DocxDocument):
         """Yields all paragraphs in document, including those inside tables."""
         for p in doc.paragraphs:
             yield p
@@ -689,7 +698,7 @@ class IEEEWordRenderer:
         clean_text = re.sub(pattern, '', text, flags=re.DOTALL).strip()
         return clean_text, list(figures)
 
-    def _add_title_section(self, doc: Document, metadata: Dict[str, Any]) -> None:
+    def _add_title_section(self, doc: DocxDocument, metadata: Dict[str, Any]) -> None:
         title = (metadata.get("title") or "").strip()
         if not title: return
         p = doc.add_paragraph()
@@ -707,7 +716,7 @@ class IEEEWordRenderer:
             run.font.name = "Times New Roman"
             run.font.size = Pt(24)
 
-    def _add_abstract_and_keywords(self, doc: Document, metadata: Dict[str, Any]) -> None:
+    def _add_abstract_and_keywords(self, doc: DocxDocument, metadata: Dict[str, Any]) -> None:
         abstract = self._latex_to_plain(metadata.get("abstract") or "")
         # Strip any existing label prefix to avoid double labeling (e.g. "Abstract—Abstract. ...")
         # Requires separator (dot, dash, colon, em-dash) after label word to avoid false positives
@@ -746,7 +755,7 @@ class IEEEWordRenderer:
                 p.paragraph_format.line_spacing = _IEEE_BODY_LINE_SPACING
                 p.paragraph_format.space_after = Pt(4)
 
-    def _add_authors_table(self, doc: Document, authors: List[Dict[str, Any]]) -> None:
+    def _add_authors_table(self, doc: DocxDocument, authors: List[Dict[str, Any]]) -> None:
         """Render author block using IEEE 'Author' style paragraphs with Word columns.
 
         The IEEE Word template uses multi-column section layout (not a table)
@@ -976,7 +985,7 @@ class IEEEWordRenderer:
         return text.strip(" ,")
 
     # NOTE: To prevent API breakage, `_add_body` is retained for calls when no uploaded template is used.
-    def _add_body(self, doc: Document, body_nodes: List[Dict[str, Any]]) -> None:
+    def _add_body(self, doc: DocxDocument, body_nodes: List[Dict[str, Any]]) -> None:
         for node in body_nodes:
             node_type = node.get("type", "")
 
@@ -1062,7 +1071,7 @@ class IEEEWordRenderer:
                     self._apply_body_paragraph_style(p, indent_first_line=True)
                     self._add_rich_runs(p, raw_text)
 
-    def _add_ieee_heading(self, doc: Document, text: str, level: int) -> None:
+    def _add_ieee_heading(self, doc: DocxDocument, text: str, level: int) -> None:
         """Add an IEEE-style heading with proper numbering.
 
         When an uploaded template is present, prefer the template's built-in
@@ -1131,7 +1140,7 @@ class IEEEWordRenderer:
             run.font.name = "Times New Roman"
             run.font.size = Pt(10)
 
-    def _add_table_node(self, doc: Document, node: Dict[str, Any], force_full_width: bool = False) -> None:
+    def _add_table_node(self, doc: DocxDocument, node: Dict[str, Any], force_full_width: bool = False) -> None:
         """Render a table IR node as a real Word table."""
         self._table_index += 1
         caption = self._normalize_table_caption(self._latex_to_plain(node.get("caption") or ""))
@@ -1229,7 +1238,7 @@ class IEEEWordRenderer:
 
         doc.add_paragraph("")  # spacing after table
 
-    def _add_figure_node(self, doc: Document, latex_figure_text: str) -> None:
+    def _add_figure_node(self, doc: DocxDocument, latex_figure_text: str) -> None:
         """Insert a figure (image + caption) from LaTeX IR text.
         
         Supports multi-image figure blocks: all \includegraphics in the
@@ -1294,7 +1303,7 @@ class IEEEWordRenderer:
                     run.font.size = Pt(8)
                     run.italic = True
 
-    def _add_equation_node(self, doc: Document, raw_text: str) -> None:
+    def _add_equation_node(self, doc: DocxDocument, raw_text: str) -> None:
         """Render an equation node as centered OMML or stylized text."""
         # Handle tab-layout equations from IEEE Word re-parsing:
         # Pattern: \t<equation text>\t(N)
@@ -1406,7 +1415,7 @@ class IEEEWordRenderer:
     # References
     # ========================================================================
 
-    def _add_references(self, doc: Document, references: List[Dict[str, Any]]) -> None:
+    def _add_references(self, doc: DocxDocument, references: List[Dict[str, Any]]) -> None:
         if not references:
             return
 
@@ -1717,7 +1726,7 @@ class IEEEWordRenderer:
         s = re.sub(r"\\end\{[^}]+\}", " ", s)
 
         # Handle \cite{refN,refM} -> [N, M]
-        def _cite_replace(m):
+        def _cite_replace(m: re.Match[str]) -> str:
             refs = m.group(1).split(",")
             nums = []
             for r in refs:
@@ -1742,6 +1751,12 @@ class IEEEWordRenderer:
         s = s.replace("\\\\", " ")
         s = s.replace("&", " ")
         # Common replacements
+        def _sup_replace(m: re.Match[str]) -> str:
+            return self._to_superscript(m.group(1))
+
+        def _sub_replace(m: re.Match[str]) -> str:
+            return self._to_subscript(m.group(1))
+
         replacements = [
             (r"\\frac\{1\}\{2\}", "½"),
             (r"\\frac\{([^}]*)\}\{([^}]*)\}", r"(\1)/(\2)"),
@@ -1761,8 +1776,8 @@ class IEEEWordRenderer:
             (r"\\subset", "⊂"), (r"\\supset", "⊃"),
             (r"\\cup", "∪"), (r"\\cap", "∩"),
             (r"\\forall", "∀"), (r"\\exists", "∃"),
-            (r"\^(\{[^}]*\}|[0-9a-zA-Z])", lambda m: self._to_superscript(m.group(1))),
-            (r"_(\{[^}]*\}|[0-9a-zA-Z])", lambda m: self._to_subscript(m.group(1))),
+            (r"\^(\{[^}]*\}|[0-9a-zA-Z])", _sup_replace),
+            (r"_(\{[^}]*\}|[0-9a-zA-Z])", _sub_replace),
         ]
         for pattern, repl in replacements:
             if callable(repl):
@@ -1842,7 +1857,7 @@ class IEEEWordRenderer:
     # Image resolution
     # ========================================================================
 
-    def _resolve_image_path(self, image_path: str) -> Optional[Path]:
+    def _resolve_image_path(self, image_path: Optional[str]) -> Optional[Path]:
         if not image_path:
             return None
 
@@ -1875,7 +1890,7 @@ class IEEEWordRenderer:
     # Document configuration (from-scratch mode)
     # ========================================================================
 
-    def _configure_ieee_document(self, doc: Document) -> None:
+    def _configure_ieee_document(self, doc: DocxDocument) -> None:
         section = doc.sections[0]
         section.page_width = Cm(21.0)   # A4
         section.page_height = Cm(29.7)
@@ -1896,7 +1911,7 @@ class IEEEWordRenderer:
     # Utility: resolve table style
     # ========================================================================
 
-    def _resolve_table_style_name(self, doc: Document) -> str | None:
+    def _resolve_table_style_name(self, doc: DocxDocument) -> str | None:
         preferred = ["Table Grid", "Table Normal", "Normal Table"]
         available = {s.name for s in doc.styles if getattr(s, "name", None)}
         for name in preferred:
@@ -1904,7 +1919,7 @@ class IEEEWordRenderer:
                 return name
         return None
 
-    def _start_two_column_body(self, doc: Document) -> None:
+    def _start_two_column_body(self, doc: DocxDocument) -> None:
         """Switch to IEEE two-column layout for main content and references."""
         if not doc.sections:
             return
@@ -1920,7 +1935,7 @@ class IEEEWordRenderer:
         self._set_section_columns(body_section, 2)
 
     def _set_section_columns(self, section, num: int, space_twips: int = 360) -> None:
-        sect_pr = section._sectPr
+        sect_pr = cast(XMLNode, section._sectPr)
         cols = sect_pr.find(qn("w:cols"))
         if cols is None:
             cols = OxmlElement("w:cols")
@@ -1935,7 +1950,7 @@ class IEEEWordRenderer:
         - Top/bottom/left/right: single, thin
         - InsideH/insideV: single, thin
         """
-        tbl_pr = table._tbl.tblPr
+        tbl_pr = cast(XMLNode, table._tbl.tblPr)
         borders = tbl_pr.find(qn("w:tblBorders"))
         if borders is None:
             borders = OxmlElement("w:tblBorders")
@@ -1952,7 +1967,7 @@ class IEEEWordRenderer:
             edge.set(qn("w:space"), "0")
             edge.set(qn("w:color"), "000000")
 
-    def _add_table_caption(self, doc: Document, label: str, caption: str) -> None:
+    def _add_table_caption(self, doc: DocxDocument, label: str, caption: str) -> None:
         """IEEE conference table caption: two lines (label + uppercase title)."""
         label_para = doc.add_paragraph()
         label_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -1999,7 +2014,7 @@ class IEEEWordRenderer:
                 if i < cols:
                     cell.width = col_width
 
-        tbl_pr = table._tbl.tblPr
+        tbl_pr = cast(XMLNode, table._tbl.tblPr)
         tbl_w = tbl_pr.find(qn("w:tblW"))
         if tbl_w is None:
             tbl_w = OxmlElement("w:tblW")
@@ -2007,13 +2022,13 @@ class IEEEWordRenderer:
         tbl_w.set(qn("w:type"), "dxa")
         tbl_w.set(qn("w:w"), str(int(max(1.0, width_inch) * 1440)))
 
-    def _current_table_target_width_inch(self, doc: Document, force_full_width: bool) -> float:
+    def _current_table_target_width_inch(self, doc: DocxDocument, force_full_width: bool) -> float:
         if not doc.sections:
             return _IEEE_COLUMN_WIDTH_INCH
 
         sec = doc.sections[-1]
         try:
-            content_width = (sec.page_width - sec.left_margin - sec.right_margin).inches
+            content_width = cast(Any, (cast(Any, sec.page_width) - cast(Any, sec.left_margin) - cast(Any, sec.right_margin))).inches
         except Exception:
             content_width = _IEEE_COLUMN_WIDTH_INCH * 2 + _IEEE_TWO_COL_GUTTER_INCH
 
@@ -2023,7 +2038,7 @@ class IEEEWordRenderer:
         col_width = (content_width - _IEEE_TWO_COL_GUTTER_INCH) / 2.0
         return max(2.8, min(_IEEE_COLUMN_WIDTH_INCH, col_width))
 
-    def _select_table_layout_mode(self, doc: Document, node: Dict[str, Any]) -> str:
+    def _select_table_layout_mode(self, doc: DocxDocument, node: Dict[str, Any]) -> str:
         required_width = self._estimate_table_required_width_inch(node)
         single_col_width = self._current_table_target_width_inch(doc, force_full_width=False)
         full_width = self._current_table_target_width_inch(doc, force_full_width=True)
@@ -2061,7 +2076,7 @@ class IEEEWordRenderer:
             return "full"
         return "landscape"
 
-    def _apply_ieee_equation_tab_layout(self, paragraph, doc: Document, eq_text: str, eq_num: str) -> None:
+    def _apply_ieee_equation_tab_layout(self, paragraph, doc: DocxDocument, eq_text: str, eq_num: str) -> None:
         """Apply IEEE-style equation layout: centered equation + right equation number."""
         paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
         paragraph.paragraph_format.space_before = Pt(6)
@@ -2150,21 +2165,21 @@ class IEEEWordRenderer:
 
         return cols >= 4 or longest_cell >= 40 or long_cells >= 4
 
-    def _start_single_column_block(self, doc: Document) -> None:
+    def _start_single_column_block(self, doc: DocxDocument) -> None:
         sec = doc.add_section(WD_SECTION.CONTINUOUS)
         self._copy_section_margins(doc.sections[0], sec)
         self._copy_section_page_size(doc.sections[0], sec)
         sec.orientation = WD_ORIENT.PORTRAIT
         self._set_section_columns(sec, 1)
 
-    def _resume_two_column_block(self, doc: Document) -> None:
+    def _resume_two_column_block(self, doc: DocxDocument) -> None:
         sec = doc.add_section(WD_SECTION.CONTINUOUS)
         self._copy_section_margins(doc.sections[0], sec)
         self._copy_section_page_size(doc.sections[0], sec)
         sec.orientation = WD_ORIENT.PORTRAIT
         self._set_section_columns(sec, 2)
 
-    def _start_landscape_single_column_block(self, doc: Document) -> None:
+    def _start_landscape_single_column_block(self, doc: DocxDocument) -> None:
         sec = doc.add_section(WD_SECTION.CONTINUOUS)
         self._copy_section_margins(doc.sections[0], sec)
         base = doc.sections[0]
@@ -2173,7 +2188,7 @@ class IEEEWordRenderer:
         sec.page_height = base.page_width
         self._set_section_columns(sec, 1)
 
-    def _resume_portrait_two_column_block(self, doc: Document) -> None:
+    def _resume_portrait_two_column_block(self, doc: DocxDocument) -> None:
         sec = doc.add_section(WD_SECTION.CONTINUOUS)
         self._copy_section_margins(doc.sections[0], sec)
         self._copy_section_page_size(doc.sections[0], sec)
@@ -2282,18 +2297,18 @@ class IEEEWordRenderer:
         text = re.sub(r"\\(?=[%&#$])", "", text)
         return text.strip()
 
-    def _get_current_column_width_inch(self, doc: Document) -> float:
+    def _get_current_column_width_inch(self, doc: DocxDocument) -> float:
         """Calculate the actual column width from section properties."""
         if not doc.sections:
             return _IEEE_COLUMN_WIDTH_INCH
         sec = doc.sections[-1]
         try:
-            content_width = (sec.page_width - sec.left_margin - sec.right_margin).inches
+            content_width = cast(Any, (cast(Any, sec.page_width) - cast(Any, sec.left_margin) - cast(Any, sec.right_margin))).inches
         except Exception:
             content_width = _IEEE_COLUMN_WIDTH_INCH * 2 + _IEEE_TWO_COL_GUTTER_INCH
 
         # Check if we're in a 2-column section
-        cols_el = sec._sectPr.find(qn("w:cols"))
+        cols_el = cast(XMLNode, sec._sectPr).find(qn("w:cols"))
         num_cols = 1
         if cols_el is not None:
             try:
@@ -2305,7 +2320,7 @@ class IEEEWordRenderer:
             return (content_width - _IEEE_TWO_COL_GUTTER_INCH) / 2.0
         return content_width
 
-    def _add_list_node(self, doc: Document, node: Dict[str, Any]) -> None:
+    def _add_list_node(self, doc: DocxDocument, node: Dict[str, Any]) -> None:
         """Render a list node (bullet or numbered) using IEEE styles."""
         items = node.get("items", [])
         bullet_style = self._pick_style_name(["bullet list", "List Bullet", "List Number"])
@@ -2324,8 +2339,8 @@ class IEEEWordRenderer:
             run.font.name = "Times New Roman"
             run.font.size = Pt(10)
 
-    def _add_latex_list_node(self, doc: Document, raw_text: str) -> None:
-        """Parse LaTeX \\begin{itemize}/\\begin{enumerate} and render as Word list."""
+    def _add_latex_list_node(self, doc: DocxDocument, raw_text: str) -> None:
+        r"""Parse LaTeX \begin{itemize}/\begin{enumerate} and render as Word list."""
         bullet_style = self._pick_style_name(["bullet list", "List Bullet"])
 
         # Extract items from \\item ...
