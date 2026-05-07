@@ -28,11 +28,14 @@ ENV/
 env/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
 *~
+# Giữ .vscode/settings.json để share cấu hình Python path trong team
+# Chỉ ignore file cá nhân
+.vscode/*.code-snippets
+.vscode/launch.json
 
 # LaTeX intermediate files
 *.aux
