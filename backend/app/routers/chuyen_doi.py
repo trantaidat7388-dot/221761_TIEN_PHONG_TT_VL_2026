@@ -46,6 +46,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Chuyển Đổi"])
 
+
+def _lay_user_id_bat_buoc(user: models.User) -> int:
+    user_id = getattr(user, "id", None)
+    if user_id is None:
+        raise ValueError("Thiếu user_id")
+    return int(user_id)
+
+
+def _lay_user_role(user: models.User | None) -> str | None:
+    if user is None:
+        return None
+    role = getattr(user, "role", None)
+    return str(role) if role is not None else None
+
 DEFAULT_IEEE_WORD_TEMPLATE = (
     Path(__file__).resolve().parents[3]
     / "input_data"
@@ -225,7 +239,7 @@ async def chuyen_doi_file(
         pages_estimate = token_service.uoc_tinh_so_trang_tu_noi_dung_word(contents)
         deduction = token_service.tru_token_cho_chuyen_doi(
             db=db,
-            user_id=current_user.id,
+            user_id=int(current_user.id),  # type: ignore[reportArgumentType]
             so_trang_uoc_tinh=pages_estimate,
             job_id=job_id,
         )
@@ -245,13 +259,13 @@ async def chuyen_doi_file(
         template_type,
     )
     
-    original_name = Path(file.filename).stem
+    original_name = Path(file.filename or "document").stem
     safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in original_name).lstrip(" -_") or "document"
     
     job_folder = TEMP_FOLDER / f"job_{job_id}"
     job_folder.mkdir(parents=True, exist_ok=True)
     
-    file_ext = Path(file.filename).suffix.lower() or '.docx'
+    file_ext = Path(file.filename or "document").suffix.lower() or '.docx'
     input_path = job_folder / f"{safe_name}_{timestamp}{file_ext}"
     output_filename = f"{safe_name}_{timestamp}.tex"
     output_path = job_folder / output_filename
@@ -378,12 +392,13 @@ async def chuyen_doi_file(
             logger.warning("Không thể copy ZIP sang outputs", exc_info=e)
 
         if current_user is not None:
+            current_user_id = _lay_user_id_bat_buoc(current_user)
             try:
                 _ghi_lich_su_chuyen_doi(
                     db=db,
-                    user_id=current_user.id,
+                    user_id=current_user_id,
                     job_id=job_id,
-                    file_name=file.filename,
+                    file_name=file.filename or "unknown.docx",
                     template_name=template_type,
                     status="Thành công",
                     file_path=str(OUTPUTS_FOLDER / zip_filename),
@@ -424,10 +439,11 @@ async def chuyen_doi_file(
         })
     except HTTPException as loi_http:
         if current_user is not None and token_usage["deducted"] and not token_usage["refunded"]:
+            current_user_id = _lay_user_id_bat_buoc(current_user)
             try:
                 token_service.hoan_token_chuyen_doi(
                     db=db,
-                    user_id=current_user.id,
+                    user_id=current_user_id,
                     token_cost=token_usage["token_cost"],
                     job_id=job_id,
                     pages_count=token_usage["pages_count"],
@@ -437,12 +453,13 @@ async def chuyen_doi_file(
                 logger.warning("Hoàn token thất bại cho request /chuyen-doi", exc_info=refund_err)
 
         if current_user is not None:
+            current_user_id = _lay_user_id_bat_buoc(current_user)
             try:
                 _ghi_lich_su_chuyen_doi(
                     db=db,
-                    user_id=current_user.id,
+                    user_id=current_user_id,
                     job_id=job_id,
-                    file_name=file.filename,
+                    file_name=file.filename or "unknown.docx",
                     template_name=template_type,
                     status="Thất bại",
                     file_path="",
@@ -457,10 +474,11 @@ async def chuyen_doi_file(
         raise
     except Exception as loi:
         if current_user is not None and token_usage["deducted"] and not token_usage["refunded"]:
+            current_user_id = _lay_user_id_bat_buoc(current_user)
             try:
                 token_service.hoan_token_chuyen_doi(
                     db=db,
-                    user_id=current_user.id,
+                    user_id=current_user_id,
                     token_cost=token_usage["token_cost"],
                     job_id=job_id,
                     pages_count=token_usage["pages_count"],
@@ -470,12 +488,13 @@ async def chuyen_doi_file(
                 logger.warning("Hoàn token thất bại cho lỗi runtime /chuyen-doi", exc_info=refund_err)
 
         if current_user is not None:
+            current_user_id = _lay_user_id_bat_buoc(current_user)
             try:
                 _ghi_lich_su_chuyen_doi(
                     db=db,
-                    user_id=current_user.id,
+                    user_id=current_user_id,
                     job_id=job_id,
-                    file_name=file.filename,
+                    file_name=file.filename or "unknown.docx",
                     template_name=template_type,
                     status="Thất bại",
                     file_path="",
@@ -754,10 +773,11 @@ async def chuyen_doi_file_stream(
 
         try:
             if current_user is not None:
+                current_user_id = _lay_user_id_bat_buoc(current_user)
                 pages_estimate = token_service.uoc_tinh_so_trang_tu_noi_dung_word(contents)
                 deduction = token_service.tru_token_cho_chuyen_doi(
                     db=db,
-                    user_id=current_user.id,
+                    user_id=current_user_id,
                     so_trang_uoc_tinh=pages_estimate,
                     job_id=job_id,
                 )
@@ -798,8 +818,8 @@ async def chuyen_doi_file_stream(
             else:
                 template_path = _resolve_template_path(
                     template_type,
-                    current_user_id=current_user.id if current_user else None,
-                    current_user_role=current_user.role if current_user else None,
+                    current_user_id=_lay_user_id_bat_buoc(current_user) if current_user is not None else None,
+                    current_user_role=_lay_user_role(current_user),
                 ) or _resolve_template_path("ieee_conference")
                 if not template_path or not template_path.exists():
                     yield sse_event(-1, "Template không tồn tại", error=True); return
@@ -875,12 +895,13 @@ async def chuyen_doi_file_stream(
             except Exception: output_zip_path = zip_path
 
             if current_user is not None:
+                current_user_id = _lay_user_id_bat_buoc(current_user)
                 try:
                     _ghi_lich_su_chuyen_doi(
                         db=db,
-                        user_id=current_user.id,
+                        user_id=current_user_id,
                         job_id=job_id,
-                        file_name=file.filename,
+                        file_name=file.filename or "unknown.docx",
                         template_name=template_type,
                         status="Thành công",
                         file_path=str(output_zip_path),
@@ -903,10 +924,11 @@ async def chuyen_doi_file_stream(
         except Exception as loi:
             req_id = getattr(request.state, "request_id", "-")
             if current_user is not None and token_usage["deducted"] and not token_usage["refunded"]:
+                current_user_id = _lay_user_id_bat_buoc(current_user)
                 try:
                     token_service.hoan_token_chuyen_doi(
                         db=db,
-                        user_id=current_user.id,
+                        user_id=current_user_id,
                         token_cost=token_usage["token_cost"],
                         job_id=job_id,
                         pages_count=token_usage["pages_count"],
@@ -916,12 +938,13 @@ async def chuyen_doi_file_stream(
                     logger.warning("Hoàn token thất bại cho SSE conversion", exc_info=refund_err)
 
             if current_user is not None:
+                current_user_id = _lay_user_id_bat_buoc(current_user)
                 try:
                     _ghi_lich_su_chuyen_doi(
                         db=db,
-                        user_id=current_user.id,
+                        user_id=current_user_id,
                         job_id=job_id,
-                        file_name=file.filename,
+                        file_name=file.filename or "unknown.docx",
                         template_name=template_type,
                         status="Thất bại",
                         file_path="",
@@ -983,11 +1006,12 @@ def tai_ve_word_theo_job(job_id: str) -> FileResponse:
 @router.api_route("/download/{job_id}", methods=["GET", "HEAD"])
 def tai_ve_theo_job(job_id: str, db: Session = Depends(lay_db), current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai)) -> FileResponse:
     """Tải file ZIP từ đường dẫn được lưu trong DB (yêu cầu auth)."""
-    record = db.query(models.ConversionHistory).filter(models.ConversionHistory.job_id == job_id, models.ConversionHistory.user_id == current_user.id).first()
+    current_user_id = _lay_user_id_bat_buoc(current_user)
+    record = db.query(models.ConversionHistory).filter(models.ConversionHistory.job_id == job_id, models.ConversionHistory.user_id == current_user_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi")
 
-    zip_path = Path(str(record.file_path)) if record.file_path else None
+    zip_path = Path(str(record.file_path)) if record.file_path is not None else None
     if not zip_path or not zip_path.exists():
         job_folder = TEMP_FOLDER / f"job_{job_id}"
         if job_folder.exists():

@@ -11,6 +11,8 @@
   ],
   "exclude": [
     "**/__pycache__",
+    "**/node_modules",
+    "**/.*",
     ".venv",
     "frontend",
     "app_web_view"
