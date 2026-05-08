@@ -798,12 +798,14 @@ async def chuyen_doi_file_stream(
                     with open(zip_path, "wb") as f: f.write(template_contents)
                     try: giai_nen_mau_zip(str(zip_path), str(job_folder))
                     except ValueError as e:
-                        yield sse_event(-1, f"File ZIP template không hợp lệ: {e}", error=True); return
+                        yield sse_event(-1, f"File ZIP template không hợp lệ: {e}", error=True)
+                        return
                     finally:
                         if zip_path.exists(): zip_path.unlink()
                     try: template_path = Path(tim_file_tex_chinh(str(job_folder)))
                     except FileNotFoundError:
-                        yield sse_event(-1, "Không tìm thấy file .tex chính trong ZIP", error=True); return
+                        yield sse_event(-1, "Không tìm thấy file .tex chính trong ZIP", error=True)
+                        return
                     template_tex_dir = template_path.parent
                     if template_tex_dir != job_folder:
                         try:
@@ -821,7 +823,8 @@ async def chuyen_doi_file_stream(
                     current_user_role=_lay_user_role(current_user),
                 ) or _resolve_template_path("ieee_conference")
                 if not template_path or not template_path.exists():
-                    yield sse_event(-1, "Template không tồn tại", error=True); return
+                    yield sse_event(-1, "Template không tồn tại", error=True)
+                    return
                 template_dir_actual = template_path.parent
                 try: shutil.copytree(str(template_dir_actual), str(job_folder), dirs_exist_ok=True)
                 except Exception:
@@ -866,7 +869,8 @@ async def chuyen_doi_file_stream(
 
             # Bỏ qua biên dịch PDF, chỉ chuyển Word → LaTeX
             if not output_path.exists():
-                yield sse_event(-1, "Không tạo được file .tex đầu ra", error=True); return
+                yield sse_event(-1, "Không tạo được file .tex đầu ra", error=True)
+                return
 
             yield sse_event(4, "Đang đóng gói kết quả...")
             tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')

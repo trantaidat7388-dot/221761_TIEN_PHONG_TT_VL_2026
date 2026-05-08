@@ -58,9 +58,12 @@ class JinjaLaTeXRenderer:
                 if doc_class == "springer" and text.isupper() and len(text) > 3:
                     text = text.title()
                     
-                if lvl == 1: out.append(f"\\section{{{text}}}\n")
-                elif lvl == 2: out.append(f"\\subsection{{{text}}}\n")
-                else: out.append(f"\\subsubsection{{{text}}}\n")
+                if lvl == 1:
+                    out.append(f"\\section{{{text}}}\n")
+                elif lvl == 2:
+                    out.append(f"\\subsection{{{text}}}\n")
+                else:
+                    out.append(f"\\subsubsection{{{text}}}\n")
             elif t == "paragraph":
                 para_text = str(node.get('text', '') or '')
                 para_text = para_text.replace("\\n\\label{", " \\label{")

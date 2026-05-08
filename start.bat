@@ -12,6 +12,30 @@ set "ROOT=%~dp0"
 cd /d "%ROOT%"
 
 REM ============================================================
+REM PRE-FLIGHT CHECKS
+REM ============================================================
+where python >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Python not found in PATH.
+    pause
+    exit /b 1
+)
+
+where node >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Node.js not found in PATH.
+    pause
+    exit /b 1
+)
+
+where npm >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: npm not found in PATH.
+    pause
+    exit /b 1
+)
+
+REM ============================================================
 REM STEP 1: DON DEP SERVER CU (AUTO RESET)
 REM ============================================================
 echo [1/5] Freeing ports 3000, 5173, 8000 and killing Node...
@@ -106,20 +130,51 @@ if %ERRORLEVEL% NEQ 0 (
 echo       OK - Dependencies ready.
 echo.
 
+if not exist "%ROOT%frontend\node_modules" (
+    echo       Installing frontend dependencies...
+    pushd "%ROOT%frontend"
+    npm install --prefer-offline
+    if errorlevel 1 (
+        popd
+        echo       ERROR: frontend dependency install failed.
+        pause
+        exit /b 1
+    )
+    popd
+) else (
+    echo       OK - frontend\node_modules already exists.
+)
+echo.
+
 REM ============================================================
 REM STEP 5: START BACKEND
 REM ============================================================
 echo [5/6] Starting Backend (FastAPI on :8000)...
 
-start "Word2LaTeX Backend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%"" & (if exist "".venv\Scripts\activate.bat"" call "".venv\Scripts\activate.bat"") & python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"
+start "Word2LaTeX Backend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%"" & (if exist "".venv\Scripts\activate.bat"" call "".venv\Scripts\activate.bat"") & "%VENV_PY%" -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000"
 
-timeout /t 3 /nobreak >nul
-echo       OK - Backend window opened.
+echo       Waiting for backend health check on /api/active-theme ...
+set "BACKEND_READY="
+for /L %%I in (1,1,60) do (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-RestMethod -Uri 'http://127.0.0.1:8000/api/active-theme' -TimeoutSec 2 | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
+    if not errorlevel 1 (
+        set "BACKEND_READY=1"
+        goto :backend_ready
+    )
+    timeout /t 1 /nobreak >nul
+)
+:backend_ready
+if not defined BACKEND_READY (
+    echo       ERROR: Backend did not become ready on port 8000.
+    pause
+    exit /b 1
+)
+echo       OK - Backend is ready.
 echo.
 
 echo [6/6] Starting Frontend (Vite on :5173)...
 
-start "Word2LaTeX Frontend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%frontend"" & (if not exist node_modules npm install --prefer-offline) & npm run dev"
+start "Word2LaTeX Frontend" cmd /k "chcp 65001 >nul & cd /d ""%ROOT%frontend"" & npm run dev"
 
 echo       OK - Frontend window opened.
 echo.

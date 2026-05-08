@@ -539,8 +539,10 @@ class WordASTParser:
     def _is_title_paragraph(self, p: Paragraph, idx: int) -> bool:
         """Heuristic for title: usually bold, large, or specific style 'Title'."""
         text = (p.text or "").strip()
-        if not text or len(text) < 3: return False
-        if "Short Title" in text or "ACM Reference Format" in text: return False
+        if not text or len(text) < 3:
+            return False
+        if "Short Title" in text or "ACM Reference Format" in text:
+            return False
         
         style_name = self._get_style_name(p)
         style_lc = style_name.lower()
@@ -550,8 +552,10 @@ class WordASTParser:
         # Heuristics: Center aligned + Bold or Large font + Bold
         aligned_center = False
         try:
-            if p.paragraph_format.alignment == 1: aligned_center = True
-        except: pass
+            if p.paragraph_format.alignment == 1:
+                aligned_center = True
+        except Exception:
+            pass
         
         runs = p.runs
         all_bold = all(r.bold for r in runs if (r.text or "").strip()) if runs else False
@@ -1402,7 +1406,7 @@ class WordASTParser:
         
         try:
             style_name = self._get_style_name(p)
-        except:
+        except Exception:
             style_name = ""
         from .config import MAP_STYLE
         style_cmd = MAP_STYLE.get(style_name or "", "")
@@ -1415,7 +1419,7 @@ class WordASTParser:
         elif style_name.lower().startswith("heading"):
             try:
                 level = int(re.sub(r'[^\d]', '', style_name))
-            except:
+            except Exception:
                 level = 1
         
         # We must process the text at the Run-level, to insert math between text nodes
@@ -1506,7 +1510,8 @@ class WordASTParser:
                 try:
                     is_bold = bool(run_obj.bold)
                     is_italic = bool(run_obj.italic)
-                except: pass
+                except Exception:
+                    pass
 
                 for r_child in node:
                     c_tag = r_child.tag.split("}")[-1] if hasattr(r_child, "tag") else ""
@@ -1518,7 +1523,8 @@ class WordASTParser:
                         if char_hex:
                             try:
                                 run_text_acc += chr(int(char_hex, 16))
-                            except: pass
+                            except Exception:
+                                pass
                     elif c_tag == "instrText":
                         # Skip field-code instructions (e.g., SEQ Table * ARABIC).
                         continue
@@ -1707,23 +1713,27 @@ class WordASTParser:
     def _lay_gridspan(self, tc) -> int:
         try:
             tcPr = tc.tcPr
-            if tcPr is None: return 1
+            if tcPr is None:
+                return 1
             gridSpan = tcPr.gridSpan
-            if gridSpan is None: return 1
+            if gridSpan is None:
+                return 1
             val = gridSpan.get(qn('w:val'))
             return max(1, int(val)) if val else 1
-        except:
+        except Exception:
             return 1
 
     def _lay_vmerge(self, tc):
         try:
             tcPr = tc.tcPr
-            if tcPr is None: return None
+            if tcPr is None:
+                return None
             vMerge = tcPr.vMerge
-            if vMerge is None: return None
+            if vMerge is None:
+                return None
             val = vMerge.get(qn('w:val'))
             return str(val) if val else 'continue'
-        except:
+        except Exception:
             return None
 
     def _lay_ty_le_rong_bang(self, t: Table):
@@ -1883,7 +1893,8 @@ class WordASTParser:
                         if id(candidate._tc) == id(info['tc']):
                             cell_obj = candidate
                             break
-                except: pass
+                except Exception:
+                    pass
                 
                 text_content = ""
                 if cell_obj:

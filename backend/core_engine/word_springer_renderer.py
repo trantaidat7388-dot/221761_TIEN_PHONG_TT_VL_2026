@@ -96,7 +96,8 @@ class SpringerWordRenderer(IEEEWordRenderer):
         # Handle Authors: Clear everything between Title and Abstract, then insert
         if title_idx != -1 and abs_idx != -1:
             for i in range(title_idx + 1, abs_idx):
-                p_el = all_paras[i]._element; p_parent = p_el.getparent()
+                p_el = all_paras[i]._element
+                p_parent = p_el.getparent()
                 if p_parent is not None:
                     p_parent.remove(p_el)
             if authors:
@@ -143,14 +144,16 @@ class SpringerWordRenderer(IEEEWordRenderer):
             # Xóa toàn bộ paragraph TRỪ first_sec_idx để dùng nó làm điểm neo
             for i in range(first_sec_idx + 1, end_idx):
                 if all_paras[i]._element.getparent() is not None:
-                    p_el = all_paras[i]._element; p_parent = p_el.getparent()
+                    p_el = all_paras[i]._element
+                    p_parent = p_el.getparent()
                     if p_parent is not None:
                         p_parent.remove(p_el)
             
             anchor_p = all_paras[first_sec_idx]
             self._insert_springer_body_before(doc, anchor_p, body_nodes)
             # Sau đó xóa hẳn paragraph neo cũ khỏi XML
-            anchor_el = anchor_p._element; anchor_parent = anchor_el.getparent()
+            anchor_el = anchor_p._element
+            anchor_parent = anchor_el.getparent()
             if anchor_parent is not None:
                 anchor_parent.remove(anchor_el)
 
@@ -161,10 +164,11 @@ class SpringerWordRenderer(IEEEWordRenderer):
             # Đúng hơn: "References" phải được giữ, còn phần sau đó sẽ xóa.
             for i in range(ref_idx + 1, len(all_paras)):
                 if all_paras[i]._element.getparent() is not None:
-                    p_el = all_paras[i]._element; p_parent = p_el.getparent()
+                    p_el = all_paras[i]._element
+                    p_parent = p_el.getparent()
                     if p_parent is not None:
                         p_parent.remove(p_el)
-            
+
             # Vậy chèn references sau ref_anchor? Không, chèn trước ref_anchor không hợp lý vì ref_anchor là tiêu đề.
             # Nhưng doc.add_paragraph() ở đây là ổn vì References nằm ở CUỐI tài liệu.
             ref_style = self._pick_style_name(["referenceitem", "referencelist", "ReferenceLine", "Normal"])
@@ -181,8 +185,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
                 p = doc.add_paragraph()
                 if ref_style:
-                    try: p.style = ref_style
-                    except: pass
+                    try:
+                        p.style = ref_style
+                    except Exception:
+                        pass
                 p.paragraph_format.first_line_indent = Inches(-0.2)
                 p.paragraph_format.left_indent = Inches(0.2)
                 
@@ -242,7 +248,8 @@ class SpringerWordRenderer(IEEEWordRenderer):
             p_name = anchor_p.insert_paragraph_before()
             if author_style:
                 try: p_name.style = author_style
-                except: pass
+                except Exception:
+                    pass
             p_name.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
             for i, a in enumerate(valid_authors):
@@ -264,8 +271,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
             for i, aff in enumerate(unique_affs, start=1):
                 p_aff = anchor_p.insert_paragraph_before()
                 if address_style:
-                    try: p_aff.style = address_style
-                    except: pass
+                    try:
+                        p_aff.style = address_style
+                    except Exception:
+                        pass
                 p_aff.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 prefix = f"{i} " if len(unique_affs) > 1 else ""
                 p_aff.add_run(prefix + aff)
@@ -274,10 +283,13 @@ class SpringerWordRenderer(IEEEWordRenderer):
         if all_emails:
             p_email = anchor_p.insert_paragraph_before()
             if email_style:
-                try: p_email.style = email_style
-                except:
-                    try: p_email.style = address_style
-                    except: pass
+                try:
+                    p_email.style = email_style
+                except Exception:
+                    try:
+                        p_email.style = address_style
+                    except Exception:
+                        pass
             p_email.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p_email.add_run(", ".join(all_emails))
 
@@ -336,8 +348,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
                     p_cap = anchor_p.insert_paragraph_before()
                     fig_style = self._pick_style_name(["figurecaption", "Figure Caption", "Caption"])
                     if fig_style:
-                        try: p_cap.style = fig_style
-                        except: pass
+                        try:
+                            p_cap.style = fig_style
+                        except Exception:
+                            pass
                     p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     p_cap.add_run(f"Fig. {self._figure_index}. {cap_clean}" if cap_clean else f"Fig. {self._figure_index}.")
                     prev_rendered_type = "figure"
@@ -349,8 +363,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 
                 body_style = self._pick_style_name(style_candidates)
                 if body_style:
-                    try: p.style = body_style
-                    except: pass
+                    try:
+                        p.style = body_style
+                    except Exception:
+                        pass
                 
                 # Fix spacing: Add space before if following a table, figure, or equation to prevent "stuck" look
                 if prev_rendered_type in ("table", "figure", "equation"):
@@ -381,8 +397,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
         
         heading_style = self._pick_style_name(style_candidates)
         if heading_style:
-            try: p.style = heading_style
-            except: pass
+            try:
+                p.style = heading_style
+            except Exception:
+                pass
 
         if level == 1:
             self._section_index += 1
@@ -420,8 +438,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
         cap_p = anchor_p.insert_paragraph_before()
         cap_style = self._pick_style_name(["tablecaption", "Table Caption", "Caption"])
         if cap_style:
-            try: cap_p.style = cap_style
-            except: pass
+            try:
+                cap_p.style = cap_style
+            except Exception:
+                pass
         cap_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         run_cap = cap_p.add_run(text)
         run_cap.font.name = "Times New Roman"
@@ -429,7 +449,8 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
         parent = anchor_p._p.getparent()
         table_data = node.get("data", [])
-        if not table_data: return
+        if not table_data:
+            return
 
         temp_table = doc.add_table(rows=len(table_data), cols=max(len(r) for r in table_data))
         
@@ -513,14 +534,17 @@ class SpringerWordRenderer(IEEEWordRenderer):
                         pic_para.add_run().add_picture(str(resolved), width=Inches(4.8))
                     else:
                         pic_para.add_run().add_picture(str(resolved))
-                except: pass
+                except Exception:
+                    pass
 
         cap_text = f"Fig. {self._figure_index}. {caption}" if caption else f"Fig. {self._figure_index}."
         p = anchor_p.insert_paragraph_before()
         fig_style = self._pick_style_name(["figurecaption", "Figure Caption", "Caption"])
         if fig_style:
-            try: p.style = fig_style
-            except: pass
+            try:
+                p.style = fig_style
+            except Exception:
+                pass
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.add_run(cap_text)
 
@@ -534,8 +558,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
             p = anchor_p.insert_paragraph_before()
             eq_style = self._pick_style_name(["equation", "Equation"])
             if eq_style:
-                try: p.style = eq_style
-                except: pass
+                try:
+                    p.style = eq_style
+                except Exception:
+                    pass
             p.add_run("\t")
             p.add_run(eq_text)
             p.add_run(f"\t{eq_num}")
@@ -565,14 +591,18 @@ class SpringerWordRenderer(IEEEWordRenderer):
         p = anchor_p.insert_paragraph_before()
         eq_style = self._pick_style_name(["equation", "Equation"])
         if eq_style:
-            try: p.style = eq_style
-            except: pass
+            try:
+                p.style = eq_style
+            except Exception:
+                pass
 
         p.add_run("\t")
         if omml_match:
-            try: self._insert_omml_to_paragraph(p, omml_match.group(1))
-            except:
-                if clean: p.add_run(clean)
+            try:
+                self._insert_omml_to_paragraph(p, omml_match.group(1))
+            except Exception:
+                if clean:
+                    p.add_run(clean)
         elif clean:
             p.add_run(clean)
 
@@ -1104,8 +1134,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
             p = doc.add_paragraph()
             eq_style = self._pick_style_name(["equation", "Equation"])
             if eq_style:
-                try: p.style = eq_style
-                except: pass
+                try:
+                    p.style = eq_style
+                except Exception:
+                    pass
             p.add_run("\t")
             p.add_run(eq_text)
             p.add_run(f"\t{eq_num}")

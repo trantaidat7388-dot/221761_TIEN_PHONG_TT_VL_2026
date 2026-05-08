@@ -700,7 +700,8 @@ class IEEEWordRenderer:
 
     def _add_title_section(self, doc: DocxDocument, metadata: Dict[str, Any]) -> None:
         title = (metadata.get("title") or "").strip()
-        if not title: return
+        if not title:
+            return
         p = doc.add_paragraph()
         title_style = self._pick_style_name(["paper title", "papertitle", "Title"])
         if title_style:

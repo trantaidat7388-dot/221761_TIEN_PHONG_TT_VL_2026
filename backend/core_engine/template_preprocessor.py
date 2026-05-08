@@ -94,7 +94,8 @@ class TemplatePreprocessor:
             replace_ops = [] # list of (start, end, replacement_text)
 
             def traverse(nodes, in_def=False):
-                if not nodes: return []
+                if not nodes:
+                    return []
                 found = []
                 for n in nodes:
                     is_def = in_def
@@ -1113,9 +1114,12 @@ class TemplatePreprocessor:
                               if m.start() < end_doc.start()]
                 
                 valid_starts = []
-                if bib_styles: valid_starts.append(bib_styles[-1].start())
-                if bib_cmds: valid_starts.append(bib_cmds[-1].start())
-                if print_bibs: valid_starts.append(print_bibs[-1].start())
+                if bib_styles:
+                    valid_starts.append(bib_styles[-1].start())
+                if bib_cmds:
+                    valid_starts.append(bib_cmds[-1].start())
+                if print_bibs:
+                    valid_starts.append(print_bibs[-1].start())
                 
                 if valid_starts:
                     start = max(valid_starts)

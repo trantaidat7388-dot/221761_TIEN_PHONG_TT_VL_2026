@@ -276,7 +276,7 @@ class MDPIAuthorStrategy(AuthorBlockStrategy):
             insts = []
             for aff in author.get('affiliations', []):
                 lines = [s.strip() for s in aff.strip().split('\n') if s.strip()]
-                inst_parts = [l for l in lines if '@' not in l]
+                inst_parts = [part for part in lines if '@' not in part]
                 key = ', '.join(inst_parts) if inst_parts else aff.strip()
                 if key in affil_map:
                     insts.append(str(affil_map[key]))

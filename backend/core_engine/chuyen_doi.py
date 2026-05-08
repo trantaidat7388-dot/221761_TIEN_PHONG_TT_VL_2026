@@ -1051,7 +1051,7 @@ class ChuyenDoiWordSangLatex:
                     try:
                         os.remove(duong_dan_anh)
                         self.dem_anh -= 1
-                    except:
+                    except Exception:
                         pass
                     continue
 
@@ -1645,7 +1645,8 @@ class ChuyenDoiWordSangLatex:
             # Xoá TẤT CẢ các thẻ tác giả cũ (bao gồm cả các thẻ của ACM và Springer LNCS)
             while True:
                 m = re.search(r'\\(author|affil|affiliation|address|email|orcid|authornote|authornotemark|institute|authorrunning|titlerunning)\s*\{', template)
-                if not m: break
+                if not m:
+                    break
                 v_mo = m.end() - 1
                 v_dong = self._tim_cap_ngoac(template, v_mo)
                 if v_dong != -1:
@@ -1713,7 +1714,8 @@ class ChuyenDoiWordSangLatex:
             # Xoá TẤT CẢ các thẻ tác giả cũ (bao gồm cả các thẻ của ACM/Springer)
             while True:
                 m = re.search(r'\\(author|affil|affiliation|address|email|orcid|authornote|authornotemark|institute|authorrunning|titlerunning)\s*\{', template)
-                if not m: break
+                if not m:
+                    break
                 v_mo = m.end() - 1
                 v_dong = self._tim_cap_ngoac(template, v_mo)
                 if v_dong != -1:
@@ -2021,13 +2023,17 @@ class ChuyenDoiWordSangLatex:
                         authors[0].contents = [author_block]
                     
                     for other in authors[1:]:
-                        try: other.delete()
-                        except: pass
+                        try:
+                            other.delete()
+                        except Exception:
+                            pass
             
             for cmd in ['affil', 'affiliation', 'address', 'email', 'institute', 'authornote', 'orcid', 'AuthorNames']:
                 for node in soup.find_all(cmd):
-                    try: node.delete()
-                    except: pass
+                    try:
+                        node.delete()
+                    except Exception:
+                        pass
 
             # 3. Abstract
             abstract = self.parsed_data.get('abstract', '').strip()
