@@ -2,7 +2,7 @@
 chuyen_doi.py
 Định nghĩa các API liên quan đến chuyển đổi Word sang LaTeX.
 """
-# type: ignore  # SQLAlchemy Column types cause complex type mismatches; suppress for now
+# type: ignore  # Bỏ qua tạm thời vì kiểu Column của SQLAlchemy gây lệch kiểu phức tạp
 
 import uuid
 import time
@@ -10,7 +10,6 @@ import json
 import shutil
 import logging
 import os
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from copy import deepcopy
@@ -158,11 +157,11 @@ def _sync_docx_layout_from_reference(output_docx: Path, reference_docx: Path) ->
 
 
 def _postprocess_pandoc_docx(output_docx: Path, reference_docx: Path) -> None:
-    # NOTE: Do NOT run sua_docx_co_macro on the Pandoc output.
-    # Pandoc produces clean .docx files without macros; the ZIP rewrite
-    # in sua_docx_co_macro can corrupt the document structure and cause
-    # "Word found unreadable content" errors.  Macro cleanup is only
-    # needed for the reference template (.docm) and is handled by
+    # Lưu ý: không chạy sua_docx_co_macro trên đầu ra của Pandoc.
+    # Pandoc tạo file .docx sạch, không có macro; bước ghi lại ZIP
+    # trong sua_docx_co_macro có thể làm hỏng cấu trúc tài liệu và gây
+    # lỗi "Word found unreadable content". Việc dọn macro chỉ cần cho
+    # template tham chiếu (.docm) và đã được xử lý bởi
     # _ensure_docx_reference_template.
     _sync_docx_layout_from_reference(output_docx, reference_docx)
 
@@ -277,7 +276,7 @@ async def chuyen_doi_file(
     
     template_path = None
     
-    # 1. Template uploaded
+    # 1. Template do người dùng tải lên
     if template_file:
         is_zip = (template_file.filename or "").lower().endswith('.zip')
         template_contents = await template_file.read()
@@ -298,18 +297,18 @@ async def chuyen_doi_file(
 
             template_tex_dir = template_path.parent
             if template_tex_dir != job_folder:
-                # Copy ALL files from the extracted template directory to job_folder
+                # Sao chép toàn bộ file từ thư mục template đã giải nén sang job_folder
                 try:
                     shutil.copytree(str(template_tex_dir), str(job_folder), dirs_exist_ok=True)
                 except Exception as e:
                     logger.warning("copytree ZIP template thất bại", exc_info=e)
                 
-                # Update template_path to point to the new location in job_folder
+                # Cập nhật template_path để trỏ tới vị trí mới trong job_folder
                 template_path = job_folder / template_path.name
         else:
             template_path = job_folder / "custom_uploaded_template.tex"
             with open(template_path, "wb") as f: f.write(template_contents)
-    # 2. Template from system
+    # 2. Template từ hệ thống
     else:
         template_path = _resolve_template_path(
             template_type,
@@ -323,7 +322,7 @@ async def chuyen_doi_file(
         try:
             shutil.copytree(str(template_dir_actual), str(job_folder), dirs_exist_ok=True)
         except Exception as e:
-            logger.warning("copytree template thất bại, fallback rglob", exc_info=e)
+            logger.warning("copytree template thất bại, chuyển sang rglob dự phòng", exc_info=e)
             for item in template_dir_actual.rglob("*"):
                 if item.is_file():
                     try:
@@ -331,7 +330,7 @@ async def chuyen_doi_file(
                         target_file.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(item, target_file)
                     except Exception as e:
-                        logger.warning("Fallback copy file thất bại: %s", item, exc_info=e)
+                        logger.warning("Sao chép file dự phòng thất bại: %s", item, exc_info=e)
         template_path = job_folder / template_path.name
 
     zip_filename = output_filename.replace('.tex', '.zip')
@@ -351,8 +350,8 @@ async def chuyen_doi_file(
 
         try:
             tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
-            # [FAIL-SAFE] Dọn dẹp rác metadata còn sót lại để tránh lỗi "Missing \begin{document}"
-            # This regex aggressively removes the metadata tag AND any subsequent { } blocks even with spaces between them.
+            # [Chống lỗi] Dọn dẹp phần metadata còn sót lại để tránh lỗi "Missing \begin{document}"
+            # Biểu thức chính quy này sẽ xóa mạnh cả thẻ metadata lẫn mọi khối { } theo sau, kể cả khi có khoảng trắng ở giữa.
             tex_raw = re.sub(r'<<\s*metadata\.[a-zA-Z0-9_]+\s*>>(?:\s*\{[^{}]*\}\s*)*', '', tex_raw)
             images_abs = str(images_folder).replace('\\', '/')
             job_abs = str(job_folder).replace('\\', '/')
@@ -366,7 +365,7 @@ async def chuyen_doi_file(
         except Exception as e:
             logger.warning("Không thể chuẩn hóa đường dẫn trong file tex đầu ra", exc_info=e)
 
-        # SKIP PDF compilation — only convert Word → LaTeX
+        # Bỏ qua biên dịch PDF, chỉ chuyển Word → LaTeX
         if not output_path.exists(): raise Exception("Không tạo được file .tex đầu ra")
 
         tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
@@ -519,7 +518,7 @@ async def chuyen_doi_springer_word_sang_ieee_word(
     file: UploadFile = File(...),
     template_file: UploadFile | None = File(None),
 ) -> JSONResponse:
-    """Convert Springer Word content into IEEE Word using uploaded or default template."""
+    """Chuyển nội dung Word Springer sang Word IEEE bằng template tải lên hoặc template mặc định."""
 
     ten_file = (file.filename or "").lower()
     if not _la_file_word_hop_le(ten_file):
@@ -620,7 +619,7 @@ async def chuyen_doi_ieee_word_sang_springer_word(
     file: UploadFile = File(...),
     template_file: UploadFile | None = File(None),
 ) -> JSONResponse:
-    """Convert IEEE Word content into Springer Word using uploaded or default template."""
+    """Chuyển nội dung Word IEEE sang Word Springer bằng template tải lên hoặc template mặc định."""
 
     ten_file = (file.filename or "").lower()
     if not _la_file_word_hop_le(ten_file):
@@ -799,12 +798,14 @@ async def chuyen_doi_file_stream(
                     with open(zip_path, "wb") as f: f.write(template_contents)
                     try: giai_nen_mau_zip(str(zip_path), str(job_folder))
                     except ValueError as e:
-                        yield sse_event(-1, f"File ZIP template không hợp lệ: {e}", error=True); return
+                        yield sse_event(-1, f"File ZIP template không hợp lệ: {e}", error=True)
+                        return
                     finally:
                         if zip_path.exists(): zip_path.unlink()
                     try: template_path = Path(tim_file_tex_chinh(str(job_folder)))
                     except FileNotFoundError:
-                        yield sse_event(-1, "Không tìm thấy file .tex chính trong ZIP", error=True); return
+                        yield sse_event(-1, "Không tìm thấy file .tex chính trong ZIP", error=True)
+                        return
                     template_tex_dir = template_path.parent
                     if template_tex_dir != job_folder:
                         try:
@@ -822,7 +823,8 @@ async def chuyen_doi_file_stream(
                     current_user_role=_lay_user_role(current_user),
                 ) or _resolve_template_path("ieee_conference")
                 if not template_path or not template_path.exists():
-                    yield sse_event(-1, "Template không tồn tại", error=True); return
+                    yield sse_event(-1, "Template không tồn tại", error=True)
+                    return
                 template_dir_actual = template_path.parent
                 try: shutil.copytree(str(template_dir_actual), str(job_folder), dirs_exist_ok=True)
                 except Exception:
@@ -851,7 +853,7 @@ async def chuyen_doi_file_stream(
 
             try:
                 tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
-                # This regex aggressively removes the metadata tag AND any subsequent { } blocks even with spaces between them.
+                # Biểu thức chính quy này xóa mạnh thẻ metadata và mọi khối { } theo sau, kể cả khi có khoảng trắng ở giữa.
                 tex_raw = re.sub(r'<<\s*metadata\.[a-zA-Z0-9_]+\s*>>(?:\s*\{[^{}]*\}\s*)*', '', tex_raw, flags=re.MULTILINE)
                 images_abs = str(images_folder).replace('\\', '/')
                 job_abs = str(job_folder).replace('\\', '/')
@@ -865,9 +867,10 @@ async def chuyen_doi_file_stream(
             except Exception as e:
                 logger.warning("Không thể chuẩn hóa đường dẫn trong file tex SSE", exc_info=e)
 
-            # SKIP PDF compilation — only convert Word → LaTeX
+            # Bỏ qua biên dịch PDF, chỉ chuyển Word → LaTeX
             if not output_path.exists():
-                yield sse_event(-1, "Không tạo được file .tex đầu ra", error=True); return
+                yield sse_event(-1, "Không tạo được file .tex đầu ra", error=True)
+                return
 
             yield sse_event(4, "Đang đóng gói kết quả...")
             tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
@@ -1040,7 +1043,7 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = 
     if not danh_sach_tex:
         raise HTTPException(status_code=404, detail="Không tìm thấy file .tex trong job")
     
-    # 🛡️ Thay rename bằng copy2 để tránh WinError 2 khi gọi đúp
+    # 🛡️ Dùng copy2 thay cho rename để tránh WinError 2 khi gọi đúp
     original_tex = danh_sach_tex[0]
     original_tex_name = original_tex.name
     tex_path = job_folder / "job_output.tex"
@@ -1051,7 +1054,7 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = 
             shutil.copy2(original_tex, tex_path)
         except Exception as e:
             logger.warning("request_id=%s job_id=%s Failed to copy to safe filename", request_id, job_id, exc_info=e)
-            tex_path = original_tex # Fallback to original if copy fails
+            tex_path = original_tex  # Quay về file gốc nếu sao chép thất bại
             original_tex_name = tex_path.name
 
     try:
@@ -1070,7 +1073,7 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = 
                 "chi_tiet": chi_tiet_loi,
             })
 
-        # Trích xuất số trang từ log
+        # Trích xuất số trang từ file log
         so_trang = None
         try:
             log_path = tex_path.with_suffix('.log')
@@ -1083,7 +1086,7 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = 
                     so_trang = int(match.group(1))
         except Exception:
             pass
-        # Đường dẫn PDF kết quả (sử dụng base name mới)
+        # Đường dẫn PDF kết quả (dùng tên gốc mới)
         pdf_name = tex_path.with_suffix('.pdf').name
         pdf_path = job_folder / pdf_name
         
@@ -1093,10 +1096,10 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = 
                 "loi": "Biên dịch không tạo được file PDF",
             })
 
-        # Dọn file rác biên dịch
+        # Dọn file rác sinh ra khi biên dịch
         don_dep_file_rac(str(tex_path))
 
-        # Tên PDF đẹp (dựa vào tên file gốc)
+        # Tên PDF gọn đẹp (dựa vào tên file gốc)
         ten_pdf_dep = original_tex_name.replace('.tex', '.pdf')
 
         return JSONResponse(status_code=200, content={
@@ -1128,9 +1131,9 @@ def tai_ve_pdf_theo_job(job_id: str) -> FileResponse:
 
     pdf_path = danh_sach_pdf[0]
     
-    # Tìm tên file gốc từ file .zip (là file có tên đẹp nhất)
+    # Tìm tên file gốc từ file .zip (đây là file có tên đẹp nhất)
     ten_hien_thi = pdf_path.name
-    # Lấy zip mới nhất
+    # Lấy file zip mới nhất
     danh_sach_zip = sorted(job_folder.glob('*.zip'), key=lambda p: p.stat().st_mtime, reverse=True)
     if danh_sach_zip:
         ten_hien_thi = danh_sach_zip[0].name.replace('.zip', '.pdf')

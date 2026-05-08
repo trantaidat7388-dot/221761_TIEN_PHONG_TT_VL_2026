@@ -1,12 +1,11 @@
-"""
-Word input loading pipeline.
+"""Pipeline nạp đầu vào Word.
 
-Provides a dedicated service for:
-- converting macro-enabled .docm to cleaned .docx
-- converting Strict Open XML documents to Transitional format
-- loading the document through compatibility-aware python-docx adapter
+Đảm nhiệm các việc sau:
+- chuyển .docm có macro sang .docx đã làm sạch
+- chuyển tài liệu Strict Open XML sang định dạng Transitional
+- nạp tài liệu qua lớp tương thích python-docx
 
-This keeps the orchestration class focused on conversion behavior.
+Điều này giúp lớp điều phối tập trung vào hành vi chuyển đổi.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from .utils import sua_docx_co_macro
 
 
 def _tim_lenh_soffice() -> str | None:
-    """Find a usable LibreOffice command for headless conversion."""
+    """Tìm lệnh LibreOffice phù hợp cho chuyển đổi không giao diện."""
     env_path = os.environ.get("LIBREOFFICE_PATH")
     if env_path and os.path.exists(env_path):
         return env_path
@@ -43,7 +42,7 @@ def _tim_lenh_soffice() -> str | None:
 
 
 def chuyen_doc_sang_docx(duong_dan_doc: str) -> str:
-    """Convert legacy .doc to .docx using LibreOffice headless mode."""
+    """Chuyển .doc cũ sang .docx bằng chế độ headless của LibreOffice."""
     if not duong_dan_doc.lower().endswith(".doc"):
         return duong_dan_doc
 
@@ -94,7 +93,7 @@ def chuyen_doc_sang_docx(duong_dan_doc: str) -> str:
 
 
 def chuyen_docm_sang_docx(duong_dan_docm: str) -> str:
-    """Convert .docm to .docx while removing macro artifacts."""
+    """Chuyển .docm sang .docx đồng thời loại bỏ dấu vết macro."""
     duong_dan_docx = duong_dan_docm.rsplit(".", 1)[0] + "_converted.docx"
     shutil.copy2(duong_dan_docm, duong_dan_docx)
     sua_docx_co_macro(duong_dan_docx)
@@ -102,7 +101,7 @@ def chuyen_docm_sang_docx(duong_dan_docm: str) -> str:
 
 
 def chuyen_strict_sang_transitional(duong_dan_strict: str) -> str:
-    r"""Convert Strict Open XML to Transitional namespace mapping."""
+    r"""Chuyển Strict Open XML sang ánh xạ namespace Transitional."""
     duong_dan_docx = duong_dan_strict.rsplit(".", 1)[0] + "_transitional.docx"
 
     mapping = {
@@ -131,13 +130,13 @@ def chuyen_strict_sang_transitional(duong_dan_strict: str) -> str:
 
 
 def mo_tai_lieu_word_co_fallback(duong_dan_word: str) -> tuple[Any, list[str]]:
-    """Load a Word file and return loaded document plus temporary files to cleanup.
+    """Nạp file Word và trả về tài liệu đã mở cùng danh sách file tạm để dọn dẹp.
 
-    Fallback sequence:
-    1) If source is .doc, convert to .docx first.
-    1) If source is .docm, convert to cleaned .docx first.
-    2) Try loading with compatibility adapter.
-    3) On Strict Open XML namespace error, convert to Transitional then retry.
+    Trình tự dự phòng:
+    1) Nếu nguồn là .doc, chuyển sang .docx trước.
+    2) Nếu nguồn là .docm, chuyển sang .docx đã làm sạch trước.
+    3) Thử nạp bằng lớp tương thích.
+    4) Nếu lỗi namespace Strict Open XML thì chuyển sang Transitional rồi thử lại.
     """
     if not os.path.exists(duong_dan_word):
         raise FileNotFoundError(f"Không tìm thấy file: {duong_dan_word}")

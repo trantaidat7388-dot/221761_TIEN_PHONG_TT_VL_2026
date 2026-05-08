@@ -1,5 +1,5 @@
 # config.py - Hằng số, namespace, và cấu hình cho dự án Word2LaTeX
-
+import os as _os
 # NAMESPACES
 
 # Namespace cho OMML (Office Math Markup Language)
@@ -479,7 +479,6 @@ FUNC_NAME_MAP = {
 }
 
 # Đường dẫn XSLT mặc định (Microsoft Office)
-import os as _os
 
 _office_paths = [
     r'C:\Program Files\Microsoft Office\root\Office16\OMML2MML.XSL',

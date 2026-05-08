@@ -2,8 +2,18 @@ import os
 import re
 import hashlib
 import base64
-from typing import Dict, Any, List, Optional
-from lxml import etree
+from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Provide typing information when type-checking (no runtime import required)
+    from lxml import etree as _lxml_etree  # type: ignore  # noqa: F401
+
+try:
+    import lxml.etree as etree  # type: ignore
+except Exception:
+    import xml.etree.ElementTree as etree  # type: ignore
+
+from docx.document import Document as DocxDocument
 
 from docx.table import Table
 from docx.text.paragraph import Paragraph
@@ -27,7 +37,7 @@ class WordASTParser:
         self.doc_path = doc_path
         self.thu_muc_anh = thu_muc_anh
         self.mode = mode  # "latex" or "word2word"
-        self.doc = None
+        self.doc: Optional[DocxDocument] = None
         self._temp_word_files: List[str] = []
         self.bo_toan = BoXuLyToan()
         self.dem_anh = 0
@@ -70,6 +80,9 @@ class WordASTParser:
     def _extract_elements_in_order(self) -> List[tuple]:
         """Flatten the document body including elements inside content controls."""
         elements = []
+        # Guard against uninitialized parser state (helps static analyzers)
+        if not self.doc:
+            return elements
         body = self.doc.element.body
         
         def traverse(node):
@@ -77,7 +90,7 @@ class WordASTParser:
                 return
             tag = node.tag.split("}")[-1]
             if tag == "p":
-                elements.append(("paragraph", Paragraph(node, self.doc)))
+                elements.append(("paragraph", Paragraph(node, cast(DocxDocument, self.doc))))
             elif tag in ("oMathPara", "oMath"):
                 elements.append(("omml", node))
                 # Capture nested blocks only from explicit containers where paragraph
@@ -355,7 +368,7 @@ class WordASTParser:
             pass
         return danh_sach
 
-    def _bat_caption_bang(self, elements: List[tuple], idx: int, used_nodes: set) -> str:
+    def _bat_caption_bang(self, elements: List[tuple], idx: int, used_nodes: set) -> Optional[str]:
         """Bắt caption thật của bảng từ paragraph ngay phía TRÊN (idx - 1).
         Ported from ChuyenDoiWordSangLatex.bat_caption_bang()."""
         try:
@@ -401,7 +414,7 @@ class WordASTParser:
             print(f"[WARNING] _bat_caption_bang: {e}")
         return None
 
-    def _bat_caption_hinh_theo_style(self, elements: List[tuple], idx: int, used_nodes: set) -> str:
+    def _bat_caption_hinh_theo_style(self, elements: List[tuple], idx: int, used_nodes: set) -> Optional[str]:
         """Fallback caption extraction for templates using dedicated caption styles.
 
         Supports patterns like "Example of a figure caption. (figure caption)"
@@ -460,7 +473,7 @@ class WordASTParser:
 
         return None
 
-    def _bat_caption_hinh(self, elements: List[tuple], idx: int, used_nodes: set) -> str:
+    def _bat_caption_hinh(self, elements: List[tuple], idx: int, used_nodes: set) -> Optional[str]:
         """Bắt caption thật của hình từ paragraph phía DƯỚI (tìm tối đa 5 đoạn).
         Ported from ChuyenDoiWordSangLatex.bat_caption_hinh()."""
         try:
@@ -526,8 +539,10 @@ class WordASTParser:
     def _is_title_paragraph(self, p: Paragraph, idx: int) -> bool:
         """Heuristic for title: usually bold, large, or specific style 'Title'."""
         text = (p.text or "").strip()
-        if not text or len(text) < 3: return False
-        if "Short Title" in text or "ACM Reference Format" in text: return False
+        if not text or len(text) < 3:
+            return False
+        if "Short Title" in text or "ACM Reference Format" in text:
+            return False
         
         style_name = self._get_style_name(p)
         style_lc = style_name.lower()
@@ -537,8 +552,10 @@ class WordASTParser:
         # Heuristics: Center aligned + Bold or Large font + Bold
         aligned_center = False
         try:
-            if p.paragraph_format.alignment == 1: aligned_center = True
-        except: pass
+            if p.paragraph_format.alignment == 1:
+                aligned_center = True
+        except Exception:
+            pass
         
         runs = p.runs
         all_bold = all(r.bold for r in runs if (r.text or "").strip()) if runs else False
@@ -1056,7 +1073,7 @@ class WordASTParser:
                 result += loc_ky_tu(txt)
         return result.strip() if result.strip() else loc_ky_tu(p.text).strip()
 
-    def _detect_equation_table(self, t) -> dict:
+    def _detect_equation_table(self, t) -> Optional[dict]:
         """Detect if a Word table is actually a layout table for an equation.
         Pattern: 1 row, 2-3 columns, last column contains equation number like (1).
         """
@@ -1389,7 +1406,7 @@ class WordASTParser:
         
         try:
             style_name = self._get_style_name(p)
-        except:
+        except Exception:
             style_name = ""
         from .config import MAP_STYLE
         style_cmd = MAP_STYLE.get(style_name or "", "")
@@ -1402,7 +1419,7 @@ class WordASTParser:
         elif style_name.lower().startswith("heading"):
             try:
                 level = int(re.sub(r'[^\d]', '', style_name))
-            except:
+            except Exception:
                 level = 1
         
         # We must process the text at the Run-level, to insert math between text nodes
@@ -1430,10 +1447,22 @@ class WordASTParser:
                 if not cx:
                     return None
                 cx_emu = float(cx)
-                if not self.doc.sections:
+                if not self.doc or not self.doc.sections:
                     return None
                 sec = self.doc.sections[0]
-                usable_emu = float(sec.page_width - sec.left_margin - sec.right_margin)
+
+                def _len_to_float(v) -> float:
+                    if v is None:
+                        return 0.0
+                    try:
+                        return float(v)
+                    except Exception:
+                        try:
+                            return float(getattr(v, 'twips', 0))
+                        except Exception:
+                            return 0.0
+
+                usable_emu = _len_to_float(getattr(sec, 'page_width', 0)) - _len_to_float(getattr(sec, 'left_margin', 0)) - _len_to_float(getattr(sec, 'right_margin', 0))
                 if usable_emu <= 0:
                     return None
                 ratio = cx_emu / usable_emu
@@ -1481,11 +1510,11 @@ class WordASTParser:
                 try:
                     is_bold = bool(run_obj.bold)
                     is_italic = bool(run_obj.italic)
-                except: pass
+                except Exception:
+                    pass
 
                 for r_child in node:
                     c_tag = r_child.tag.split("}")[-1] if hasattr(r_child, "tag") else ""
-                    full_tag = r_child.tag if hasattr(r_child, "tag") else ""
                     
                     if c_tag == "t":
                         if r_child.text: run_text_acc += r_child.text
@@ -1494,7 +1523,8 @@ class WordASTParser:
                         if char_hex:
                             try:
                                 run_text_acc += chr(int(char_hex, 16))
-                            except: pass
+                            except Exception:
+                                pass
                     elif c_tag == "instrText":
                         # Skip field-code instructions (e.g., SEQ Table * ARABIC).
                         continue
@@ -1657,7 +1687,7 @@ class WordASTParser:
                         elif latex_cmd == r"\subsection": level = 2
                         elif latex_cmd == r"\subsubsection": level = 3
                         break
-            except Exception as e:
+            except Exception:
                 # Silently skip bad regex or unexpected text content
                 pass
 
@@ -1683,23 +1713,27 @@ class WordASTParser:
     def _lay_gridspan(self, tc) -> int:
         try:
             tcPr = tc.tcPr
-            if tcPr is None: return 1
+            if tcPr is None:
+                return 1
             gridSpan = tcPr.gridSpan
-            if gridSpan is None: return 1
+            if gridSpan is None:
+                return 1
             val = gridSpan.get(qn('w:val'))
             return max(1, int(val)) if val else 1
-        except:
+        except Exception:
             return 1
 
     def _lay_vmerge(self, tc):
         try:
             tcPr = tc.tcPr
-            if tcPr is None: return None
+            if tcPr is None:
+                return None
             vMerge = tcPr.vMerge
-            if vMerge is None: return None
+            if vMerge is None:
+                return None
             val = vMerge.get(qn('w:val'))
             return str(val) if val else 'continue'
-        except:
+        except Exception:
             return None
 
     def _lay_ty_le_rong_bang(self, t: Table):
@@ -1725,14 +1759,22 @@ class WordASTParser:
 
             if w_type == 'dxa':
                 twips = float(w_val)
-                if not self.doc.sections:
+                if not self.doc or not self.doc.sections:
                     return None
                 sec = self.doc.sections[0]
-                usable_twips = (
-                    sec.page_width.twips
-                    - sec.left_margin.twips
-                    - sec.right_margin.twips
-                )
+
+                def _len_to_float(v) -> float:
+                    if v is None:
+                        return 0.0
+                    try:
+                        return float(v)
+                    except Exception:
+                        try:
+                            return float(getattr(v, 'twips', 0))
+                        except Exception:
+                            return 0.0
+
+                usable_twips = _len_to_float(getattr(sec, 'page_width', 0)) - _len_to_float(getattr(sec, 'left_margin', 0)) - _len_to_float(getattr(sec, 'right_margin', 0))
                 if usable_twips <= 0:
                     return None
                 ratio = twips / float(usable_twips)
@@ -1750,15 +1792,20 @@ class WordASTParser:
 
         so_cot = 0
         try:
-            grid_cols = tbl.tblGrid.gridCol_lst
+            tg = getattr(tbl, 'tblGrid', None)
+            if tg is not None:
+                grid_cols = getattr(tg, 'gridCol_lst', []) or []
+            else:
+                grid_cols = []
             so_cot = len(grid_cols)
-        except: pass
+        except Exception:
+            pass
 
         if so_cot <= 0:
             for tr in tr_list:
                 so_cot = max(so_cot, len(list(tr.tc_lst)))
 
-        luoi = [[None for _ in range(so_cot)] for _ in range(len(tr_list))]
+        luoi: List[List[Any]] = [[None for _ in range(so_cot)] for _ in range(len(tr_list))]
         meta = {}
 
         for r, tr in enumerate(tr_list):
@@ -1781,7 +1828,7 @@ class WordASTParser:
                     'tc': tc,
                     'colspan': colspan,
                     'vmerge': vmerge,
-                    'start': not (vmerge in ('continue', 'cont')),
+                    'start': vmerge not in ('continue', 'cont'),
                     'col_start': c,
                 }
 
@@ -1846,7 +1893,8 @@ class WordASTParser:
                         if id(candidate._tc) == id(info['tc']):
                             cell_obj = candidate
                             break
-                except: pass
+                except Exception:
+                    pass
                 
                 text_content = ""
                 if cell_obj:

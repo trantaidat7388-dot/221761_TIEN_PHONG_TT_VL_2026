@@ -244,14 +244,20 @@ def loc_ky_tu(text: str) -> str:
         c = match.group(0)
         cp = ord(c)
         # Bold A-Z, a-z
-        if 0x1D400 <= cp <= 0x1D419: return chr(ord('A') + (cp - 0x1D400))
-        if 0x1D41A <= cp <= 0x1D433: return chr(ord('a') + (cp - 0x1D41A))
+        if 0x1D400 <= cp <= 0x1D419:
+            return chr(ord('A') + (cp - 0x1D400))
+        if 0x1D41A <= cp <= 0x1D433:
+            return chr(ord('a') + (cp - 0x1D41A))
         # Italic A-Z, a-z
-        if 0x1D434 <= cp <= 0x1D44D: return chr(ord('A') + (cp - 0x1D434))
-        if 0x1D44E <= cp <= 0x1D467: return chr(ord('a') + (cp - 0x1D44E))
+        if 0x1D434 <= cp <= 0x1D44D:
+            return chr(ord('A') + (cp - 0x1D434))
+        if 0x1D44E <= cp <= 0x1D467:
+            return chr(ord('a') + (cp - 0x1D44E))
         # Bold Italic A-Z, a-z
-        if 0x1D468 <= cp <= 0x1D481: return chr(ord('A') + (cp - 0x1D468))
-        if 0x1D482 <= cp <= 0x1D49B: return chr(ord('a') + (cp - 0x1D482))
+        if 0x1D468 <= cp <= 0x1D481:
+            return chr(ord('A') + (cp - 0x1D468))
+        if 0x1D482 <= cp <= 0x1D49B:
+            return chr(ord('a') + (cp - 0x1D482))
         # Script, Fraktur, Double-struck, Sans-serif etc.
         # For simplicity, map most to their ASCII equivalents if possible, or space
         if 0x1D49C <= cp <= 0x1D7FF:
@@ -336,9 +342,10 @@ def loc_ky_tu(text: str) -> str:
         c = match.group(0)
         # Một số ký tự Tiếng Việt phổ biến và các ký tự đặc biệt an toàn thì giữ lại
         # Latin Extended Additional dải \u1E00-\u1EFF rất quan trọng cho Tiếng Việt
-        if re.match(r'[a-zA-Z0-9\sà-ỹÀ-ỸđĐ\u1E00-\u1EFF]', c): return c
+        if re.match(r'[a-zA-Z0-9\sà-ỹÀ-ỸđĐ\u1E00-\u1EFF]', c):
+            return c
         # Còn lại thì bọc trong \ensuremath nếu là ký tự toán, hoặc bỏ qua
-        return f' '
+        return ' '
 
     # Chỉ áp dụng cho các ký tự ngoài dải ASCII và Tiếng Việt mở rộng
     ket_qua = re.sub(r'[^\x00-\x7Fà-ỹÀ-ỸđĐ\u1E00-\u1EFF\s\\]', handle_leftover_unicode, ket_qua)

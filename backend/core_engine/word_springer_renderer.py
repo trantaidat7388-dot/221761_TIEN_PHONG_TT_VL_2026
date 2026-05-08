@@ -1,13 +1,14 @@
-"""Springer Word Renderer built on top of IEEE renderer infrastructure.
+"""Bộ render Word Springer được xây dựng trên hạ tầng renderer IEEE.
 
-This renderer keeps the robust IR handling/equation/table logic from IEEEWordRenderer,
-but switches layout and styles toward Springer-like Word output.
+Renderer này giữ lại logic xử lý IR/phương trình/bảng vững chắc từ IEEEWordRenderer,
+nhưng đổi bố cục và style theo đầu ra Word kiểu Springer.
 """
 
 import re
 from typing import Any, Dict, List
 
 from docx import Document
+from docx.document import Document as DocxDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm, Pt, Inches
 from docx.oxml import OxmlElement
@@ -17,23 +18,23 @@ from .word_ieee_renderer import IEEEWordRenderer
 
 
 class SpringerWordRenderer(IEEEWordRenderer):
-    """Render IR output into a Springer-like Word document."""
+    """Kết xuất IR thành tài liệu Word mang phong cách Springer."""
 
     def render(
         self,
         ir_data: Dict[str, Any],
         output_path: str,
         image_root_dir: str | None = None,
-        springer_template_path: str | None = None,
+        ieee_template_path: str | None = None,
     ) -> str:
         rendered_path = super().render(
             ir_data=ir_data,
             output_path=output_path,
             image_root_dir=image_root_dir,
-            ieee_template_path=springer_template_path,
+            ieee_template_path=ieee_template_path,
         )
 
-        # Template headers often keep placeholder short title unless replaced explicitly.
+        # Phần header của template thường giữ tiêu đề ngắn placeholder nếu không thay rõ ràng.
         try:
             doc = Document(rendered_path)
             self._sync_template_header_title(doc, ir_data.get("metadata") or {})
@@ -45,19 +46,19 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
     def _rebuild_on_uploaded_template(
         self,
-        doc: Document,
+        doc: DocxDocument,
         metadata: Dict[str, Any],
         body_nodes: List[Dict[str, Any]],
         references: List[Dict[str, Any]],
     ) -> None:
-        '''Override native clear-body approach to use fill-in-place for Springer templates.
-        This preserves Springer macros, bookmarks, fields, and headers/footers exactly.
+        '''Ghi đè cách xóa body mặc định để dùng kiểu điền tại chỗ cho template Springer.
+        Cách này giữ nguyên macro, bookmark, field và header/footer của Springer.
         '''
         self._fill_springer_template(doc, metadata, body_nodes, references)
 
     def _fill_springer_template(
         self,
-        doc: Document,
+        doc: DocxDocument,
         metadata: Dict[str, Any],
         body_nodes: List[Dict[str, Any]],
         references: List[Dict[str, Any]],
@@ -76,15 +77,16 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
         for i, p in enumerate(all_paras):
             text_upper = p.text.strip().upper()
-            if p.style.name == "papertitle" and title_idx == -1:
+            style_name = (p.style.name if p.style is not None and p.style.name else "").lower()
+            if style_name == "papertitle" and title_idx == -1:
                 title_idx = i
-            if p.style.name == "abstract" and abs_idx == -1:
+            if style_name == "abstract" and abs_idx == -1:
                 abs_idx = i
-            if p.style.name == "keywords" and kw_idx == -1:
+            if style_name == "keywords" and kw_idx == -1:
                 kw_idx = i
-            if p.style.name == "heading1" and "FIRST SECTION" in text_upper and first_sec_idx == -1:
+            if style_name == "heading1" and "FIRST SECTION" in text_upper and first_sec_idx == -1:
                 first_sec_idx = i
-            if p.style.name == "heading1" and "REFERENCES" in text_upper and ref_idx == -1:
+            if style_name == "heading1" and "REFERENCES" in text_upper and ref_idx == -1:
                 ref_idx = i
 
         # Replace Title
@@ -94,7 +96,8 @@ class SpringerWordRenderer(IEEEWordRenderer):
         # Handle Authors: Clear everything between Title and Abstract, then insert
         if title_idx != -1 and abs_idx != -1:
             for i in range(title_idx + 1, abs_idx):
-                p_el = all_paras[i]._element; p_parent = p_el.getparent();
+                p_el = all_paras[i]._element
+                p_parent = p_el.getparent()
                 if p_parent is not None:
                     p_parent.remove(p_el)
             if authors:
@@ -132,39 +135,42 @@ class SpringerWordRenderer(IEEEWordRenderer):
         if first_sec_idx != -1:
             end_idx = ref_idx if ref_idx != -1 else len(all_paras)
 
-            # Delete any existing tables in the template body to prevent leftover lines/shapes
+            # Xóa mọi bảng sẵn có trong body template để tránh sót lại đường kẻ/hình vẽ
             for t in doc.tables:
                 t_el = t._element
                 if t_el.getparent() is not None:
                     t_el.getparent().remove(t_el)
 
-            # Remove all paragraphs EXCEPT first_sec_idx to use it as anchor
+            # Xóa toàn bộ paragraph TRỪ first_sec_idx để dùng nó làm điểm neo
             for i in range(first_sec_idx + 1, end_idx):
                 if all_paras[i]._element.getparent() is not None:
-                    p_el = all_paras[i]._element; p_parent = p_el.getparent();
+                    p_el = all_paras[i]._element
+                    p_parent = p_el.getparent()
                     if p_parent is not None:
                         p_parent.remove(p_el)
             
             anchor_p = all_paras[first_sec_idx]
             self._insert_springer_body_before(doc, anchor_p, body_nodes)
-            # Now remove the old anchor paragraph entirely from the XML
-            anchor_el = anchor_p._element; anchor_parent = anchor_el.getparent();
+            # Sau đó xóa hẳn paragraph neo cũ khỏi XML
+            anchor_el = anchor_p._element
+            anchor_parent = anchor_el.getparent()
             if anchor_parent is not None:
                 anchor_parent.remove(anchor_el)
 
-        # Handle References
+        # Xử lý phần References
         if ref_idx != -1:
-            # We want to use ref_anchor. If ref_idx+1 exists, use it as anchor. However ref_idx itself
-            # might just be the "References" title which we keep!
-            # Wait, no. "References" needs to be kept by us. But we clear from ref_idx+1.
+            # Muốn dùng ref_anchor. Nếu có ref_idx+1 thì dùng nó làm neo. Tuy nhiên ref_idx
+            # có thể chỉ là tiêu đề "References" mà ta muốn giữ lại!
+            # Đúng hơn: "References" phải được giữ, còn phần sau đó sẽ xóa.
             for i in range(ref_idx + 1, len(all_paras)):
                 if all_paras[i]._element.getparent() is not None:
-                    p_el = all_paras[i]._element; p_parent = p_el.getparent();
+                    p_el = all_paras[i]._element
+                    p_parent = p_el.getparent()
                     if p_parent is not None:
                         p_parent.remove(p_el)
-            
-            # So insert references after ref_anchor? No, insert BEFORE ref_anchor doesn't make sense since ref_anchor is the title.
-            # But doc.add_paragraph() is totally fine here! Because References is at the END.
+
+            # Vậy chèn references sau ref_anchor? Không, chèn trước ref_anchor không hợp lý vì ref_anchor là tiêu đề.
+            # Nhưng doc.add_paragraph() ở đây là ổn vì References nằm ở CUỐI tài liệu.
             ref_style = self._pick_style_name(["referenceitem", "referencelist", "ReferenceLine", "Normal"])
 
             for idx, ref in enumerate(references, start=1):
@@ -179,8 +185,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
                 p = doc.add_paragraph()
                 if ref_style:
-                    try: p.style = ref_style
-                    except: pass
+                    try:
+                        p.style = ref_style
+                    except Exception:
+                        pass
                 p.paragraph_format.first_line_indent = Inches(-0.2)
                 p.paragraph_format.left_indent = Inches(0.2)
                 
@@ -240,7 +248,8 @@ class SpringerWordRenderer(IEEEWordRenderer):
             p_name = anchor_p.insert_paragraph_before()
             if author_style:
                 try: p_name.style = author_style
-                except: pass
+                except Exception:
+                    pass
             p_name.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
             for i, a in enumerate(valid_authors):
@@ -262,8 +271,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
             for i, aff in enumerate(unique_affs, start=1):
                 p_aff = anchor_p.insert_paragraph_before()
                 if address_style:
-                    try: p_aff.style = address_style
-                    except: pass
+                    try:
+                        p_aff.style = address_style
+                    except Exception:
+                        pass
                 p_aff.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 prefix = f"{i} " if len(unique_affs) > 1 else ""
                 p_aff.add_run(prefix + aff)
@@ -272,14 +283,17 @@ class SpringerWordRenderer(IEEEWordRenderer):
         if all_emails:
             p_email = anchor_p.insert_paragraph_before()
             if email_style:
-                try: p_email.style = email_style
-                except:
-                    try: p_email.style = address_style
-                    except: pass
+                try:
+                    p_email.style = email_style
+                except Exception:
+                    try:
+                        p_email.style = address_style
+                    except Exception:
+                        pass
             p_email.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p_email.add_run(", ".join(all_emails))
 
-    def _insert_springer_body_before(self, doc: Document, anchor_p, body_nodes: List[Dict[str, Any]]) -> None:
+    def _insert_springer_body_before(self, doc: DocxDocument, anchor_p, body_nodes: List[Dict[str, Any]]) -> None:
         self._section_index = 0
         self._subsection_counters = {}
         prev_rendered_type = None
@@ -334,8 +348,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
                     p_cap = anchor_p.insert_paragraph_before()
                     fig_style = self._pick_style_name(["figurecaption", "Figure Caption", "Caption"])
                     if fig_style:
-                        try: p_cap.style = fig_style
-                        except: pass
+                        try:
+                            p_cap.style = fig_style
+                        except Exception:
+                            pass
                     p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     p_cap.add_run(f"Fig. {self._figure_index}. {cap_clean}" if cap_clean else f"Fig. {self._figure_index}.")
                     prev_rendered_type = "figure"
@@ -347,8 +363,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 
                 body_style = self._pick_style_name(style_candidates)
                 if body_style:
-                    try: p.style = body_style
-                    except: pass
+                    try:
+                        p.style = body_style
+                    except Exception:
+                        pass
                 
                 # Fix spacing: Add space before if following a table, figure, or equation to prevent "stuck" look
                 if prev_rendered_type in ("table", "figure", "equation"):
@@ -379,8 +397,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
         
         heading_style = self._pick_style_name(style_candidates)
         if heading_style:
-            try: p.style = heading_style
-            except: pass
+            try:
+                p.style = heading_style
+            except Exception:
+                pass
 
         if level == 1:
             self._section_index += 1
@@ -410,7 +430,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 run.font.name = "Times New Roman"
                 run.font.size = Pt(10)
 
-    def _insert_springer_table_before(self, doc: Document, anchor_p, node: Dict[str, Any]) -> None:
+    def _insert_springer_table_before(self, doc: DocxDocument, anchor_p, node: Dict[str, Any]) -> None:
         self._table_index = getattr(self, "_table_index", 0) + 1
         caption = self._normalize_springer_caption(str(node.get("caption") or ""), "table")
         text = f"Table {self._table_index}. {caption}" if caption else f"Table {self._table_index}."
@@ -418,8 +438,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
         cap_p = anchor_p.insert_paragraph_before()
         cap_style = self._pick_style_name(["tablecaption", "Table Caption", "Caption"])
         if cap_style:
-            try: cap_p.style = cap_style
-            except: pass
+            try:
+                cap_p.style = cap_style
+            except Exception:
+                pass
         cap_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         run_cap = cap_p.add_run(text)
         run_cap.font.name = "Times New Roman"
@@ -427,10 +449,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
         parent = anchor_p._p.getparent()
         table_data = node.get("data", [])
-        if not table_data: return
+        if not table_data:
+            return
 
-        try: temp_table = doc.add_table(rows=len(table_data), cols=max(len(r) for r in table_data))
-        except TypeError: temp_table = doc.add_table(rows=len(table_data), cols=max(len(r) for r in table_data), width=Inches(6.0))
+        temp_table = doc.add_table(rows=len(table_data), cols=max(len(r) for r in table_data))
         
         # Springer tables use "Normal Table" (invisible borders) with explicit horizontal rules
         # Let's apply top border to first row, bottom border to first row, and bottom border to last row
@@ -475,7 +497,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
         parent.remove(tbl_xml)
         anchor_p._p.addprevious(tbl_xml)
 
-    def _insert_springer_figure_before(self, doc: Document, anchor_p, latex_figure_text: str) -> None:
+    def _insert_springer_figure_before(self, doc: DocxDocument, anchor_p, latex_figure_text: str) -> None:
         paths = re.findall(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", latex_figure_text)
         cap_match = re.search(r"\\caption\{([^}]*)\}", latex_figure_text)
         caption = self._normalize_springer_caption(
@@ -512,18 +534,21 @@ class SpringerWordRenderer(IEEEWordRenderer):
                         pic_para.add_run().add_picture(str(resolved), width=Inches(4.8))
                     else:
                         pic_para.add_run().add_picture(str(resolved))
-                except: pass
+                except Exception:
+                    pass
 
         cap_text = f"Fig. {self._figure_index}. {caption}" if caption else f"Fig. {self._figure_index}."
         p = anchor_p.insert_paragraph_before()
         fig_style = self._pick_style_name(["figurecaption", "Figure Caption", "Caption"])
         if fig_style:
-            try: p.style = fig_style
-            except: pass
+            try:
+                p.style = fig_style
+            except Exception:
+                pass
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.add_run(cap_text)
 
-    def _insert_springer_equation_before(self, doc: Document, anchor_p, raw_text: str) -> None:
+    def _insert_springer_equation_before(self, doc: DocxDocument, anchor_p, raw_text: str) -> None:
         # Handle tab-layout equations from IEEE Word re-parsing:
         # Pattern: \t<equation text>\t(N)
         tab_eq_match = re.match(r"^\t(.+?)\t(\([A-Za-z0-9.\-]+\))\s*$", raw_text)
@@ -533,8 +558,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
             p = anchor_p.insert_paragraph_before()
             eq_style = self._pick_style_name(["equation", "Equation"])
             if eq_style:
-                try: p.style = eq_style
-                except: pass
+                try:
+                    p.style = eq_style
+                except Exception:
+                    pass
             p.add_run("\t")
             p.add_run(eq_text)
             p.add_run(f"\t{eq_num}")
@@ -564,14 +591,18 @@ class SpringerWordRenderer(IEEEWordRenderer):
         p = anchor_p.insert_paragraph_before()
         eq_style = self._pick_style_name(["equation", "Equation"])
         if eq_style:
-            try: p.style = eq_style
-            except: pass
+            try:
+                p.style = eq_style
+            except Exception:
+                pass
 
         p.add_run("\t")
         if omml_match:
-            try: self._insert_omml_to_paragraph(p, omml_match.group(1))
-            except:
-                if clean: p.add_run(clean)
+            try:
+                self._insert_omml_to_paragraph(p, omml_match.group(1))
+            except Exception:
+                if clean:
+                    p.add_run(clean)
         elif clean:
             p.add_run(clean)
 
@@ -579,7 +610,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
             p.add_run(f"\t{eq_num}")
 
 
-    def _sync_template_header_title(self, doc: Document, metadata: Dict[str, Any]) -> None:
+    def _sync_template_header_title(self, doc: DocxDocument, metadata: Dict[str, Any]) -> None:
         import re
         title = (metadata.get("title") or "").strip()
         title_plain = self._latex_to_plain(title).strip()
@@ -624,7 +655,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
                         if new_text:
                             self._replace_paragraph_text_keep_formatting(p, new_text)
 
-    def _configure_ieee_document(self, doc: Document) -> None:
+    def _configure_ieee_document(self, doc: DocxDocument) -> None:
         """Configure a Springer-like one-column document."""
         section = doc.sections[0]
         section.page_width = Cm(21.0)
@@ -636,20 +667,24 @@ class SpringerWordRenderer(IEEEWordRenderer):
         self._set_section_columns(section, 1)
 
         normal_style = doc.styles["Normal"]
-        normal_style.font.name = "Times New Roman"
-        normal_style.font.size = Pt(10)
-        normal_style.paragraph_format.space_before = Pt(0)
-        normal_style.paragraph_format.space_after = Pt(4)
-        normal_style.paragraph_format.line_spacing = 1.15
+        normal_font = getattr(normal_style, "font", None)
+        if normal_font is not None:
+            normal_font.name = "Times New Roman"
+            normal_font.size = Pt(10)
+        normal_para = getattr(normal_style, "paragraph_format", None)
+        if normal_para is not None:
+            normal_para.space_before = Pt(0)
+            normal_para.space_after = Pt(4)
+            normal_para.line_spacing = 1.15
 
-    def _start_two_column_body(self, doc: Document) -> None:
+    def _start_two_column_body(self, doc: DocxDocument) -> None:
         """Springer body stays one-column (no IEEE two-column switch)."""
         if not doc.sections:
             return
         for sec in doc.sections:
             self._set_section_columns(sec, 1)
 
-    def _add_title_section(self, doc: Document, metadata: Dict[str, Any]) -> None:
+    def _add_title_section(self, doc: DocxDocument, metadata: Dict[str, Any]) -> None:
         title = (metadata.get("title") or "").strip()
         if not title:
             return
@@ -668,7 +703,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
             run.font.size = Pt(16)
         p.paragraph_format.space_after = Pt(8)
 
-    def _add_authors_table(self, doc: Document, authors: List[Dict[str, Any]]) -> None:
+    def _add_authors_table(self, doc: DocxDocument, authors: List[Dict[str, Any]]) -> None:
         if not authors:
             return
         
@@ -790,7 +825,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
         
         doc.add_paragraph("")
 
-    def _add_abstract_and_keywords(self, doc: Document, metadata: Dict[str, Any]) -> None:
+    def _add_abstract_and_keywords(self, doc: DocxDocument, metadata: Dict[str, Any]) -> None:
         abstract = self._latex_to_plain(metadata.get("abstract") or "")
         abstract = re.sub(r"^\s*(?:abstract|t[oó]m\s+t[aắ]t)\s*[:.\u2013\u2014\-]+\s*", "", abstract, flags=re.IGNORECASE)
         abstract = re.sub(r"^\s*[-\u2013\u2014]{2,}\s*", "", abstract).strip()
@@ -835,7 +870,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 run_body.font.name = "Times New Roman"
                 run_body.font.size = Pt(10)
 
-    def _add_body(self, doc: Document, body_nodes: List[Dict[str, Any]]) -> None:
+    def _add_body(self, doc: DocxDocument, body_nodes: List[Dict[str, Any]]) -> None:
         for idx, node in enumerate(body_nodes):
             node_type = node.get("type", "")
 
@@ -930,7 +965,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
         return p_norm == c_norm or p_norm in c_norm or c_norm in p_norm
 
-    def _add_ieee_heading(self, doc: Document, text: str, level: int) -> None:
+    def _add_ieee_heading(self, doc: DocxDocument, text: str, level: int) -> None:
         """Springer-like heading numbering (arabic)."""
         clean = self._latex_to_plain(text)
         if not clean:
@@ -993,7 +1028,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(2)
 
-    def _add_table_caption(self, doc: Document, label: str, caption: str) -> None:
+    def _add_table_caption(self, doc: DocxDocument, label: str, caption: str) -> None:
         """Springer-style table caption as a single line."""
         index = getattr(self, "_table_index", 1)
         caption = self._normalize_springer_caption(caption, "table")
@@ -1014,7 +1049,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
         p.paragraph_format.space_before = Pt(6)
         p.paragraph_format.space_after = Pt(2)
 
-    def _add_references(self, doc: Document, references: List[Dict[str, Any]]) -> None:
+    def _add_references(self, doc: DocxDocument, references: List[Dict[str, Any]]) -> None:
         if not references:
             return
         p = doc.add_paragraph("References")
@@ -1070,21 +1105,26 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 run_text.font.name = "Times New Roman"
                 run_text.font.size = Pt(9)
 
-    def _select_table_layout_mode(self, doc: Document, node: Dict[str, Any]) -> str:
+    def _select_table_layout_mode(self, doc: DocxDocument, node: Dict[str, Any]) -> str:
         """Springer/LNCS is single-column, keep tables in-column to match template."""
         return "column"
 
-    def _current_table_target_width_inch(self, doc: Document, force_full_width: bool) -> float:
+    def _current_table_target_width_inch(self, doc: DocxDocument, force_full_width: bool) -> float:
         if not doc.sections:
             return 6.0
         sec = doc.sections[-1]
         try:
-            content_width = (sec.page_width - sec.left_margin - sec.right_margin).inches
+            page_width = sec.page_width
+            left_margin = sec.left_margin
+            right_margin = sec.right_margin
+            if page_width is None or left_margin is None or right_margin is None:
+                return 6.0
+            content_width = page_width.inches - left_margin.inches - right_margin.inches
             return max(4.8, content_width)
         except Exception:
             return 6.0
 
-    def _add_equation_node(self, doc: Document, raw_text: str) -> None:
+    def _add_equation_node(self, doc: DocxDocument, raw_text: str) -> None:
         """Render equation using Springer equation paragraph style when available."""
         # Handle tab-layout equations from IEEE Word re-parsing:
         tab_eq_match = re.match(r"^\t(.+?)\t(\([A-Za-z0-9.\-]+\))\s*$", raw_text)
@@ -1094,8 +1134,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
             p = doc.add_paragraph()
             eq_style = self._pick_style_name(["equation", "Equation"])
             if eq_style:
-                try: p.style = eq_style
-                except: pass
+                try:
+                    p.style = eq_style
+                except Exception:
+                    pass
             p.add_run("\t")
             p.add_run(eq_text)
             p.add_run(f"\t{eq_num}")
@@ -1163,7 +1205,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
         return False
 
-    def _add_figure_node(self, doc: Document, latex_figure_text: str) -> None:
+    def _add_figure_node(self, doc: DocxDocument, latex_figure_text: str) -> None:
         """Render Springer figure with centered image(s) and `figurecaption` style below."""
         paths = re.findall(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", latex_figure_text)
         cap_match = re.search(r"\\caption\{([^}]*)\}", latex_figure_text)

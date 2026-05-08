@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import Any, cast, Optional
 
 from .. import models
 from .. import auth
@@ -22,7 +23,6 @@ from ..config import (
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI,
-    GOOGLE_REDIRECT_URI_FLUTTER,
     FREE_PLAN_MAX_PAGES,
 )
 
@@ -138,10 +138,10 @@ def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, g
     if user is None:
         user_by_email = db.query(models.User).filter(models.User.email == google_email).first()
         if user_by_email:
-            user_by_email.google_id = google_sub
-            user_by_email.auth_provider = "google"
+            cast(Any, user_by_email).google_id = google_sub
+            cast(Any, user_by_email).auth_provider = "google"
             if kwargs.get("picture"):
-                user_by_email.photo_url = kwargs.get("picture")
+                cast(Any, user_by_email).photo_url = kwargs.get("picture")
             user = user_by_email
         else:
             user = models.User(
@@ -167,7 +167,7 @@ def _dong_bo_tai_khoan_google(db: Session, google_sub: str, google_email: str, g
     return user
 
 
-def _lay_google_user_info_tu_authorization_code(code: str, redirect_uri: str = None) -> dict:
+def _lay_google_user_info_tu_authorization_code(code: str, redirect_uri: Optional[str] = None) -> dict:
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Thiếu GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET")
 
@@ -280,7 +280,7 @@ def dang_ky(req: YeuCauDangKy, db: Session = Depends(lay_db)) -> dict:
 def dang_nhap(req: YeuCauDangNhap, db: Session = Depends(lay_db)) -> dict:
     """Đăng nhập bằng email + mật khẩu, trả về JWT token."""
     user = db.query(models.User).filter(models.User.email == req.email).first()
-    if not user or not auth.xac_minh_mat_khau(req.password, user.hashed_password):
+    if not user or not auth.xac_minh_mat_khau(req.password, cast(str, user.hashed_password)):
         raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
 
     if not user.is_active:
@@ -349,7 +349,7 @@ def dang_nhap_google_redirect(request: Request) -> RedirectResponse:
 
 
 @router.get("/auth/google/callback")
-def google_callback(code: str, state: str = "", request: Request = None, db: Session = Depends(lay_db)):
+def google_callback(code: str, state: str = "", request: Request = None, db: Session = Depends(lay_db)):  # type: ignore[assignment]
     # Tự động chọn redirect_uri/frontend dựa trên host hoặc referer của request hiện tại
     host = request.headers.get("host", "") if request else ""
     referer = request.headers.get("referer", "") if request else ""
@@ -447,7 +447,7 @@ def kiem_tra_phien_dang_nhap(
         # Giải mã JWT để lấy user info trả về cho Frontend
         try:
             from ..auth import _giai_ma_voi_nhieu_khoa
-            payload = _giai_ma_voi_nhieu_khoa(token_value)
+            payload = _giai_ma_voi_nhieu_khoa(cast(str, token_value))
             user_id = payload.get("sub")
             user = db.query(models.User).filter(models.User.id == int(user_id)).first() if user_id else None
             user_data = _serialize_user(user) if user else None
@@ -534,8 +534,8 @@ def google_callback_flutter_logic(
     ).first()
 
     if login_session:
-        login_session.token = jwt_token
-        login_session.status = "completed"
+        cast(Any, login_session).token = jwt_token
+        cast(Any, login_session).status = "completed"
         db.commit()
         logger.info("[Cloud-Sync] Token saved for session: %s, user: %s", session_id, user.email)
     else:
@@ -629,11 +629,11 @@ def dang_ky_goi_premium(
             ),
         )
 
-    current_user.token_balance -= token_cost
-    current_user.plan_type = "premium"
-    if current_user.premium_expires_at is None or current_user.premium_expires_at < now:
-        current_user.premium_started_at = now
-    current_user.premium_expires_at = base_time + timedelta(days=so_ngay)
+    cast(Any, current_user).token_balance -= token_cost
+    cast(Any, current_user).plan_type = "premium"
+    if cast(Any, current_user).premium_expires_at is None or cast(Any, current_user).premium_expires_at < now:
+        cast(Any, current_user).premium_started_at = now
+    cast(Any, current_user).premium_expires_at = base_time + timedelta(days=so_ngay)
 
     db.add(
         models.TokenLedger(
@@ -684,7 +684,7 @@ def cap_nhat_thong_tin_ban_than(
     if can_xac_nhan_mat_khau and not req.current_password:
         raise HTTPException(status_code=400, detail="Vui lòng nhập mật khẩu hiện tại để xác nhận")
 
-    if can_xac_nhan_mat_khau and not auth.xac_minh_mat_khau(req.current_password, current_user.hashed_password):
+    if can_xac_nhan_mat_khau and not auth.xac_minh_mat_khau(cast(str, req.current_password), cast(str, current_user.hashed_password)):
         raise HTTPException(status_code=401, detail="Mật khẩu hiện tại không đúng")
 
     if req.username is not None:
@@ -698,7 +698,7 @@ def cap_nhat_thong_tin_ban_than(
         )
         if trung_username:
             raise HTTPException(status_code=400, detail="Tên đăng nhập đã tồn tại")
-        current_user.username = username_moi
+        cast(Any, current_user).username = username_moi
 
     if req.email is not None:
         email_moi = req.email.strip().lower()
@@ -711,12 +711,12 @@ def cap_nhat_thong_tin_ban_than(
         )
         if trung_email:
             raise HTTPException(status_code=400, detail="Email này đã được đăng ký")
-        current_user.email = email_moi
+        cast(Any, current_user).email = email_moi
 
     if req.new_password is not None:
         if len(req.new_password) < 6:
             raise HTTPException(status_code=400, detail="Mật khẩu mới phải có ít nhất 6 ký tự")
-        current_user.hashed_password = auth.bam_mat_khau(req.new_password)
+        cast(Any, current_user).hashed_password = auth.bam_mat_khau(req.new_password)
 
     db.commit()
     db.refresh(current_user)

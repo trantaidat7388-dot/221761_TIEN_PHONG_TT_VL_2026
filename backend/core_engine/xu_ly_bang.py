@@ -592,7 +592,7 @@ class BoXuLyBang:
                     'tc': tc,
                     'colspan': colspan,
                     'vmerge': vmerge,
-                    'start': not (vmerge in ('continue', 'cont')),
+                    'start': vmerge not in ('continue', 'cont'),
                 }
 
                 for k in range(colspan):
@@ -700,7 +700,8 @@ class BoXuLyBang:
                         if id(candidate._tc) == id(info['tc']):
                             cell_obj = candidate
                             break
-                except: cell_obj = None
+                except Exception:
+                    cell_obj = None
 
                 noi_dung = self.xu_ly_doan_van_trong_cell(cell_obj) if cell_obj else ""
                 token = noi_dung.strip()

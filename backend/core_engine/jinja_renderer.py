@@ -19,11 +19,11 @@ from .author_strategies import (
 
 class JinjaLaTeXRenderer:
     """
-    Takes an Intermediate Representation (IR) JSON and a Jinja-compatible LaTeX template,
-    and renders the final .tex file using the jinja2 engine.
+    Nhận JSON IR và template LaTeX tương thích Jinja,
+    rồi kết xuất file .tex cuối cùng bằng engine jinja2.
     """
     def __init__(self, template_dir: str):
-        # We must change Jinja2's default delimiters because LaTeX relies heavily on { }
+        # Cần đổi dấu phân tách mặc định của Jinja2 vì LaTeX phụ thuộc rất nhiều vào { }
         self.env = jinja2.Environment(
             loader=jinja2.FileSystemLoader(template_dir),
             block_start_string='<%',
@@ -34,19 +34,19 @@ class JinjaLaTeXRenderer:
             comment_end_string='#>',
             trim_blocks=True,
             lstrip_blocks=True,
-            autoescape=False # LaTeX needs raw strings, we escape via custom LocKyTu during AST parse
+            autoescape=False # LaTeX cần chuỗi thô, việc escape được xử lý bằng LocKyTu trong bước parse AST
         )
 
         self.bo_toan = BoXuLyToan()
         self.env.filters['tex_escape'] = self.escape_latex
 
     def escape_latex(self, text: str) -> str:
-        """Escape special LaTeX characters if needed. (Fallback if AST didn't do it)"""
-        # LocKyTu inside AST parser handles most escapes.
+        """Escape ký tự LaTeX đặc biệt nếu cần. (Dự phòng khi AST chưa xử lý)"""
+        # LocKyTu trong AST parser xử lý phần lớn việc escape.
         return str(text)
 
     def render_body_nodes(self, body_nodes: list, doc_class: str = "generic") -> str:
-        """Helper to render common semantic body nodes into standard LaTeX."""
+        """Hàm hỗ trợ kết xuất các node ngữ nghĩa phổ biến của body sang LaTeX chuẩn."""
         out = []
         table_counter = 0
         for node in body_nodes:
@@ -58,20 +58,23 @@ class JinjaLaTeXRenderer:
                 if doc_class == "springer" and text.isupper() and len(text) > 3:
                     text = text.title()
                     
-                if lvl == 1: out.append(f"\\section{{{text}}}\n")
-                elif lvl == 2: out.append(f"\\subsection{{{text}}}\n")
-                else: out.append(f"\\subsubsection{{{text}}}\n")
+                if lvl == 1:
+                    out.append(f"\\section{{{text}}}\n")
+                elif lvl == 2:
+                    out.append(f"\\subsection{{{text}}}\n")
+                else:
+                    out.append(f"\\subsubsection{{{text}}}\n")
             elif t == "paragraph":
                 para_text = str(node.get('text', '') or '')
                 para_text = para_text.replace("\\n\\label{", " \\label{")
-                # Normalize accidental literal "\\n" tokens before core LaTeX commands.
+                # Chuẩn hóa token "\\n" vô tình xuất hiện trước các lệnh LaTeX chính.
                 para_text = re.sub(
                     r'\\n(\\(?:label|caption|includegraphics|refstepcounter|begin|end)\b)',
                     r'\n\1',
                     para_text,
                 )
-                # Normalize hard line breaks from DOC/PDF-converted sources to avoid
-                # unintended visual line-spacing artifacts in LaTeX output.
+                # Chuẩn hóa các ngắt dòng cứng từ nguồn DOC/PDF để tránh
+                # tạo khoảng cách dòng không mong muốn trong đầu ra LaTeX.
                 para_text = re.sub(r'[\u200b\u200c\u200d\ufeff\xa0]+', ' ', para_text)
                 para_text = re.sub(r'\s*\n+\s*', ' ', para_text)
                 para_text = re.sub(r'[ \t]{2,}', ' ', para_text).strip()
@@ -87,9 +90,9 @@ class JinjaLaTeXRenderer:
                 cols = node.get("cols", 1)
                 rows_data = node.get("data", [])
 
-                # Setup column widths. For common 3-column metadata tables
-                # (Feature/Type/Description), make the description column wider
-                # to avoid excessive line wrapping and tall rows.
+                # Thiết lập độ rộng cột. Với bảng metadata 3 cột phổ biến
+                # (Feature/Type/Description), làm cột mô tả rộng hơn
+                # để tránh bẻ dòng quá nhiều và hàng bị cao bất thường.
                 col_widths = None
                 if cols == 3 and rows_data:
                     first_row = rows_data[0]
@@ -110,16 +113,16 @@ class JinjaLaTeXRenderer:
 
                 col_def = "|" + "|".join([f"p{{{w:.3f}\\linewidth}}" for w in col_widths]) + "|"
                 
-                # Detect if table should be wide (spanning two columns)
+                # Phát hiện bảng có nên là dạng rộng (trải qua hai cột) hay không
                 is_wide = cols > 4 or node.get("is_wide", False)
                 env_name = "table*" if (is_wide and doc_class in ("ieee", "acm")) else "table"
                 scale_width = "\\textwidth" if env_name == "table*" else "\\columnwidth"
 
-                # IEEE standard: caption ABOVE table
+                # Theo chuẩn IEEE: caption nằm TRÊN bảng
                 table_caption = node.get("caption", "Table")
-                # Width logic is handled by proportional p{} col_def below.
-                # Use \resizebox as a safety measure for wide tables even in single column.
-                # Keep IEEE tables anchored to preserve Word-like ordering.
+                # Logic độ rộng được xử lý bằng col_def p{} theo tỷ lệ bên dưới.
+                # Dùng \resizebox như một lớp an toàn cho bảng rộng ngay cả trong một cột.
+                # Giữ bảng IEEE neo vị trí để bảo toàn thứ tự giống Word.
                 if doc_class == "springer":
                     table_pos = "[htbp]"
                 else:
@@ -131,7 +134,7 @@ class JinjaLaTeXRenderer:
                 out.append("\\begingroup\\small\\setlength{\\tabcolsep}{3pt}\\setlength{\\arrayrulewidth}{0.4pt}\\renewcommand{\\arraystretch}{0.95}\n")
                 out.append(f"\\begin{{tabular}}{{{col_def}}}\n\\hline\n")
                 
-                # Track active multirow spans: col_index -> remaining rows
+                # Theo dõi các multirow đang hoạt động: col_index -> số hàng còn lại
                 active_multirows = {}  # col_index -> rows_remaining
 
                 for r_idx, row in enumerate(rows_data):
@@ -140,8 +143,8 @@ class JinjaLaTeXRenderer:
                     is_header_row = bool(node.get("has_header")) and r_idx == 0
                     row_multirow_starts = {}  # col -> rowspan (new multirows starting this row)
 
-                    # Table parser already resolves merge structure. Rendering should
-                    # respect those logical cells directly to avoid double-merge drift.
+                    # Parser của bảng đã xử lý cấu trúc merge. Khi render phải
+                    # tôn trọng trực tiếp các ô logic đó để tránh lệch do merge hai lần.
                     for cell in row:
                         if c_logical >= cols:
                             break
@@ -160,7 +163,7 @@ class JinjaLaTeXRenderer:
                         token = text
                         if rowspan > 1:
                             token = f"\\multirow{{{rowspan}}}{{*}}{{{token}}}"
-                            # Record multirow starts for this row
+                            # Ghi nhận các multirow bắt đầu ở hàng này
                             for dc in range(colspan):
                                 row_multirow_starts[c_logical + dc] = rowspan
                         if colspan > 1:
@@ -184,7 +187,7 @@ class JinjaLaTeXRenderer:
                         tex_cells.append("")
                         c_logical += 1
                     
-                    # Lọc để đóng gói thành dòng LaTeX (skip các ô bị multicolumn chiếm trong cùng hàng)
+                    # Lọc để ghép thành một dòng LaTeX (bỏ qua các ô đã bị multicolumn chiếm trong cùng hàng)
                     dong_filtered = []
                     skip_mc = 0
                     for cell_str in tex_cells:
@@ -197,26 +200,26 @@ class JinjaLaTeXRenderer:
                             if mc_match:
                                 skip_mc = int(mc_match.group(1)) - 1
                     
-                    # Update active multirow tracking
-                    # First, decrement existing active multirows
+                    # Cập nhật theo dõi multirow đang hoạt động
+                    # Trước hết, giảm số hàng còn lại của các multirow hiện có
                     new_active = {}
                     for col_idx, remaining in active_multirows.items():
                         if remaining > 1:
                             new_active[col_idx] = remaining - 1
-                    # Then add new multirow starts from this row
+                    # Sau đó thêm các multirow mới bắt đầu từ hàng này
                     for col_idx, rspan in row_multirow_starts.items():
                         new_active[col_idx] = rspan
                     active_multirows = new_active
 
-                    # Determine horizontal rule: use \cline if any multirow is spanning
-                    # into the next row, otherwise use \hline
+                    # Xác định đường kẻ ngang: dùng \cline nếu có multirow còn kéo
+                    # sang hàng kế tiếp, ngược lại dùng \hline
                     spanning_cols = set()
                     for col_idx, remaining in active_multirows.items():
-                        if remaining > 1:  # Still spanning into the next row
+                        if remaining > 1:  # Vẫn còn kéo sang hàng kế tiếp
                             spanning_cols.add(col_idx)
                     
                     if spanning_cols and r_idx < len(rows_data) - 1:
-                        # Build \cline commands for non-spanning column ranges
+                        # Tạo lệnh \cline cho các đoạn cột không bị multirow chiếm
                         cline_parts = []
                         range_start = None
                         for ci in range(cols):
@@ -241,11 +244,11 @@ class JinjaLaTeXRenderer:
                 out.append("}\n") # End of \resizebox
                 out.append(f"\\end{{{env_name}}}\n\n")
         
-        # Ensure everything in `out` is strings
+        # Đảm bảo mọi phần tử trong `out` đều là chuỗi
         result = "".join([str(x) for x in out])
 
-        # Post-process: strip text-mode wrappers (\textit, \textbf) inside equation
-        # environments — they cause "Missing $ inserted" errors in LaTeX.
+        # Hậu xử lý: bỏ các wrapper chế độ text (\textit, \textbf) bên trong môi trường
+        # equation vì chúng có thể gây lỗi "Missing $ inserted" trong LaTeX.
         def _clean_equation_block(m):
             block = m.group(0)
             block = re.sub(r'\\textit\{([^{}]*)\}', r'\1', block)
@@ -269,9 +272,9 @@ class JinjaLaTeXRenderer:
 
     def _process_omml_math(self, text_with_omml: str) -> str:
         r"""
-        Replaces all «OMML:base64» placeholders with actual LaTeX math.
-        If the placeholder is inside \begin{equation}...\end{equation}, it does not wrap it in $...$.
-        Otherwise, it wraps it in $...$.
+        Thay thế toàn bộ placeholder «OMML:base64» bằng công thức LaTeX thật.
+        Nếu placeholder nằm trong \begin{equation}...\end{equation} thì không bọc $...$.
+        Ngược lại sẽ bọc bằng $...$.
         """
         if "«OMML:" not in text_with_omml:
             return text_with_omml
@@ -282,7 +285,7 @@ class JinjaLaTeXRenderer:
                 xml_str = base64.b64decode(b64_str).decode('utf-8')
                 omml_elem = etree.fromstring(xml_str.encode('utf-8'))
                 latex_math = self.bo_toan.omml_element_to_latex(omml_elem)
-                # Strip existing $ to avoid double delimiters
+                # Bỏ dấu $ sẵn có để tránh bọc hai lớp.
                 latex_math = latex_math.strip().strip('$').strip()
                 if not latex_math:
                     latex_math = self.bo_toan.omml_to_text(omml_elem)
@@ -309,22 +312,22 @@ class JinjaLaTeXRenderer:
             eq_block = match.group(0)
             return re.sub(r"«OMML:([A-Za-z0-9+/=]+)»", replace_block, eq_block)
             
-        # 1. Process OMML inside equation environments (block math)
+        # 1. Xử lý OMML bên trong môi trường equation (toán khối)
         text_with_omml = re.sub(r"\\begin\{equation\*?\}.*?\\end\{equation\*?\}", process_equation_env, text_with_omml, flags=re.DOTALL)
         
-        # 2. Process remaining OMML blocks (inline math)
+        # 2. Xử lý các khối OMML còn lại (toán inline)
         text_with_omml = re.sub(r"«OMML:([A-Za-z0-9+/=]+)»", replace_inline, text_with_omml)
         
         return text_with_omml
 
     def render(self, template_name: str, ir_data: dict, output_path: str, **kwargs):
         """
-        Renders the IR data using the specified template file.
-        The template MUST use custom delimiters (<< >>, <% %>).
+        Kết xuất dữ liệu IR bằng file template đã chỉ định.
+        Template BẮT BUỘC phải dùng dấu phân tách tùy chỉnh (<< >>, <% %>).
         """
         template = self.env.get_template(template_name)
         
-        # Detect document class to generate format-appropriate output behavior
+        # Phát hiện loại tài liệu để tạo đầu ra phù hợp với định dạng
         try:
             from jinja2 import FileSystemLoader
             loader = self.env.loader
@@ -339,7 +342,7 @@ class JinjaLaTeXRenderer:
         
         doc_class = phat_hien_loai_tai_lieu(template_src)
 
-        # Pre-render body nodes so templates just drop << body >>
+        # Kết xuất sẵn body nodes để template chỉ cần chèn << body >>
         body_tex = self.render_body_nodes(ir_data.get('body', []), doc_class=doc_class)
         body_tex = self._process_omml_math(body_tex)
         
@@ -352,7 +355,7 @@ class JinjaLaTeXRenderer:
         bib_file = self._generate_bib_file(ir_data.get('references', []), output_path)
         references_block = self._generate_thebibliography(ir_data.get('references', []), doc_class)
         
-        # Override author_block with format-appropriate version
+        # Ghi đè author_block bằng phiên bản phù hợp với định dạng tài liệu
         metadata = dict(ir_data.get('metadata', {}))
         for key, value in metadata.items():
             if isinstance(value, str):
@@ -370,14 +373,14 @@ class JinjaLaTeXRenderer:
         )
         tex_content = self._normalize_tex_preamble(tex_content)
 
-        # Prefer pdfLaTeX by default, but switch to XeLaTeX when the rendered
-        # content includes packages that require a Unicode engine.
+        # Ưu tiên pdfLaTeX theo mặc định, nhưng chuyển sang XeLaTeX khi nội dung
+        # đã render có package cần engine Unicode.
         magic_comment = f"% !TeX program = {self._choose_magic_engine(tex_content)}\n"
 
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(magic_comment + tex_content)
 
-        # Remove stale latexmkrc that may force XeLaTeX from older output runs.
+        # Xóa latexmkrc cũ có thể ép XeLaTeX từ các lần xuất trước.
         latexmkrc_path = os.path.join(os.path.dirname(output_path), 'latexmkrc')
         if os.path.exists(latexmkrc_path):
             try:
@@ -402,8 +405,8 @@ class JinjaLaTeXRenderer:
             start, end = match.span()
             fig_block = match.group(0)
 
-            # Captionless figure blocks are usually formula snapshots or decorative
-            # blocks from Word. Keep them inline to avoid float drift.
+            # Các block figure không có caption thường là ảnh chụp công thức hoặc
+            # block trang trí từ Word. Giữ chúng ở dạng inline để tránh lệch float.
             if self._has_empty_caption(fig_block):
                 fig_block = self._convert_figure_float_to_inline(fig_block, with_counter=False)
                 chunks.append(body_tex[cursor:start])
@@ -435,8 +438,8 @@ class JinjaLaTeXRenderer:
 
         This avoids LaTeX float queue behavior in tight IEEE two-column layouts.
         """
-        # Some DOCX conversions carry a literal "\\n" token before \label.
-        # Normalize it first so regex extraction stays stable.
+        # Một số chuyển đổi DOCX mang token "\\n" trước \label.
+        # Chuẩn hóa nó trước để việc trích xuất bằng regex ổn định.
         fig_block = fig_block.replace("\\n\\label", "\n\\label")
 
         include_match = re.search(r"\\includegraphics(?:\[[^\]]*\])?\{[^}]+\}", fig_block, re.DOTALL)
@@ -573,15 +576,15 @@ class JinjaLaTeXRenderer:
         if re.search(r"\\usepackage\{polyglossia\}", tex_content):
             return "xelatex"
 
-        # Respect templates that explicitly pin pdfTeX in documentclass options.
+        # Tôn trọng template đã ghim pdfTeX trực tiếp trong options của documentclass.
         docclass_opts = re.search(r"\\documentclass\s*\[([^\]]*)\]", tex_content)
         if docclass_opts is not None:
             options = [o.strip().lower() for o in docclass_opts.group(1).split(",")]
             if any(o in ("pdftex", "pdflatex") for o in options):
                 return "pdflatex"
 
-        # Default to pdflatex. If it fails with encoding/Unicode issues,
-        # the compilation process will automatically retry with xelatex.
+        # Mặc định dùng pdflatex. Nếu lỗi do encoding/Unicode,
+        # quá trình biên dịch sẽ tự thử lại bằng xelatex.
         return "pdflatex"
 
     def _normalize_tex_preamble(self, tex_content: str) -> str:
@@ -609,7 +612,7 @@ class JinjaLaTeXRenderer:
         if not has_multirow:
             inject_lines.append("\\usepackage{multirow}")
         
-        # Ensure mathtools is loaded for symbols like \coloneqq
+        # Đảm bảo mathtools được nạp để dùng các ký hiệu như \coloneqq
         if "mathtools" not in tex_content:
             inject_lines.append("\\usepackage{mathtools}")
             
@@ -630,7 +633,7 @@ class JinjaLaTeXRenderer:
         """Generate author block LaTeX code appropriate for the detected document class."""
         if not authors:
             if doc_class == "springer":
-                # Prevent LLNCS class defaults: "No Author Given" / "No Institute Given".
+                # Ngăn default của class LLNCS: "No Author Given" / "No Institute Given".
                 return "\\author{}\n\\institute{}"
             return ""
             
@@ -656,11 +659,11 @@ class JinjaLaTeXRenderer:
             text = ref.get("text", "")
             if not text:
                 continue
-            # Strip leading numbers like "[1]" or "1. "
+            # Xóa số đầu dòng kiểu "[1]" hoặc "1. "
             text = re.sub(r'^\[?\d+\]?\s*\.?\s*', '', text).strip()
             if text:
                 if doc_class == "jov":
-                    # jovcite/apacite requires \bibitem to have an optional argument
+                    # jovcite/apacite yêu cầu \bibitem có đối số tùy chọn
                     items.append(f"\\bibitem[{{\\relax }}]{{ref{i+1}}} {text}")
                 else:
                     items.append(f"\\bibitem{{ref{i+1}}} {text}")
@@ -677,14 +680,14 @@ class JinjaLaTeXRenderer:
         bib_path = os.path.join(os.path.dirname(os.path.abspath(output_path)), "references.bib")
         with open(bib_path, "w", encoding="utf-8") as f:
             for i, ref in enumerate(references):
-                # refs are standard paragraph nodes
+                # refs là các paragraph node thông thường
                 text = ref.get("text", "")
                 if not text:
                     continue
-                # Strip leading numbers like "[1]" or "1. " from bibliography items
+                # Xóa số đầu dòng kiểu "[1]" hoặc "1. " khỏi mục tài liệu tham khảo
                 text = re.sub(r'^\[?\d+\]?\s*\.?\s*', '', text).strip()
                 
-                # Write minimal generic @misc entry since deep parsing citations into Author/Title is out of scope 
+                # Ghi entry @misc tối giản vì việc parse sâu citation sang Author/Title nằm ngoài phạm vi 
                 f.write(f"@misc{{ref{i+1},\n")
                 f.write(f"  note = {{{text}}}\n")
                 f.write("}\n\n")
