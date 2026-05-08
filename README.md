@@ -225,6 +225,19 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 
 ## Hướng Dẫn Cài Đặt
 
+### Trình tự khuyến nghị sau khi clone
+
+Để tránh thiếu thư viện hoặc thiếu file cấu hình, hãy làm đúng thứ tự này:
+
+1. Cài `Python 3.10+`, `Node.js 18+` và đảm bảo có `python`, `node`, `npm` trong `PATH`.
+2. Clone repository về máy.
+3. Tạo môi trường Python ảo và cài dependencies từ `backend/requirements.txt`.
+4. Chạy `npm install` trong thư mục `frontend/` để cài đúng bộ thư viện đi kèm `package-lock.json`.
+5. Copy `backend/.env.example` thành `backend/.env` và `frontend/.env.example` thành `frontend/.env` nếu bạn chạy thủ công.
+6. Nếu dùng launcher, chỉ cần chạy `start.bat` trên Windows hoặc `start.sh` trên Linux/macOS.
+
+> **Lưu ý:** `start.bat` và `start.sh` đã được cấu hình để tự kiểm tra môi trường, tạo `outputs/` khi cần, cài `node_modules` nếu thiếu và chờ backend sẵn sàng trước khi mở frontend.
+
 ### 1. Clone dự án
 
 ```bash
@@ -250,7 +263,7 @@ source .venv/bin/activate
 pip install -r backend/requirements.txt
 ```
 
-> **Lưu ý:** Dự án ghim `bcrypt==4.0.1` để tương thích với `passlib`. Không nâng cấp bcrypt độc lập.
+> **Lưu ý:** Backend đang dùng `bcrypt==3.2.2` để tương thích ổn định với `passlib`. Không nâng cấp bcrypt độc lập nếu chưa kiểm tra lại toàn bộ auth flow.
 
 ### 4. Cài đặt thư viện frontend
 
@@ -277,6 +290,20 @@ Copy-Item frontend/.env.example frontend/.env
 ```
 
 > **Nếu dùng `start.bat` (Windows):** Script sẽ **tự động tạo** file `.env` từ `.env.example` nếu chưa có — bạn không cần copy thủ công.
+
+### Các file quan trọng cần có sau khi clone
+
+Các file dưới đây phải tồn tại trong repository để người mới clone có thể dựng lại môi trường mà không phải tự đoán cấu trúc:
+
+- `backend/requirements.txt`
+- `backend/.env.example`
+- `frontend/package.json`
+- `frontend/package-lock.json`
+- `frontend/.env.example`
+- `start.bat`
+- `start.sh`
+- `app_web_view/pubspec.yaml`
+- `app_web_view/pubspec.lock`
 
 Sau đó mở file `backend/.env` và chỉnh sửa các giá trị cần thiết (xem mục [Cấu Hình Biến Môi Trường](#cấu-hình-biến-môi-trường)). Với mục đích **dev/test**, giữ nguyên giá trị mặc định là đủ dùng.
 
