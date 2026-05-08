@@ -1485,7 +1485,6 @@ class WordASTParser:
 
                 for r_child in node:
                     c_tag = r_child.tag.split("}")[-1] if hasattr(r_child, "tag") else ""
-                    full_tag = r_child.tag if hasattr(r_child, "tag") else ""
                     
                     if c_tag == "t":
                         if r_child.text: run_text_acc += r_child.text
@@ -1657,7 +1656,7 @@ class WordASTParser:
                         elif latex_cmd == r"\subsection": level = 2
                         elif latex_cmd == r"\subsubsection": level = 3
                         break
-            except Exception as e:
+            except Exception:
                 # Silently skip bad regex or unexpected text content
                 pass
 

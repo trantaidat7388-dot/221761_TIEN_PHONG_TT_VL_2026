@@ -338,7 +338,7 @@ def loc_ky_tu(text: str) -> str:
         # Latin Extended Additional dải \u1E00-\u1EFF rất quan trọng cho Tiếng Việt
         if re.match(r'[a-zA-Z0-9\sà-ỹÀ-ỸđĐ\u1E00-\u1EFF]', c): return c
         # Còn lại thì bọc trong \ensuremath nếu là ký tự toán, hoặc bỏ qua
-        return f' '
+        return ' '
 
     # Chỉ áp dụng cho các ký tự ngoài dải ASCII và Tiếng Việt mở rộng
     ket_qua = re.sub(r'[^\x00-\x7Fà-ỹÀ-ỸđĐ\u1E00-\u1EFF\s\\]', handle_leftover_unicode, ket_qua)
