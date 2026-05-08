@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Provide typing information when type-checking (no runtime import required)
-    from lxml import etree as _lxml_etree  # type: ignore
+    from lxml import etree as _lxml_etree  # type: ignore  # noqa: F401
 
 try:
     import lxml.etree as etree  # type: ignore
