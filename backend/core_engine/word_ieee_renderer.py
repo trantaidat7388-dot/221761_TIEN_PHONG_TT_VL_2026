@@ -276,7 +276,7 @@ class IEEEWordRenderer:
 
     def _replace_body_and_refs(
         self,
-        doc: Document,
+        doc: DocxDocument,
         body_nodes: List[Dict[str, Any]],
         references: List[Dict[str, Any]],
     ) -> None:
