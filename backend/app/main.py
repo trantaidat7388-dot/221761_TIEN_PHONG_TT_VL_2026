@@ -11,6 +11,7 @@ import time
 import uuid
 from fastapi import FastAPI, Response
 from fastapi import Request
+from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 from fastapi.responses import JSONResponse
@@ -289,7 +290,7 @@ def xu_ly_don_dep_khi_khoi_dong() -> None:
 
     logger.info("Registered POST routes:")
     for route in app.routes:
-        if getattr(route, "methods", None) and "POST" in route.methods:
+        if isinstance(route, APIRoute) and "POST" in route.methods:
             logger.info(" - %s", route.path)
 
     # Dọn dẹp các thư mục/file mồ côi trong temp khi server khởi động

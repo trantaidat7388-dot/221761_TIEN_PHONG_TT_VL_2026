@@ -1,6 +1,7 @@
 import re
 import json
 import os
+from typing import Any, cast
 from .utils import phat_hien_loai_tai_lieu
 
 MANIFEST_PATH = os.path.join(os.path.dirname(__file__), 'publishers_manifest.json')
@@ -19,7 +20,7 @@ class TemplatePreprocessor:
     """
 
     @classmethod
-    def auto_tag(cls, tex_content: str, config: dict = None) -> str:
+    def auto_tag(cls, tex_content: str, config: dict | None = None) -> str:
         # 1. Detect publisher logic
         tex_content = cls._trim_after_first_end_document(tex_content)
         doc_class = phat_hien_loai_tai_lieu(tex_content)
@@ -99,19 +100,25 @@ class TemplatePreprocessor:
                 found = []
                 for n in nodes:
                     is_def = in_def
-                    if isinstance(n, LatexMacroNode) and n.macroname in ('newcommand', 'renewcommand', 'providecommand', 'def', 'let'):
+                    node = cast(Any, n)
+                    macroname = getattr(node, 'macroname', None)
+                    if macroname in ('newcommand', 'renewcommand', 'providecommand', 'def', 'let'):
                         is_def = True
-                    n._is_definition = in_def
-                    found.append(n)
-                    if getattr(n, 'nodelist', None):
-                        found.extend(traverse(n.nodelist, is_def))
-                    if getattr(n, 'nodeargd', None) and getattr(n.nodeargd, 'argnlist', None):
-                        for arg in n.nodeargd.argnlist:
+                    node._is_definition = in_def
+                    found.append(node)
+                    node_nodelist = getattr(node, 'nodelist', None)
+                    if node_nodelist:
+                        found.extend(traverse(node_nodelist, is_def))
+                    nodeargd = getattr(node, 'nodeargd', None)
+                    if nodeargd and getattr(nodeargd, 'argnlist', None):
+                        for arg in nodeargd.argnlist:
                             if arg:
-                                arg._is_definition = is_def
-                                found.append(arg)
-                                if getattr(arg, 'nodelist', None):
-                                    found.extend(traverse(arg.nodelist, is_def))
+                                arg_node = cast(Any, arg)
+                                arg_node._is_definition = is_def
+                                found.append(arg_node)
+                                arg_nodelist = getattr(arg_node, 'nodelist', None)
+                                if arg_nodelist:
+                                    found.extend(traverse(arg_nodelist, is_def))
                 return found
 
             all_nodes = traverse(nodelist)
@@ -122,10 +129,12 @@ class TemplatePreprocessor:
             for t in titles:
                 if getattr(t, 'nodeargd', None) and getattr(t.nodeargd, 'argnlist', None):
                     for arg in reversed(t.nodeargd.argnlist):
-                        if arg and isinstance(arg, LatexGroupNode):
+                        arg_pos = getattr(arg, 'pos', None)
+                        arg_len = getattr(arg, 'len', None)
+                        if arg and isinstance(arg, LatexGroupNode) and arg_pos is not None and arg_len is not None:
                             title_tag = '<< metadata.title >>'
                             title_tag = re.sub(r'\s+', ' ', title_tag).strip()
-                            replace_ops.append((arg.pos + 1, arg.pos + arg.len - 1, title_tag))
+                            replace_ops.append((arg_pos + 1, arg_pos + arg_len - 1, title_tag))
                             break
 
             # 2. Author & Affiliations - Universal approach
@@ -142,13 +151,17 @@ class TemplatePreprocessor:
             if author_nodes:
                 print(f"[*] pylatexenc found {len(author_nodes)} author nodes. Revamping injection...")
                 first_author = author_nodes[0]
-                insert_pos = first_author.pos
+                insert_pos = first_author.pos or 0
                 author_tag = '<< metadata.author_block >>'
                 author_tag = re.sub(r'\s+', ' ', author_tag).strip()
                 replace_ops.append((insert_pos, insert_pos, author_tag))
                 
                 for node in author_nodes:
-                    end_pos = node.pos + node.len
+                    node_pos = getattr(node, 'pos', None)
+                    node_len = getattr(node, 'len', None)
+                    if node_pos is None or node_len is None:
+                        continue
+                    end_pos = node_pos + node_len
                     # pylatexenc quirk: for \author[a,1]{Name}, it often
                     # absorbs the '[' into the node span but leaves
                     # 'a,1]{Name}' as rest. Detect this by checking if the
@@ -190,30 +203,40 @@ class TemplatePreprocessor:
             abstracts_env = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname.lower() == abstract_env_raw.lower() and not getattr(n, '_is_definition', False)]
             if abstracts_env:
                 ab = abstracts_env[0]
-                replace_ops.append((ab.pos, ab.pos + ab.len, f'\\begin{{{ab.environmentname}}}\n<< metadata.abstract >>\n\\end{{{ab.environmentname}}}'))
+                ab_pos = getattr(ab, 'pos', None)
+                ab_len = getattr(ab, 'len', None)
+                if ab_pos is not None and ab_len is not None:
+                    replace_ops.append((ab_pos, ab_pos + ab_len, f'\\begin{{{ab.environmentname}}}\\n<< metadata.abstract >>\\n\\end{{{ab.environmentname}}}'))
             else:
                 abstracts_cmd = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname.lower() == abstract_env_raw.lower() and not getattr(n, '_is_definition', False)]
                 if abstracts_cmd:
                     ab = abstracts_cmd[0]
                     if getattr(ab, 'nodeargd', None) and getattr(ab.nodeargd, 'argnlist', None):
                         for arg in reversed(ab.nodeargd.argnlist):
-                            if arg and isinstance(arg, LatexGroupNode):
-                                replace_ops.append((arg.pos + 1, arg.pos + arg.len - 1, '<< metadata.abstract >>'))
+                            arg_pos = getattr(arg, 'pos', None)
+                            arg_len = getattr(arg, 'len', None)
+                            if arg and isinstance(arg, LatexGroupNode) and arg_pos is not None and arg_len is not None:
+                                replace_ops.append((arg_pos + 1, arg_pos + arg_len - 1, '<< metadata.abstract >>'))
                                 break
 
             # 4. Processing Keywords
             kw_envs = [n for n in all_nodes if isinstance(n, LatexEnvironmentNode) and n.environmentname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms'] and not getattr(n, '_is_definition', False)]
             if kw_envs:
                 kw = kw_envs[0]
-                replace_ops.append((kw.pos, kw.pos + kw.len, f'\\begin{{{kw.environmentname}}}\n<< metadata.keywords_str >>\n\\end{{{kw.environmentname}}}'))
+                kw_pos = getattr(kw, 'pos', None)
+                kw_len = getattr(kw, 'len', None)
+                if kw_pos is not None and kw_len is not None:
+                    replace_ops.append((kw_pos, kw_pos + kw_len, f'\\begin{{{kw.environmentname}}}\\n<< metadata.keywords_str >>\\n\\end{{{kw.environmentname}}}'))
             else:
                 kw_cmds = [n for n in all_nodes if isinstance(n, LatexMacroNode) and n.macroname in ['keywords', 'keyword', 'IEEEkeywords', 'IndexTerms'] and not getattr(n, '_is_definition', False)]
                 if kw_cmds:
                     kw = kw_cmds[0]
                     if getattr(kw, 'nodeargd', None) and getattr(kw.nodeargd, 'argnlist', None):
                         for arg in reversed(kw.nodeargd.argnlist):
-                            if arg and isinstance(arg, LatexGroupNode):
-                                replace_ops.append((arg.pos + 1, arg.pos + arg.len - 1, '<< metadata.keywords_str >>'))
+                            arg_pos = getattr(arg, 'pos', None)
+                            arg_len = getattr(arg, 'len', None)
+                            if arg and isinstance(arg, LatexGroupNode) and arg_pos is not None and arg_len is not None:
+                                replace_ops.append((arg_pos + 1, arg_pos + arg_len - 1, '<< metadata.keywords_str >>'))
                                 break
 
             # Apply replacements from back to front
@@ -571,7 +594,7 @@ class TemplatePreprocessor:
     # ── Phase 2: Publisher metadata cleanup ───────────────────────
 
     @classmethod
-    def _cleanup_publisher_metadata(cls, tex: str, config: dict = None) -> str:
+    def _cleanup_publisher_metadata(cls, tex: str, config: dict | None = None) -> str:
         """Remove publisher-specific metadata using rules from manifest."""
         config = config or {}
         
@@ -617,7 +640,7 @@ class TemplatePreprocessor:
     # ── Phase 3: Title ──────────────────────────────────────────
 
     @classmethod
-    def _process_title(cls, tex: str, config: dict = None) -> str:
+    def _process_title(cls, tex: str, config: dict | None = None) -> str:
         config = config or {}
         r"""
         Replace content of \title{...} or \Title{...} with << metadata.title >>.
@@ -644,7 +667,7 @@ class TemplatePreprocessor:
 
     @classmethod
     def _replace_existing_author(cls, tex: str) -> str:
-        """Replace author macros with a single placeholder.
+        r"""Replace author macros with a single placeholder.
         The first non‑commented \author (or \Author) macro is replaced by the
         ``<< metadata.author_block >>`` placeholder. Any additional author macros
         are removed entirely to avoid duplicate definitions.
@@ -703,7 +726,8 @@ class TemplatePreprocessor:
             tex = tex[:s] + tex[e:]
 
         return tex
-    def _process_authors(cls, tex: str, config: dict = None) -> str:
+    @classmethod
+    def _process_authors(cls, tex: str, config: dict | None = None) -> str:
         config = config or {}
         r"""
         Remove all author-related commands and inject << metadata.author_block >>.
@@ -810,7 +834,7 @@ class TemplatePreprocessor:
     # ── Phase 5: Abstract ────────────────────────────────────────
 
     @classmethod
-    def _process_abstract(cls, tex: str, config: dict = None) -> str:
+    def _process_abstract(cls, tex: str, config: dict | None = None) -> str:
         config = config or {}
         r"""
         Replace abstract content with << metadata.abstract >>.
@@ -989,7 +1013,7 @@ class TemplatePreprocessor:
     # ── Phase 6: Keywords ────────────────────────────────────────
 
     @classmethod
-    def _process_keywords(cls, tex: str, config: dict = None) -> str:
+    def _process_keywords(cls, tex: str, config: dict | None = None) -> str:
         config = config or {}
         r"""
         Inject << metadata.keywords_str >> into keywords command.
@@ -1067,6 +1091,8 @@ class TemplatePreprocessor:
                 # Look for optional second brace group
                 rest = tex[brace1_end + 1:]
                 rest_stripped = rest.lstrip()
+                offset = -1
+                brace2_end = -1
                 if rest_stripped and rest_stripped[0] == '{':
                     offset = brace1_end + 1 + (len(rest) - len(rest_stripped))
                     brace2_end = cls._find_matching_brace(tex, offset)
