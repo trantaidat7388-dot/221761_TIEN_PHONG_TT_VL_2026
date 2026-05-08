@@ -592,7 +592,7 @@ class BoXuLyBang:
                     'tc': tc,
                     'colspan': colspan,
                     'vmerge': vmerge,
-                    'start': not (vmerge in ('continue', 'cont')),
+                    'start': vmerge not in ('continue', 'cont'),
                 }
 
                 for k in range(colspan):

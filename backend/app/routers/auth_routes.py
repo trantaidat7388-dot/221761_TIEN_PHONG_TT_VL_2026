@@ -349,7 +349,7 @@ def dang_nhap_google_redirect(request: Request) -> RedirectResponse:
 
 
 @router.get("/auth/google/callback")
-def google_callback(code: str, state: str = "", request: Optional[Request] = None, db: Session = Depends(lay_db)):
+def google_callback(code: str, state: str = "", request: Request = None, db: Session = Depends(lay_db)):  # type: ignore[assignment]
     # Tự động chọn redirect_uri/frontend dựa trên host hoặc referer của request hiện tại
     host = request.headers.get("host", "") if request else ""
     referer = request.headers.get("referer", "") if request else ""

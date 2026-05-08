@@ -31,7 +31,7 @@ def du_doan_loai_node(text, index, is_bold=False):
             return "TITLE"
             
     # 4. AUTHOR (Nằm dưới Title nhỏ hơn 15 từ, tên riêng)
-    if 0 < index <= 15 and word_count < 15 and not "university" in text_lower and not "đại học" in text_lower:
+    if 0 < index <= 15 and word_count < 15 and "university" not in text_lower and "đại học" not in text_lower:
         # Nếu có dấu phẩy hoặc chữ C hoa nhiều
         if re.search(r'[A-Z][a-z]+', text):
             return "AUTHOR"

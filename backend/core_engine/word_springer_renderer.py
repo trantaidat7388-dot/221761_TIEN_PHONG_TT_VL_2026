@@ -96,7 +96,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
         # Handle Authors: Clear everything between Title and Abstract, then insert
         if title_idx != -1 and abs_idx != -1:
             for i in range(title_idx + 1, abs_idx):
-                p_el = all_paras[i]._element; p_parent = p_el.getparent();
+                p_el = all_paras[i]._element; p_parent = p_el.getparent()
                 if p_parent is not None:
                     p_parent.remove(p_el)
             if authors:
@@ -143,14 +143,14 @@ class SpringerWordRenderer(IEEEWordRenderer):
             # Xóa toàn bộ paragraph TRỪ first_sec_idx để dùng nó làm điểm neo
             for i in range(first_sec_idx + 1, end_idx):
                 if all_paras[i]._element.getparent() is not None:
-                    p_el = all_paras[i]._element; p_parent = p_el.getparent();
+                    p_el = all_paras[i]._element; p_parent = p_el.getparent()
                     if p_parent is not None:
                         p_parent.remove(p_el)
             
             anchor_p = all_paras[first_sec_idx]
             self._insert_springer_body_before(doc, anchor_p, body_nodes)
             # Sau đó xóa hẳn paragraph neo cũ khỏi XML
-            anchor_el = anchor_p._element; anchor_parent = anchor_el.getparent();
+            anchor_el = anchor_p._element; anchor_parent = anchor_el.getparent()
             if anchor_parent is not None:
                 anchor_parent.remove(anchor_el)
 
@@ -161,7 +161,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
             # Đúng hơn: "References" phải được giữ, còn phần sau đó sẽ xóa.
             for i in range(ref_idx + 1, len(all_paras)):
                 if all_paras[i]._element.getparent() is not None:
-                    p_el = all_paras[i]._element; p_parent = p_el.getparent();
+                    p_el = all_paras[i]._element; p_parent = p_el.getparent()
                     if p_parent is not None:
                         p_parent.remove(p_el)
             

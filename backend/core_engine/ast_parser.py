@@ -1818,7 +1818,7 @@ class WordASTParser:
                     'tc': tc,
                     'colspan': colspan,
                     'vmerge': vmerge,
-                    'start': not (vmerge in ('continue', 'cont')),
+                    'start': vmerge not in ('continue', 'cont'),
                     'col_start': c,
                 }
 
