@@ -77,7 +77,7 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 - **Thanh toán SePay (Polling Sync)** — Đối soát giao dịch tự động không cần Webhook, có state machine pending/failed/completed.
 - **Quản trị Admin** — Dashboard quản lý user, audit log, cấp/thu hồi token.
 - **Lộ trình quản trị Admin** — Xem checklist, kiến trúc quyền và backlog tại `docs/admin-governance-roadmap.md`.
-- **Tài liệu SePay** — Luồng kỹ thuật tại `docs/sepay-payment-polling-sync.md`, hướng dẫn lấy key tại `HUONG_DAN_LAY_SEPAY_API_KEY.md`.
+- **Tài liệu SePay** — Luồng kỹ thuật tại `docs/sepay-payment-polling-sync.md`, checklist cấu hình nhanh ở mục **Cấu Hình Biến Môi Trường**.
 - **Rate Limiting** — Giới hạn request theo nhóm (auth, convert, admin) để chống lạm dụng.
 - **Dọn dẹp tự động** — Thư mục job tạm và file output được xóa theo TTL cấu hình.
 - **Xử lý cục bộ nội dung tài liệu** — Nội dung Word/LaTeX được xử lý trên máy chủ của hệ thống; chỉ gọi dịch vụ bên ngoài khi dùng OAuth hoặc thanh toán.
@@ -191,8 +191,6 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 ├── requirements.txt                      # Dependencies root
 ├── package-lock.json
 ├── pytest.ini
-├── HUONG_DAN_LAY_GOOGLE_OAUTH_KEY.md
-├── HUONG_DAN_LAY_SEPAY_API_KEY.md
 └── README.md
 ```
 
@@ -227,14 +225,14 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 
 ### Trình tự khuyến nghị sau khi clone
 
-Để tránh thiếu thư viện hoặc thiếu file cấu hình, hãy làm đúng thứ tự này:
+Checklist onboarding nhanh (5-10 phút):
 
-1. Cài `Python 3.10+`, `Node.js 18+` và đảm bảo có `python`, `node`, `npm` trong `PATH`.
-2. Clone repository về máy.
-3. Tạo môi trường Python ảo và cài dependencies từ `backend/requirements.txt`.
-4. Chạy `npm install` trong thư mục `frontend/` để cài đúng bộ thư viện đi kèm `package-lock.json`.
-5. Copy `backend/.env.example` thành `backend/.env` và `frontend/.env.example` thành `frontend/.env` nếu bạn chạy thủ công.
-6. Nếu dùng launcher, chỉ cần chạy `start.bat` trên Windows hoặc `start.sh` trên Linux/macOS.
+- [ ] Cài `Python 3.10+`, `Node.js 18+` và kiểm tra có `python`, `node`, `npm` trong `PATH`
+- [ ] Clone dự án về máy
+- [ ] Tạo virtual environment và cài `backend/requirements.txt`
+- [ ] Chạy `npm install` trong thư mục `frontend/`
+- [ ] Tạo `backend/.env` và `frontend/.env` từ file `.env.example`
+- [ ] Khởi động bằng `start.bat` (Windows) hoặc `start.sh` (Linux/macOS)
 
 > **Lưu ý:** `start.bat` và `start.sh` đã được cấu hình để tự kiểm tra môi trường, tạo `outputs/` khi cần, cài `node_modules` nếu thiếu và chờ backend sẵn sàng trước khi mở frontend.
 
@@ -305,40 +303,37 @@ Các file dưới đây phải tồn tại trong repository để người mới
 - `app_web_view/pubspec.yaml`
 - `app_web_view/pubspec.lock`
 
-Sau đó mở file `backend/.env` và chỉnh sửa các giá trị cần thiết (xem mục [Cấu Hình Biến Môi Trường](#cấu-hình-biến-môi-trường)). Với mục đích **dev/test**, giữ nguyên giá trị mặc định là đủ dùng.
+### Tóm tắt SePay nhanh (sau khi clone)
 
-### Checklist SePay setup nhanh (cho team)
-
-1. Copy mẫu cấu hình SePay:
-
-```bash
-# Linux / macOS
-cp backend/.env.sepay.example backend/.env.sepay.local
-```
+- [ ] Tạo file môi trường:
 
 ```powershell
-# Windows PowerShell
-Copy-Item backend/.env.sepay.example backend/.env.sepay.local
+Copy-Item backend/.env.example backend/.env
+Copy-Item frontend/.env.example frontend/.env
 ```
 
-2. Mở `backend/.env` và điền tối thiểu 3 biến sau:
-- `SEPAY_API_KEY=<api-key-tu-sepay-dashboard>`
-- `NAME_WEB=W2L` (prefix nội dung chuyển khoản)
-- `SECRET_XOR_KEY=<so-nguyen-rieng-cua-du-an>`
+- [ ] Cập nhật tối thiểu trong `backend/.env`:
+    - `SEPAY_API_KEY=<api-key-tu-sepay-dashboard>`
+    - `NAME_WEB=W2L`
+    - `SECRET_XOR_KEY=<so-nguyen-rieng-cua-du-an>`
 
-3. Trên SePay Dashboard:
-- Đã thêm tài khoản ngân hàng (MB/VCB/VPB...)
-- Đã bật app ngân hàng trên điện thoại để SePay đồng bộ biến động số dư
-- Đã tạo API key và copy đúng vào `backend/.env`
+- [ ] Trên SePay dashboard:
+    - Đã liên kết tài khoản ngân hàng
+    - Đã bật thông báo biến động số dư trên app ngân hàng
+    - Đã tạo API key (key chỉ hiển thị 1 lần) và lưu an toàn
 
-4. Khởi động lại backend sau khi cập nhật `.env`.
+- [ ] (Tùy chọn) Cập nhật thông tin tài khoản nhận tiền trong `frontend/.env`:
+    - `VITE_BANK_BIN`, `VITE_BANK_ACCOUNT`, `VITE_BANK_ACCOUNT_NAME`
 
-5. Smoke test nhanh luồng nạp tiền:
-- Đăng nhập frontend -> vào Premium -> tạo hóa đơn nạp
-- Chuyển khoản đúng nội dung `{NAME_WEB}NAPTOKEN{HEX_ID}`
-- Kiểm tra polling `GET /api/payment/status/{id}` trả về `completed`
+- [ ] Khởi động lại backend sau khi đổi `.env`, rồi smoke test:
+    - Tạo hóa đơn nạp token trên frontend
+    - Chuyển khoản đúng nội dung `{NAME_WEB}NAPTOKEN{HEX_ID}`
+    - Polling `GET /api/payment/status/{id}` trả `completed`
 
-> Tài liệu chi tiết: `docs/sepay-payment-polling-sync.md` và `HUONG_DAN_LAY_SEPAY_API_KEY.md`.
+- [ ] Nếu đang ở môi trường dev và chưa có luồng ngân hàng thật, xác nhận thủ công qua:
+    - `POST /api/payment/dev/complete/{id}`
+
+> Luồng kỹ thuật chi tiết: `docs/sepay-payment-polling-sync.md`.
 
 ---
 
@@ -391,9 +386,29 @@ Bạn có thể đổi các giá trị này trong `backend/.env` bằng các bi�
 
 > **Bảo mật:** API Key, Secret Key chỉ được lưu trong `backend/.env` — KHÔNG bao giờ lộ trên frontend. Frontend chỉ giao tiếp với backend qua JWT token.
 
-### Cấu hình Google OAuth
+### Cấu hình Google OAuth (Redirect Flow) - tóm tắt nhanh
 
-Xem hướng dẫn đầy đủ tại: [`HUONG_DAN_LAY_GOOGLE_OAUTH_KEY.md`](HUONG_DAN_LAY_GOOGLE_OAUTH_KEY.md)
+- [ ] Tạo/chọn project trong Google Cloud Console và bật **Google People API**
+- [ ] Cấu hình **OAuth consent screen**:
+    - App type: `External`
+    - Điền thông tin app cơ bản
+    - Thêm email test user khi app ở trạng thái `Testing`
+- [ ] Tạo **OAuth Client ID** (`Web application`) với:
+    - Authorized JavaScript origins: `http://localhost:5173`
+    - Authorized redirect URIs:
+        - `http://localhost:8000/api/auth/google/callback`
+        - `http://localhost:8000/api/auth/google/callback/flutter`
+- [ ] Cập nhật biến môi trường:
+    - `backend/.env`: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_REDIRECT_URI_FLUTTER`, `FRONTEND_URL`
+    - `frontend/.env`: `VITE_GOOGLE_CLIENT_ID`
+- [ ] Restart backend + frontend
+- [ ] Kiểm tra nhanh:
+    - Mở `http://localhost:8000/api/auth/google/login` (nếu redirect sang Google là backend đã đọc key)
+    - Đăng nhập Google từ `http://localhost:5173`
+
+Lỗi thường gặp:
+- `GOOGLE_CLIENT_ID` thiếu: sai vị trí file `.env` hoặc chưa restart backend
+- `redirect_uri_mismatch`: URI trên Google Console không khớp 100%
 
 ### Quy trình rotate JWT key an toàn
 

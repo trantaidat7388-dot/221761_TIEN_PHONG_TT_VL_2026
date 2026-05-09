@@ -589,6 +589,7 @@ class JinjaLaTeXRenderer:
 
     def _normalize_tex_preamble(self, tex_content: str) -> str:
         r"""Normalize preamble so pdfLaTeX avoids OT1 pitfalls (e.g., \DJ unavailable)."""
+        tex_content = self._normalize_literal_newline_tokens(tex_content)
         tex_content = tex_content.replace(
             "\\usepackage[OT1]{fontenc}",
             "\\usepackage[T1]{fontenc}",
@@ -627,6 +628,27 @@ class JinjaLaTeXRenderer:
 
         pos = doc_match.start()
         return tex_content[:pos] + inject_block + tex_content[pos:]
+
+    def _normalize_literal_newline_tokens(self, tex_content: str) -> str:
+        """Convert accidental literal "\\n" tokens into actual newlines.
+
+        Some sources inject "\\n" as plain text (especially around abstract/keywords),
+        which LaTeX interprets as an undefined command "\\n".
+        """
+        # High-confidence fixes for common IEEE blocks.
+        tex_content = tex_content.replace("\\begin{abstract}\\n", "\\begin{abstract}\n")
+        tex_content = tex_content.replace("\\n\\end{abstract}", "\n\\end{abstract}")
+        tex_content = tex_content.replace("\\begin{IEEEkeywords}\\n", "\\begin{IEEEkeywords}\n")
+        tex_content = tex_content.replace("\\n\\end{IEEEkeywords}", "\n\\end{IEEEkeywords}")
+
+        # Generic cleanup: treat standalone "\\n" tokens near sentence/command boundaries as line breaks.
+        tex_content = re.sub(
+            r'(?:(?<=^)|(?<=[\s\}\]\)\.,;:]))\\n(?=[A-Z\\])',
+            '\n',
+            tex_content,
+        )
+        tex_content = re.sub(r'\\n(?=\\end\{)', '\n', tex_content)
+        return tex_content
 
 
     def _generate_author_block(self, authors: list, doc_class: str) -> str:
