@@ -999,6 +999,9 @@ class JinjaLaTeXRenderer:
         if "\\begin{algorithm}" in tex_content:
             if "algorithm" not in tex_content:
                 inject_lines.append("\\usepackage{algorithm}")
+                # Thêm khung cho thuật toán (Boxed style)
+                inject_lines.append("\\floatstyle{boxed}")
+                inject_lines.append("\\restylefloat{algorithm}")
             if "algorithmic" not in tex_content:
                 inject_lines.append("\\usepackage{algorithmic}")
         
