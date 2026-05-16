@@ -86,7 +86,12 @@ class JinjaLaTeXRenderer:
                 if para_text:
                     # Strip leading/trailing newlines to prevent redundant blank lines
                     para_text = para_text.strip()
-                    if para_text.startswith(r"\begin{equation}") or para_text.startswith(r"\begin{figure}"):
+                    is_block = (
+                        para_text.startswith(r"\begin{equation}") or 
+                        para_text.startswith(r"\begin{figure}") or
+                        node.get("is_equation")
+                    )
+                    if is_block:
                         # Don't add double newline before/after blocks that already handle their own spacing
                         out.append(f"{para_text}\n")
                     else:
@@ -746,7 +751,7 @@ class JinjaLaTeXRenderer:
             bib_file="references",
             references_block=references_block,
         )
-        tex_content = self._normalize_tex_preamble(tex_content)
+        tex_content = self._normalize_tex_preamble(tex_content, doc_class)
 
         # Ưu tiên pdfLaTeX theo mặc định, nhưng chuyển sang XeLaTeX khi nội dung
         # đã render có package cần engine Unicode.
@@ -962,7 +967,7 @@ class JinjaLaTeXRenderer:
         # quá trình biên dịch sẽ tự thử lại bằng xelatex.
         return "pdflatex"
 
-    def _normalize_tex_preamble(self, tex_content: str) -> str:
+    def _normalize_tex_preamble(self, tex_content: str, doc_class: str = "generic") -> str:
         r"""Normalize preamble so pdfLaTeX avoids OT1 pitfalls (e.g., \DJ unavailable)."""
         tex_content = self._normalize_literal_newline_tokens(tex_content)
         tex_content = tex_content.replace(
@@ -996,8 +1001,17 @@ class JinjaLaTeXRenderer:
             inject_lines.append("\\raggedbottom")
             inject_lines.append("\\setlength{\\textfloatsep}{6pt plus 2pt minus 2pt}")
             inject_lines.append("\\setlength{\\intextsep}{6pt plus 2pt minus 2pt}")
+        elif doc_class == "springer":
+            # Springer (LLNCS) needs very tight spacing to maintain page count
+            inject_lines.append("\\setlength{\\textfloatsep}{4pt plus 1pt minus 1pt}")
+            inject_lines.append("\\setlength{\\intextsep}{4pt plus 1pt minus 1pt}")
+            inject_lines.append("\\setlength{\\floatsep}{4pt plus 1pt minus 1pt}")
+            inject_lines.append("\\setlength{\\abovedisplayskip}{3pt plus 1pt minus 1pt}")
+            inject_lines.append("\\setlength{\\belowdisplayskip}{3pt plus 1pt minus 1pt}")
+            inject_lines.append("\\setlength{\\abovedisplayshortskip}{1pt}")
+            inject_lines.append("\\setlength{\\belowdisplayshortskip}{1pt}")
         else:
-            # Springer, ACM, generic: Tighten spacing around figures and equations
+            # ACM, generic: Tighten spacing around figures and equations
             inject_lines.append("\\setlength{\\textfloatsep}{8pt plus 2pt minus 2pt}")
             inject_lines.append("\\setlength{\\intextsep}{8pt plus 2pt minus 2pt}")
             inject_lines.append("\\setlength{\\floatsep}{8pt plus 2pt minus 2pt}")

@@ -36,8 +36,9 @@ _RESERVED_UPLOAD_NAMES = HIDDEN.copy()
 
 _ALLOWED_TEMPLATE_EXTENSIONS = {
     ".tex", ".cls", ".sty", ".bst", ".bib", ".csl", ".txt",
-    ".png", ".jpg", ".jpeg", ".pdf", ".eps", ".png",
-    ".otf", ".ttf", ".woff", ".woff2",
+    ".png", ".jpg", ".jpeg", ".pdf", ".eps", ".gif", ".svg", ".tif", ".tiff",
+    ".bbx", ".cbx", ".lbx", ".dbx", ".fd", ".cfg", ".def",
+    ".otf", ".ttf", ".woff", ".woff2", ".pfb", ".tfm",
 }
 _MAX_ZIP_EXTRACT_SIZE = 80 * 1024 * 1024  # 80MB uncompressed
 _MAX_SINGLE_ZIP_ENTRY_SIZE = 20 * 1024 * 1024  # 20MB
@@ -242,28 +243,29 @@ def lay_danh_sach_template(
 
     # Private templates for current user only
     if current_user is not None:
-        user_dir = _user_template_base(current_user.id)
+        user_id: int = int(current_user.id)
+        user_dir = _user_template_base(user_id)
         if user_dir.exists() and user_dir.is_dir():
             for tpl_path in user_dir.iterdir():
                 if tpl_path.is_file() and tpl_path.suffix == '.tex':
                     templates.append(
                         _template_metadata(
-                            template_id=f"{_PRIVATE_TEMPLATE_PREFIX}{current_user.id}_{tpl_path.stem}",
+                            template_id=f"{_PRIVATE_TEMPLATE_PREFIX}{user_id}_{tpl_path.stem}",
                             ten=f"{tpl_path.stem} (cá nhân)",
                             kich_thuoc=tpl_path.stat().st_size,
                             pham_vi="private",
-                            owner_user_id=current_user.id,
+                            owner_user_id=user_id,
                         )
                     )
                 elif tpl_path.is_dir():
                     kich_thuoc = sum(f.stat().st_size for f in tpl_path.rglob('*') if f.is_file())
                     templates.append(
                         _template_metadata(
-                            template_id=f"{_PRIVATE_TEMPLATE_PREFIX}{current_user.id}_{tpl_path.name}",
+                            template_id=f"{_PRIVATE_TEMPLATE_PREFIX}{user_id}_{tpl_path.name}",
                             ten=f"{tpl_path.name} (cá nhân)",
                             kich_thuoc=kich_thuoc,
                             pham_vi="private",
-                            owner_user_id=current_user.id,
+                            owner_user_id=user_id,
                         )
                     )
 
@@ -279,17 +281,22 @@ async def tai_len_template(
     current_user: models.User = Depends(auth.lay_nguoi_dung_hien_tai),
 ) -> dict:
     """Upload template LaTeX tùy chỉnh (hỗ trợ .tex và .zip)"""
-    is_zip = file.filename.lower().endswith('.zip')
-    if not (file.filename.lower().endswith('.tex') or is_zip):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Tên file không hợp lệ")
+    
+    filename = file.filename
+    is_zip = filename.lower().endswith('.zip')
+    if not (filename.lower().endswith('.tex') or is_zip):
         raise HTTPException(status_code=400, detail="Chỉ chấp nhận file .tex hoặc .zip")
     
     contents = await file.read()
     if len(contents) > MAX_TEMPLATE_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(status_code=400, detail=f"File template quá lớn (tối đa {MAX_TEMPLATE_UPLOAD_MB}MB)")
     
-    role = (current_user.role or "user").lower()
+    user_id: int = int(current_user.id)
+    role: str = str(current_user.role or "user").lower()
     la_admin = role == "admin"
-    safe_name = _sanitize_template_name(Path(file.filename).stem)
+    safe_name = _sanitize_template_name(Path(filename).stem)
 
     if la_admin:
         if safe_name in _RESERVED_UPLOAD_NAMES:
@@ -300,11 +307,11 @@ async def tai_len_template(
         template_id = f"{_GLOBAL_TEMPLATE_PREFIX}{safe_name}"
         pham_vi = "global"
     else:
-        user_tex, user_dir = _user_template_paths(current_user.id, safe_name)
+        user_tex, user_dir = _user_template_paths(user_id, safe_name)
         safe_name = _ensure_unique_name_for_scope(safe_name, user_tex, user_dir)
-        save_tex_path, save_dir_path = _user_template_paths(current_user.id, safe_name)
+        save_tex_path, save_dir_path = _user_template_paths(user_id, safe_name)
         save_tex_path.parent.mkdir(parents=True, exist_ok=True)
-        template_id = f"{_PRIVATE_TEMPLATE_PREFIX}{current_user.id}_{safe_name}"
+        template_id = f"{_PRIVATE_TEMPLATE_PREFIX}{user_id}_{safe_name}"
         pham_vi = "private"
     
     if not is_zip:

@@ -1754,10 +1754,11 @@ class WordASTParser:
         traverse_node(p._p)
         text = text.strip()
 
-        # Fix tab-layout equations parsed as normal text (prevents \textit and \quad corruption)
+        # 4. Nhận diện công thức dạng IEEE (Tab [Công thức] Tab [Số thứ tự])
+        # Ví dụ: "\tA = B\t(1)"
         raw_p_text = getattr(p, "text", "")
-        if raw_p_text and re.match(r'^\t.*\t\([\w\.\-\*]+\)$', raw_p_text):
-            m = re.match(r'^\t(.*)\t\(([\w\.\-\*]+)\)$', raw_p_text)
+        if raw_p_text and re.match(r'^\s*\t.*\t\([\w\.\-\*#]+\)\s*$', raw_p_text):
+            m = re.match(r'^\s*\t(.*)\t\(([\w\.\-\*#]+)\)\s*$', raw_p_text)
             if m:
                 eq_text = m.group(1).strip()
                 eq_num = m.group(2).strip()

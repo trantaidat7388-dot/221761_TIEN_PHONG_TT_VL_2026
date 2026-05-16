@@ -237,6 +237,21 @@ def loc_ky_tu(text: str) -> str:
     
     ket_qua, pua_placeholders = _normalize_private_use_symbol_chars(text)
 
+    # PROTECTION STEP: Protect existing LaTeX commands from being escaped.
+    # This is critical for Word -> Word -> LaTeX flow where LaTeX markers might be in Word.
+    protected_commands = []
+    def _protect_latex(match):
+        cmd = match.group(0)
+        idx = len(protected_commands)
+        placeholder = f"LATEXCMDPROTECT{idx:04d}x"
+        protected_commands.append(cmd)
+        return placeholder
+
+    # Common LaTeX commands to protect
+    pattern_to_protect = r'\\(?:quad|text|frac|begin|end|tag|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|omega|phi|times|cdot|pm|leq|geq|neq|approx|rightarrow|leftarrow|in|notin|subset|supset|cup|cap|forall|exists|ldots|coloneqq|land|lor|mapsto|ast|sum|prod|int|infty|sqrt|overset|underset|boxed|left|right)\b'
+    ket_qua = re.sub(pattern_to_protect, _protect_latex, ket_qua)
+
+
     # Remove directional control chars and uncommon script noise (Hebrew, Armenian, etc.)
     ket_qua = re.sub(r'[\u200e\u200f\u202a-\u202e\u2066-\u2069]', '', ket_qua)
     ket_qua = re.sub(r'[\u0530-\u05FF]+', ' ', ket_qua) # Armenian + Hebrew range
@@ -274,8 +289,6 @@ def loc_ky_tu(text: str) -> str:
     for ky_tu_u, thay_the_u in simple_unicode:
         ket_qua = ket_qua.replace(ky_tu_u, thay_the_u)
     
-    # Thay tab (\t) thành \quad trong LaTeX
-    ket_qua = ket_qua.replace('\t', r'\quad ')
     
     # Thay Unicode phức tạp bằng placeholder ASCII
     for ky_tu_u, placeholder, _ in unicode_placeholders:
@@ -319,6 +332,15 @@ def loc_ky_tu(text: str) -> str:
 
     for placeholder, latex_cmd in pua_placeholders.items():
         ket_qua = ket_qua.replace(placeholder, latex_cmd)
+        
+    # Restore protected LaTeX commands
+    for i, cmd in enumerate(protected_commands):
+        placeholder = f"LATEXCMDPROTECT{i:04d}x"
+        ket_qua = ket_qua.replace(placeholder, cmd)
+
+    # BƯỚC CUỐI: Thay tab (\t) thành \quad trong LaTeX (làm cuối cùng để không bị escape)
+    ket_qua = ket_qua.replace('\t', r'\quad ')
+
         
     # Tự động bọc URL vào thẻ \url{} để tránh lỗi tràn lề (overflow) trong PDF
     # Bỏ qua nếu URL đã nằm trong \url{...} hoặc \href{...}
