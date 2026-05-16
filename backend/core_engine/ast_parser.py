@@ -1130,40 +1130,63 @@ class WordASTParser:
         i = 0
         while i < len(merged_body):
             node = merged_body[i]
-            if node.get("type") == "paragraph":
-                text = node.get("text", "").strip()
-                if re.match(r'^Algorithm\s+\d+', text, re.IGNORECASE) or re.match(r'^Thuật toán\s+\d+', text, re.IGNORECASE):
+            # Debug: check if this node could be an algorithm caption
+            node_type = node.get("type")
+            node_text = (node.get("text") or "").strip()
+            if "algorithm" in node_text.lower() or "thuật toán" in node_text.lower():
+                print(f"[*] DEBUG: Checking node for algorithm: type={node_type}, text='{node_text[:100]}'")
+
+            if node_type == "paragraph":
+                text = node_text
+                # Flexibly detect Algorithm caption
+                if re.search(r'\b(Algorithm|Alg\.?|Algo\.?|Thuật toán)\s+\d+', text, re.IGNORECASE):
                     alg_steps = []
                     j = i + 1
                     while j < len(merged_body):
                         nxt = merged_body[j]
-                        if nxt.get("type") != "paragraph":
+                        if nxt.get("type") not in ("paragraph", "omml"):
                             break
                         
                         nxt_text = (nxt.get("text") or "").strip()
+                        if not nxt_text: # Skip empty lines inside algorithm
+                            j += 1
+                            continue
+                            
                         l_nxt_text = nxt_text.lower()
                         
-                        # Greedy indicators for algorithm steps
+                        # Stop if we hit a clear section heading
+                        if nxt.get("style") and "Heading" in nxt.get("style"):
+                            break
+                            
+                        # Indicators that we are still in an algorithm
                         is_step = (
+                            j == i + 1 or # First line after caption is ALWAYS a step
                             nxt.get("has_border") or 
                             nxt.get("is_list") or 
                             "leftarrow" in l_nxt_text or 
                             "<-" in nxt_text or
                             "\\leftarrow" in nxt_text or
                             "\\begin{equation}" in nxt_text or
+                            "«OMML:" in nxt_text or
                             re.match(r'^(if|then|else|for|while|return|do|until|endif|endfor|endwhile|exception)\b', l_nxt_text) or
                             nxt.get("first_line_indent", 0) > 0 or 
                             nxt.get("left_indent", 0) > 0 or
-                            # If it's a very short line right after the caption, it's likely a step
-                            (j == i + 1 and len(nxt_text.split()) < 10)
+                            len(nxt_text.split()) < 20 # Code lines are usually short
                         )
                         
                         if is_step:
                             alg_steps.append(nxt)
                             j += 1
                         else:
-                            break
+                            # If it looks like a regular long paragraph and we already have some steps, stop
+                            if len(nxt_text.split()) > 30:
+                                break
+                            # Otherwise, maybe it's just a text step
+                            alg_steps.append(nxt)
+                            j += 1
+                    
                     if alg_steps:
+                        print(f"[*] SUCCESS: Detected Algorithm block: '{text[:50]}...' with {len(alg_steps)} steps.")
                         final_body.append({
                             "type": "algorithm",
                             "caption": text,
@@ -1171,6 +1194,42 @@ class WordASTParser:
                         })
                         i = j
                         continue
+            
+            elif node_type == "table":
+                # Detect algorithm tables (common when boxed in Word)
+                caption = (node.get("caption") or "").strip()
+                first_cell_text = ""
+                if node.get("data") and node["data"][0]:
+                    first_cell_text = (node["data"][0][0].get("text") or "").strip()
+                
+                is_alg = False
+                if re.search(r'\b(Algorithm|Alg\.?|Algo\.?|Thuật toán)\b', caption, re.IGNORECASE):
+                    is_alg = True
+                elif re.search(r'\b(Algorithm|Alg\.?|Algo\.?|Thuật toán)\b', first_cell_text, re.IGNORECASE):
+                    is_alg = True
+                
+                if is_alg:
+                    print(f"[*] SUCCESS: Detected Algorithm TABLE: '{caption or first_cell_text[:50]}'")
+                    steps = []
+                    # Flatten table cells into steps
+                    for row in node.get("data", []):
+                        for cell in row:
+                            txt = (cell.get("text") or "").strip()
+                            if txt:
+                                # If the caption was in the first cell, remove it from steps
+                                if txt == first_cell_text and re.search(r'\b(Algorithm|Alg\.?|Algo\.?|Thuật toán)\s+\d+', txt, re.IGNORECASE):
+                                    continue
+                                for line in txt.split('\n'):
+                                    if line.strip():
+                                        steps.append({"type": "paragraph", "text": line.strip()})
+                    
+                    final_body.append({
+                        "type": "algorithm",
+                        "caption": caption or first_cell_text,
+                        "steps": steps
+                    })
+                    i += 1
+                    continue
             final_body.append(node)
             i += 1
             
