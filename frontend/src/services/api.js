@@ -208,6 +208,13 @@ export const chuyenDoiWordSpringer = async (file, templateFile = null) => {
 export const taiFileWordTheoJob = async (jobId, tenFileWordFallback = '') => {
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
+    if (window.FlutterBridge) {
+      window.FlutterBridge.postMessage(JSON.stringify({
+        type: 'OPEN_URL',
+        url: `${DIA_CHI_API_GOC}/api/tai-ve-word/${jobId}`
+      }));
+      return { thanhCong: true };
+    }
     const response = await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-word/${jobId}`, {
       method: 'GET',
       headers: taoHeaderXacThuc(),
@@ -244,6 +251,13 @@ export const taiFile = async (duongDan, tenFile) => {
 export const taiFileZip = async (jobId, tenFileZipFallback = '') => {
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
+    if (window.FlutterBridge) {
+      window.FlutterBridge.postMessage(JSON.stringify({
+        type: 'OPEN_URL',
+        url: `${DIA_CHI_API_GOC}/api/tai-ve-zip/${jobId}`
+      }));
+      return { thanhCong: true };
+    }
     const downloadUrl = `${DIA_CHI_API_GOC}/api/download/${jobId}`
     const response = await fetch(downloadUrl, { method: 'GET', headers: taoHeaderXacThuc() })
     if (response.status === 401) thongBaoPhienHetHan()
@@ -293,6 +307,13 @@ export const bienDichPDF = async (jobId, signal = null) => {
 export const taiFilePDF = async (jobId) => {
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
+    if (window.FlutterBridge) {
+      window.FlutterBridge.postMessage(JSON.stringify({
+        type: 'OPEN_URL',
+        url: `${DIA_CHI_API_GOC}/api/tai-ve-pdf/${jobId}`
+      }));
+      return { thanhCong: true };
+    }
     const response = await fetch(`${DIA_CHI_API_GOC}/api/tai-ve-pdf/${jobId}`, { headers: taoHeaderXacThuc() })
     if (response.status === 401) thongBaoPhienHetHan()
     if (!response.ok) throw new Error('Không thể tải file PDF')

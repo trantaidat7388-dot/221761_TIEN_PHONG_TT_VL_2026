@@ -753,6 +753,14 @@ class JinjaLaTeXRenderer:
         )
         tex_content = self._normalize_tex_preamble(tex_content, doc_class)
 
+        # Fix specific LaTeX compilation errors caused by double-escaped arrows inside algorithms or math
+        tex_content = tex_content.replace(r"\\\\leftarrow", r"\leftarrow")
+        tex_content = tex_content.replace(r"\\leftarrow", r"\leftarrow")
+        
+        # Un-nest if already in math mode (just safe un-nesting)
+        tex_content = tex_content.replace(r"$\leftarrow$", r"\leftarrow")
+        tex_content = tex_content.replace(r"\ensuremath{\leftarrow}", r"\leftarrow")
+
         # Ưu tiên pdfLaTeX theo mặc định, nhưng chuyển sang XeLaTeX khi nội dung
         # đã render có package cần engine Unicode.
         magic_comment = f"% !TeX program = {self._choose_magic_engine(tex_content)}\n"
@@ -1143,8 +1151,11 @@ class JinjaLaTeXRenderer:
     def _render_algorithm(self, node: dict) -> str:
         """Render algorithm node to LaTeX algorithm/algorithmic environment."""
         caption = node.get("caption", "Algorithm")
-        # Clean up "Algorithm 1:" from caption
-        caption = re.sub(r'^(Algorithm|Thuật toán)\s+\d+:?\s*', '', caption, flags=re.IGNORECASE).strip()
+        # Clean up "Algorithm 1:" or "\textbf{Algorithm 1:}" from caption iteratively
+        old_caption = None
+        while caption != old_caption:
+            old_caption = caption
+            caption = re.sub(r'^(?:\\textbf\{|\\textit\{)?\s*(?:Algorithm|Thuật toán)[\s:]*\d*[\s:.\-]*\}?\s*', '', caption, flags=re.IGNORECASE).strip()
         
         steps = node.get("steps", [])
         
@@ -1168,11 +1179,13 @@ class JinjaLaTeXRenderer:
             # Remove leading line numbers if present
             line_text = re.sub(r'^\d+[:.]\s*', '', line_text)
             
-            # Map common symbols to LaTeX math
+            # Map common symbols to LaTeX math safely
+            line_text = line_text.replace("\\\\leftarrow", "leftarrow")
+            line_text = line_text.replace("\\leftarrow", "leftarrow")
+            line_text = line_text.replace("<-", "leftarrow")
             line_text = line_text.replace("leftarrow", r" $\leftarrow$ ")
-            line_text = line_text.replace("<-", r" $\leftarrow$ ")
-            line_text = line_text.replace(r"\leftarrow", r" $\leftarrow$ ")
             line_text = line_text.replace('$ $', ' ').replace('  ', ' ')
+            line_text = line_text.replace('$$', '$')
             
             # Map keywords to algorithmic commands
             l_text = line_text.lower()

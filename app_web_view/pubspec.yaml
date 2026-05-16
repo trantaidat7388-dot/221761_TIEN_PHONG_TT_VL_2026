@@ -37,6 +37,7 @@ dependencies:
 
   # WebView - nhúng web vào app
   webview_flutter: ^4.10.0
+  url_launcher: ^6.3.0
 
   # Custom Tab - mở Google OAuth không bị chặn
   flutter_web_auth_2: ^4.0.0

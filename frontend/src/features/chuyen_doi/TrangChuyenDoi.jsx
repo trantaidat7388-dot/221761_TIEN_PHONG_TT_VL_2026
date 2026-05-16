@@ -910,13 +910,19 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                       {pdfKetQua?.pdfUrl && (
                         <div className="mt-2 flex gap-2">
                           <NutBam
-                            onClick={() => window.open(pdfKetQua.pdfUrl, '_blank')}
+                            onClick={() => {
+                              if (window.FlutterBridge) {
+                                window.FlutterBridge.postMessage(JSON.stringify({ type: 'OPEN_URL', url: pdfKetQua.pdfUrl }));
+                              } else {
+                                window.open(pdfKetQua.pdfUrl, '_blank');
+                              }
+                            }}
                             bienThe="secondary"
                             icon={Eye}
                             kichThuoc="md"
                             className="flex-1"
                           >
-                            Xem PDF trong trình duyệt
+                            Xem PDF
                           </NutBam>
                         </div>
                       )}
