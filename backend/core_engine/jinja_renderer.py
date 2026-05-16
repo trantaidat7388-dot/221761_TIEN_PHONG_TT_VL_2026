@@ -1169,7 +1169,9 @@ class JinjaLaTeXRenderer:
             line_text = re.sub(r'^\d+[:.]\s*', '', line_text)
             
             # Map common symbols to LaTeX math
-            line_text = re.sub(r'(\\?leftarrow|<-)', r' $\\leftarrow$ ', line_text)
+            line_text = line_text.replace("leftarrow", r" $\leftarrow$ ")
+            line_text = line_text.replace("<-", r" $\leftarrow$ ")
+            line_text = line_text.replace(r"\leftarrow", r" $\leftarrow$ ")
             line_text = line_text.replace('$ $', ' ').replace('  ', ' ')
             
             # Map keywords to algorithmic commands
