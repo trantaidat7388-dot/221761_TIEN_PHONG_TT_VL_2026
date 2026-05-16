@@ -60,16 +60,16 @@ const TabTokenLedger = ({ danhSachTokenLedger }) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success('Da xuat CSV token ledger');
+    toast.success('Đã xuất CSV nhật ký phát sinh token.');
   };
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-        <StatMini label="Ban ghi" value={thongKe.total} color="text-violet-300 bg-violet-500/10" />
-        <StatMini label="Tong cong" value={new Intl.NumberFormat('vi-VN').format(thongKe.tongCong)} color="text-emerald-300 bg-emerald-500/10" />
-        <StatMini label="Tong tru" value={new Intl.NumberFormat('vi-VN').format(thongKe.tongTru)} color="text-red-300 bg-red-500/10" />
-        <StatMini label="Nguoi dung" value={thongKe.nguoiDung} color="text-cyan-300 bg-cyan-500/10" />
+        <StatMini label="Bản ghi" value={thongKe.total} color="text-violet-300 bg-violet-500/10" />
+        <StatMini label="Tổng cộng" value={new Intl.NumberFormat('vi-VN').format(thongKe.tongCong)} color="text-emerald-300 bg-emerald-500/10" />
+        <StatMini label="Tổng trừ" value={new Intl.NumberFormat('vi-VN').format(thongKe.tongTru)} color="text-red-300 bg-red-500/10" />
+        <StatMini label="Người dùng" value={thongKe.nguoiDung} color="text-cyan-300 bg-cyan-500/10" />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -79,7 +79,7 @@ const TabTokenLedger = ({ danhSachTokenLedger }) => {
             type="text"
             value={tuKhoa}
             onChange={e => setTuKhoa(e.target.value)}
-            placeholder="Tim theo user, ly do, job..."
+            placeholder="Tìm theo người dùng, lý do, job..."
             className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-600"
           />
         </div>
@@ -91,16 +91,16 @@ const TabTokenLedger = ({ danhSachTokenLedger }) => {
             className="bg-transparent text-xs text-white/70 outline-none [&>option]:bg-slate-900 [&>option]:text-white"
           >
             {danhSachLyDo.map(item => (
-              <option key={item} value={item}>{item === 'all' ? 'Tat ca ly do' : item}</option>
+              <option key={item} value={item}>{item === 'all' ? 'Tất cả lý do' : item}</option>
             ))}
           </select>
         </div>
         <div className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/5 px-3 py-2">
-          <span className="text-[11px] text-slate-500">Tu</span>
+          <span className="text-[11px] text-slate-500">Từ</span>
           <input type="date" value={tuNgay} onChange={e => setTuNgay(e.target.value)} className="bg-transparent text-xs text-white/70 outline-none" />
         </div>
         <div className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/5 px-3 py-2">
-          <span className="text-[11px] text-slate-500">Den</span>
+          <span className="text-[11px] text-slate-500">Đến</span>
           <input type="date" value={denNgay} onChange={e => setDenNgay(e.target.value)} className="bg-transparent text-xs text-white/70 outline-none" />
         </div>
         <button
@@ -108,28 +108,28 @@ const TabTokenLedger = ({ danhSachTokenLedger }) => {
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-white hover:bg-white/10 transition-all"
         >
           <Download className="w-4 h-4" />
-          Xuat CSV
+          Xuất CSV
         </button>
       </div>
 
       <div className="rounded-2xl border border-white/5 bg-white/[0.02] overflow-hidden">
         <div className="px-5 py-3 border-b border-white/5 flex items-center gap-2">
           <Coins className="h-4 w-4 text-violet-400" />
-          <span className="font-semibold text-white text-sm">Token Ledger toan he thong</span>
-          <span className="text-xs text-slate-500 ml-auto">{ledgerDaLoc.length} ban ghi</span>
+          <span className="font-semibold text-white text-sm">Nhật ký phát sinh Token toàn hệ thống</span>
+          <span className="text-xs text-slate-500 ml-auto">{ledgerDaLoc.length} bản ghi</span>
         </div>
         <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
           <table className="w-full text-sm text-white/90">
             <thead className="sticky top-0 bg-slate-950/95 backdrop-blur-sm">
               <tr className="border-b border-white/5 text-left text-[11px] uppercase tracking-wider text-slate-500">
-                <th className="py-3 px-4 font-medium">Nguoi dung</th>
+                <th className="py-3 px-4 font-medium">Người dùng</th>
                 <th className="py-3 px-3 font-medium">Email</th>
                 <th className="py-3 px-3 font-medium text-right">Delta</th>
-                <th className="py-3 px-3 font-medium text-right">So du</th>
-                <th className="py-3 px-3 font-medium">Ly do</th>
+                <th className="py-3 px-3 font-medium text-right">Số dư</th>
+                <th className="py-3 px-3 font-medium">Lý do</th>
                 <th className="py-3 px-3 font-medium">Meta</th>
                 <th className="py-3 px-3 font-medium">Job ID</th>
-                <th className="py-3 px-3 font-medium">Thoi gian</th>
+                <th className="py-3 px-3 font-medium">Thời gian</th>
               </tr>
             </thead>
             <tbody>
@@ -155,7 +155,7 @@ const TabTokenLedger = ({ danhSachTokenLedger }) => {
                 </tr>
               ))}
               {!ledgerDaLoc.length && (
-                <tr><td className="py-8 text-center text-slate-600" colSpan={8}>Chua co du lieu</td></tr>
+                <tr><td className="py-8 text-center text-slate-600" colSpan={8}>Chưa có dữ liệu</td></tr>
               )}
             </tbody>
           </table>

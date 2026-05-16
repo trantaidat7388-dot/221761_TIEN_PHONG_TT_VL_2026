@@ -10,6 +10,7 @@ import tempfile
 
 
 def _lay_so_nguyen_tu_env(name: str, default: int, min_value: int = 1) -> int:
+    """Đọc biến môi trường dạng số nguyên và áp dụng giá trị tối thiểu."""
     raw = os.getenv(name, str(default)).strip()
     try:
         value = int(raw)
@@ -34,11 +35,11 @@ def _nen_thu_lai_bang_xelatex(log_text: str) -> bool:
     return any(re.search(p, log_text, re.IGNORECASE) for p in patterns)
 
 def sua_docx_co_macro(doc_path: str):
-    """
-    Tẩy rửa file Word có chứa Macro (.docm hoặc .docx dính macro):
+    """Tẩy rửa file Word có chứa Macro (.docm hoặc .docx dính macro).
+
     - Mở file dưới dạng ZIP, sửa [Content_Types].xml (content type macro → chuẩn).
-    - Sửa các file .rels để loại bỏ các Relationship tới macro.
-    - Xóa file cũ và đổi tên file ZIP mới thành doc_path để python-docx mở được.
+    - Sửa các file .rels để loại bỏ Relationship tới macro.
+    - Ghi đè file gốc để python-docx có thể mở.
     """
     if not os.path.isfile(doc_path):
         return
@@ -103,6 +104,7 @@ def sua_docx_co_macro(doc_path: str):
             pass
 
 def loc_ky_tu(text: str) -> str:
+    """Escape ký tự đặc biệt LaTeX và chuẩn hóa Unicode trong văn bản."""
     # Escape các ký tự đặc biệt LaTeX (\, %, $, _, &, #, {, }, ~, ^)
     if not text:
         return ""
@@ -353,7 +355,7 @@ def loc_ky_tu(text: str) -> str:
     return ket_qua
 
 def don_dep_file_rac(duong_dan_dau_ra: str):
-    # Xóa các file phụ sinh ra từ quá trình biên dịch LaTeX
+    """Xóa các file phụ sinh ra từ quá trình biên dịch LaTeX."""
     base_name = os.path.splitext(duong_dan_dau_ra)[0]
     cac_duoi_rac = [
         '.aux', '.log', '.out', '.toc',
@@ -371,7 +373,7 @@ def don_dep_file_rac(duong_dan_dau_ra: str):
 
 
 def xoa_file_an_toan(duong_dan_file: str, so_lan_thu: int = 3, thoi_gian_cho_ms: int = 100) -> bool:
-    # Xóa file an toàn có retry để tránh lỗi file đang bị hệ thống khóa
+    """Xóa file an toàn có retry để tránh lỗi file đang bị hệ thống khóa."""
     for lan in range(max(1, so_lan_thu)):
         try:
             if os.path.exists(duong_dan_file):

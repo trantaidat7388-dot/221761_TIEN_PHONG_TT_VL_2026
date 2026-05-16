@@ -41,12 +41,12 @@ class JinjaLaTeXRenderer:
         self.env.filters['tex_escape'] = self.escape_latex
 
     def escape_latex(self, text: str) -> str:
-        """Escape ký tự LaTeX đặc biệt nếu cần. (Dự phòng khi AST chưa xử lý)"""
+        """Escape ký tự LaTeX đặc biệt nếu AST chưa xử lý."""
         # LocKyTu trong AST parser xử lý phần lớn việc escape.
         return str(text)
 
     def render_body_nodes(self, body_nodes: list, doc_class: str = "generic") -> str:
-        """Hàm hỗ trợ kết xuất các node ngữ nghĩa phổ biến của body sang LaTeX chuẩn."""
+        """Kết xuất danh sách node ngữ nghĩa (body) sang chuỗi LaTeX."""
         out = []
         table_counter = 0
         for node in body_nodes:
@@ -84,7 +84,13 @@ class JinjaLaTeXRenderer:
                         out.append(promoted_eq)
                         continue
                 if para_text:
-                    out.append(f"{para_text}\n\n")
+                    # Strip leading/trailing newlines to prevent redundant blank lines
+                    para_text = para_text.strip()
+                    if para_text.startswith(r"\begin{equation}") or para_text.startswith(r"\begin{figure}"):
+                        # Don't add double newline before/after blocks that already handle their own spacing
+                        out.append(f"{para_text}\n")
+                    else:
+                        out.append(f"{para_text}\n\n")
             elif t == "table":
                 table_counter += 1
                 cols = node.get("cols", 1)
@@ -115,18 +121,46 @@ class JinjaLaTeXRenderer:
                 
                 # Phát hiện bảng có nên là dạng rộng (trải qua hai cột) hay không
                 is_wide = cols > 4 or node.get("is_wide", False)
-                env_name = "table*" if (is_wide and doc_class in ("ieee", "acm")) else "table"
+                # Theo yêu cầu: IEEE chỉ được dùng 1 cột, không dùng table*
+                env_name = "table*" if (is_wide and doc_class == "acm") else "table"
                 scale_width = "\\textwidth" if env_name == "table*" else "\\columnwidth"
+
+                # Bảng siêu dài (>12 hàng): dùng longtable
+                # - Springer (1 cột): longtable hoạt động trực tiếp
+                # - ACM/generic (twocolumn): bọc \onecolumn + longtable + \twocolumn
+                # - IEEE: Theo yêu cầu, giữ nguyên 2 cột, không dùng longtable phá vỡ layout
+                NGUONG_SIEU_DAI = 12
+                is_springer_long = (
+                    doc_class == "springer"
+                    and len(rows_data) > NGUONG_SIEU_DAI
+                )
+                if is_springer_long:
+                    out.append(self._render_springer_longtable(node, cols, col_widths, col_def))
+                    continue
+
+                is_ieee_long = (
+                    doc_class in ("acm", "generic")
+                    and len(rows_data) > NGUONG_SIEU_DAI
+                )
+                if is_ieee_long:
+                    out.append(self._render_ieee_longtable(node, cols, col_widths))
+                    continue
 
                 # Theo chuẩn IEEE: caption nằm TRÊN bảng
                 table_caption = node.get("caption", "Table")
                 # Logic độ rộng được xử lý bằng col_def p{} theo tỷ lệ bên dưới.
                 # Dùng \resizebox như một lớp an toàn cho bảng rộng ngay cả trong một cột.
                 # Giữ bảng IEEE neo vị trí để bảo toàn thứ tự giống Word.
-                if doc_class == "springer":
+                if env_name == "table*":
+                    # table* trong IEEE/ACM twocolumn BẮT BUỘC dùng [t] hoặc [b].
+                    # Không được dùng [H] hay [h] – IEEEtran sẽ bỏ qua hoặc báo lỗi.
+                    table_pos = "[t]"
+                elif doc_class == "springer":
                     table_pos = "[htbp]"
                 else:
-                    table_pos = "[H]"
+                    # IEEE, ACM, generic: dùng float tự nhiên [htbp] để LaTeX
+                    # tự lấp đầy khoảng trắng. KHÔNG dùng [H] trong tài liệu học thuật.
+                    table_pos = "[htbp]"
                 
                 out.append(f"\\begin{{{env_name}}}{table_pos}\n\\centering\n")
                 out.append(f"\\caption{{{table_caption}}}\\label{{tab{table_counter}}}\n")
@@ -157,6 +191,7 @@ class JinjaLaTeXRenderer:
                         colspan = max(1, int(cell.get("colspan", 1) or 1))
                         rowspan = max(1, int(cell.get("rowspan", 1) or 1))
                         text = self._normalize_table_cell_linebreaks(cell.get("text") or "")
+                        text = self._sanitize_table_cell_math(text)
                         if is_header_row and text.strip() and "\\textbf{" not in text:
                             text = f"\\textbf{{{text}}}"
 
@@ -264,17 +299,300 @@ class JinjaLaTeXRenderer:
 
         return result
 
+    def _render_springer_longtable(
+        self,
+        node: dict,
+        cols: int,
+        col_widths: list,
+        col_def: str,
+    ) -> str:
+        """Render bảng siêu dài (>12 hàng) cho Springer LLNCS bằng longtable.
+
+        Springer LLNCS là định dạng 1 cột nên longtable hoạt động trực tiếp.
+        Không cần \\onecolumn / \\twocolumn như IEEE twocolumn.
+        Dùng \\linewidth thay vì \\textwidth để đúng với kích thước text block.
+        """
+        rows_data = node.get("data", [])
+        table_caption = node.get("caption", "Table")
+        has_header = bool(node.get("has_header"))
+
+        # Dùng linewidth (đúng cho Springer 1-cột)
+        lw_col_widths = [w for w in col_widths]
+        lt_col_def = (
+            "|"
+            + "|".join([f"p{{{w:.3f}\\linewidth}}" for w in lw_col_widths])
+            + "|"
+        )
+
+        out = []
+        out.append(f"\\setlength{{\\arrayrulewidth}}{{0.4pt}}")
+        out.append(f"\\begin{{longtable}}{{{lt_col_def}}}")
+        # Caption TRÊN nội dung (chuẩn IEEE + Springer cho bảng)
+        out.append(f"\\caption{{{table_caption}}}\\\\")
+        out.append("\\hline")
+
+        active_multirows: dict = {}
+
+        for r_idx, row in enumerate(rows_data):
+            tex_cells = []
+            c_logical = 0
+            is_header_row = has_header and r_idx == 0
+            row_multirow_starts: dict = {}
+
+            for cell in row:
+                if c_logical >= cols:
+                    break
+                if cell.get("type") == "empty":
+                    tex_cells.append("")
+                    c_logical += 1
+                    continue
+
+                colspan = max(1, int(cell.get("colspan", 1) or 1))
+                rowspan = max(1, int(cell.get("rowspan", 1) or 1))
+                text = self._normalize_table_cell_linebreaks(cell.get("text") or "")
+                text = self._sanitize_table_cell_math(text)
+                if is_header_row and text.strip() and "\\textbf{" not in text:
+                    text = f"\\textbf{{{text}}}"
+
+                token = text
+                if rowspan > 1:
+                    token = f"\\multirow{{{rowspan}}}{{*}}{{{token}}}"
+                    for dc in range(colspan):
+                        row_multirow_starts[c_logical + dc] = rowspan
+                if colspan > 1:
+                    width_slice = lw_col_widths[c_logical:c_logical + colspan]
+                    mc_width = sum(width_slice) if width_slice else (0.98 / cols) * colspan
+                    mc_fmt = (
+                        f"|p{{{mc_width:.3f}\\linewidth}}|"
+                        if c_logical == 0 else
+                        f"p{{{mc_width:.3f}\\linewidth}}|"
+                    )
+                    token = f"\\multicolumn{{{colspan}}}{{{mc_fmt}}}{{{token}}}"
+
+                tex_cells.append(token)
+                c_logical += colspan
+
+            while c_logical < cols:
+                tex_cells.append("")
+                c_logical += 1
+
+            dong_filtered = []
+            skip_mc = 0
+            for cell_str in tex_cells:
+                if skip_mc > 0:
+                    skip_mc -= 1
+                    continue
+                dong_filtered.append(cell_str)
+                if "\\multicolumn{" in cell_str:
+                    mc_m = re.search(r'\\multicolumn\{(\d+)\}', cell_str)
+                    if mc_m:
+                        skip_mc = int(mc_m.group(1)) - 1
+
+            # Cập nhật multirow tracking
+            new_active: dict = {}
+            for col_idx, remaining in active_multirows.items():
+                if remaining > 1:
+                    new_active[col_idx] = remaining - 1
+            for col_idx, rspan in row_multirow_starts.items():
+                new_active[col_idx] = rspan
+            active_multirows = new_active
+
+            spanning_cols = {
+                col_idx for col_idx, remaining in active_multirows.items()
+                if remaining > 1
+            }
+
+            out.append(" & ".join(dong_filtered) + " \\\\")
+
+            if spanning_cols and r_idx < len(rows_data) - 1:
+                cline_parts = []
+                range_start = None
+                for ci in range(cols):
+                    if ci not in spanning_cols:
+                        if range_start is None:
+                            range_start = ci
+                    else:
+                        if range_start is not None:
+                            cline_parts.append(f"\\cline{{{range_start + 1}-{ci}}}")
+                            range_start = None
+                if range_start is not None:
+                    cline_parts.append(f"\\cline{{{range_start + 1}-{cols}}}")
+                out.append("".join(cline_parts) if cline_parts else "\\hline")
+            else:
+                out.append("\\hline")
+
+        out.append("\\end{longtable}")
+        out.append("")
+        return "\n".join(out) + "\n"
+
+    def _render_ieee_longtable(
+        self,
+        node: dict,
+        cols: int,
+        col_widths: list,
+    ) -> str:
+        """Render bảng siêu dài (>12 hàng) cho IEEE/ACM twocolumn bằng longtable.
+
+        IEEE/ACM dùng twocolumn nên longtable KHÔNG hoạt động trực tiếp.
+        Phải bọc bằng ``\\onecolumn`` ... ``\\twocolumn`` để tạm thoát 2 cột.
+        Dùng ``\\textwidth`` (toàn trang) thay vì ``\\linewidth`` (nửa cột).
+        """
+        rows_data = node.get("data", [])
+        table_caption = node.get("caption", "Table")
+        has_header = bool(node.get("has_header"))
+
+        # Dùng textwidth (toàn trang sau khi thoát 2 cột)
+        tw_col_widths = [w for w in col_widths]
+        lt_col_def = (
+            "|"
+            + "|".join([f"p{{{w:.3f}\\textwidth}}" for w in tw_col_widths])
+            + "|"
+        )
+
+        out = []
+        # Thoát khỏi chế độ 2 cột
+        out.append("\\onecolumn")
+        out.append("")
+        out.append(f"\\setlength{{\\arrayrulewidth}}{{0.4pt}}")
+        out.append(f"\\begin{{longtable}}{{{lt_col_def}}}")
+        # Caption TRÊN nội dung (chuẩn IEEE)
+        out.append(f"\\caption{{{table_caption}}}\\\\")
+        out.append("\\hline")
+
+        active_multirows: dict = {}
+
+        for r_idx, row in enumerate(rows_data):
+            tex_cells = []
+            c_logical = 0
+            is_header_row = has_header and r_idx == 0
+            row_multirow_starts: dict = {}
+
+            for cell in row:
+                if c_logical >= cols:
+                    break
+                if cell.get("type") == "empty":
+                    tex_cells.append("")
+                    c_logical += 1
+                    continue
+
+                colspan = max(1, int(cell.get("colspan", 1) or 1))
+                rowspan = max(1, int(cell.get("rowspan", 1) or 1))
+                text = self._normalize_table_cell_linebreaks(cell.get("text") or "")
+                text = self._sanitize_table_cell_math(text)
+                if is_header_row and text.strip() and "\\textbf{" not in text:
+                    text = f"\\textbf{{{text}}}"
+
+                token = text
+                if rowspan > 1:
+                    token = f"\\multirow{{{rowspan}}}{{*}}{{{token}}}"
+                    for dc in range(colspan):
+                        row_multirow_starts[c_logical + dc] = rowspan
+                if colspan > 1:
+                    width_slice = tw_col_widths[c_logical:c_logical + colspan]
+                    mc_width = sum(width_slice) if width_slice else (0.98 / cols) * colspan
+                    mc_fmt = (
+                        f"|p{{{mc_width:.3f}\\textwidth}}|"
+                        if c_logical == 0 else
+                        f"p{{{mc_width:.3f}\\textwidth}}|"
+                    )
+                    token = f"\\multicolumn{{{colspan}}}{{{mc_fmt}}}{{{token}}}"
+
+                tex_cells.append(token)
+                c_logical += colspan
+
+            while c_logical < cols:
+                tex_cells.append("")
+                c_logical += 1
+
+            dong_filtered = []
+            skip_mc = 0
+            for cell_str in tex_cells:
+                if skip_mc > 0:
+                    skip_mc -= 1
+                    continue
+                dong_filtered.append(cell_str)
+                if "\\multicolumn{" in cell_str:
+                    mc_m = re.search(r'\\multicolumn\{(\d+)\}', cell_str)
+                    if mc_m:
+                        skip_mc = int(mc_m.group(1)) - 1
+
+            # Cập nhật multirow tracking
+            new_active: dict = {}
+            for col_idx, remaining in active_multirows.items():
+                if remaining > 1:
+                    new_active[col_idx] = remaining - 1
+            for col_idx, rspan in row_multirow_starts.items():
+                new_active[col_idx] = rspan
+            active_multirows = new_active
+
+            spanning_cols = {
+                col_idx for col_idx, remaining in active_multirows.items()
+                if remaining > 1
+            }
+
+            out.append(" & ".join(dong_filtered) + " \\\\")
+
+            if spanning_cols and r_idx < len(rows_data) - 1:
+                cline_parts = []
+                range_start = None
+                for ci in range(cols):
+                    if ci not in spanning_cols:
+                        if range_start is None:
+                            range_start = ci
+                    else:
+                        if range_start is not None:
+                            cline_parts.append(f"\\cline{{{range_start + 1}-{ci}}}")
+                            range_start = None
+                if range_start is not None:
+                    cline_parts.append(f"\\cline{{{range_start + 1}-{cols}}}")
+                out.append("".join(cline_parts) if cline_parts else "\\hline")
+            else:
+                out.append("\\hline")
+
+        out.append("\\end{longtable}")
+        out.append("")
+        # Quay lại chế độ 2 cột
+        out.append("\\twocolumn")
+        out.append("")
+        return "\n".join(out) + "\n"
+
     def _normalize_table_cell_linebreaks(self, text: str) -> str:
+
+        """Chuẩn hóa xuống dòng trong ô bảng để LaTeX hiểu đúng."""
         if not text:
             return ""
         cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
         return cleaned.replace("\n", r"\\ ")
 
+    def _sanitize_table_cell_math(self, text: str) -> str:
+        """Normalize math in table cells to avoid equation blocks or bad escapes."""
+        if not text:
+            return ""
+
+        def _flatten_equation(match):
+            inner = (match.group(1) or "").strip()
+            if not inner:
+                return ""
+            inner = re.sub(r"\\tag\{[^}]+\}", "", inner)
+            inner = re.sub(r"\s+", " ", inner).strip()
+            return f"${inner}$"
+
+        text = re.sub(
+            r"\\begin\{equation\*?\}\s*(.*?)\s*\\end\{equation\*?\}",
+            _flatten_equation,
+            text,
+            flags=re.DOTALL,
+        )
+
+        # Fix doubled backslashes inside inline math: $\\approx$ -> $\approx$.
+        text = re.sub(r"\$\\\\([A-Za-z]+)", r"$\\\1", text)
+        text = re.sub(r"\\\\([A-Za-z]+)\$", r"\\\1$", text)
+        return text
+
     def _process_omml_math(self, text_with_omml: str) -> str:
-        r"""
-        Thay thế toàn bộ placeholder «OMML:base64» bằng công thức LaTeX thật.
-        Nếu placeholder nằm trong \begin{equation}...\end{equation} thì không bọc $...$.
-        Ngược lại sẽ bọc bằng $...$.
+        r"""Thay placeholder «OMML:base64» bằng LaTeX thật.
+
+        Nếu nằm trong môi trường equation thì không bọc $...$; ngược lại sẽ bọc.
         """
         if "«OMML:" not in text_with_omml:
             return text_with_omml
@@ -320,6 +638,61 @@ class JinjaLaTeXRenderer:
         
         return text_with_omml
 
+    def _normalize_inline_math_escapes(self, text: str) -> str:
+        """Fix doubled backslashes inside inline math tokens like $\\nabla$ -> $\nabla$."""
+        if not text:
+            return text
+        text = re.sub(r"\$\\\\([A-Za-z]+)", r"$\\\1", text)
+        text = re.sub(r"\\\\([A-Za-z]+)\$", r"\\\1$", text)
+        return text
+
+    def _soften_long_equations(self, text: str) -> str:
+        """Insert soft breaks into long equation blocks to reduce overflow."""
+        if not text:
+            return text
+
+        def _soften_block(match):
+            env = match.group(1) or "equation"
+            inner = match.group(2) or ""
+
+            # Collapse letter-spaced tokens (e.g., "W e b C r y p t o" -> "WebCrypto").
+            def _collapse_spaced_letters(text_value: str) -> str:
+                def _join_letters(m):
+                    return re.sub(r"\s+", "", m.group(0))
+
+                return re.sub(r"(?:\b[A-Za-z]\b\s+){2,}\b[A-Za-z]\b", _join_letters, text_value)
+
+            inner = _collapse_spaced_letters(inner)
+
+            if len(inner) < 120:
+                softened = re.sub(r"\.(?=[A-Za-z])", r".\\allowbreak ", inner)
+                softened = re.sub(r",\s*", r",\\allowbreak ", softened)
+                softened = re.sub(r"\(\s*", r"(\\allowbreak ", softened)
+                softened = re.sub(r"\s+", " ", softened).strip()
+                return f"\\begin{{{env}}}\n{softened}\n\\end{{{env}}}"
+
+            # For very long equations, scale to fit the IEEE column.
+            if len(inner) >= 120:
+                scaled = re.sub(r"\s+", " ", inner).strip()
+                return (
+                    f"\\begin{{{env}}}\n"
+                    f"\\resizebox{{\\columnwidth}}{{!}}{{${{\\displaystyle {scaled}}}$}}\n"
+                    f"\\end{{{env}}}"
+                )
+
+            softened = re.sub(r"\.(?=[A-Za-z])", r".\\allowbreak ", inner)
+            softened = re.sub(r",\s*", r",\\allowbreak ", softened)
+            softened = re.sub(r"\(\s*", r"(\\allowbreak ", softened)
+            softened = re.sub(r"\s+", " ", softened).strip()
+            return f"\\begin{{{env}}}\n{softened}\n\\end{{{env}}}"
+
+        return re.sub(
+            r"\\begin\{(equation\*?)\}\s*(.*?)\s*\\end\{\1\}",
+            _soften_block,
+            text,
+            flags=re.DOTALL,
+        )
+
     def render(self, template_name: str, ir_data: dict, output_path: str, **kwargs):
         """
         Kết xuất dữ liệu IR bằng file template đã chỉ định.
@@ -345,6 +718,8 @@ class JinjaLaTeXRenderer:
         # Kết xuất sẵn body nodes để template chỉ cần chèn << body >>
         body_tex = self.render_body_nodes(ir_data.get('body', []), doc_class=doc_class)
         body_tex = self._process_omml_math(body_tex)
+        body_tex = self._normalize_inline_math_escapes(body_tex)
+        body_tex = self._soften_long_equations(body_tex)
         
         if doc_class == "ieee":
             body_tex = self._normalize_ieee_figure_placement(body_tex)
@@ -619,8 +994,29 @@ class JinjaLaTeXRenderer:
             
         if "IEEEtran" in tex_content:
             inject_lines.append("\\raggedbottom")
-            inject_lines.append("\\setlength{\\textfloatsep}{10pt plus 2pt minus 2pt}")
-            inject_lines.append("\\setlength{\\intextsep}{10pt plus 2pt minus 2pt}")
+            inject_lines.append("\\setlength{\\textfloatsep}{6pt plus 2pt minus 2pt}")
+            inject_lines.append("\\setlength{\\intextsep}{6pt plus 2pt minus 2pt}")
+        else:
+            # Springer, ACM, generic: Tighten spacing around figures and equations
+            inject_lines.append("\\setlength{\\textfloatsep}{8pt plus 2pt minus 2pt}")
+            inject_lines.append("\\setlength{\\intextsep}{8pt plus 2pt minus 2pt}")
+            inject_lines.append("\\setlength{\\floatsep}{8pt plus 2pt minus 2pt}")
+        
+        # Global equation spacing adjustment
+        inject_lines.append("\\setlength{\\abovedisplayskip}{4pt}")
+        inject_lines.append("\\setlength{\\belowdisplayskip}{4pt}")
+        inject_lines.append("\\setlength{\\abovedisplayshortskip}{2pt}")
+        inject_lines.append("\\setlength{\\belowdisplayshortskip}{2pt}")
+
+        # Kiểm tra chính xác package longtable đã được load chưa.
+        # Lưu ý: KHÔNG dùng `"longtable" not in tex_content` vì body
+        # có thể chứa `\begin{longtable}` khiến check bị false negative.
+        _has_longtable_pkg = bool(re.search(
+            r'\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{[^}]*longtable[^}]*\}',
+            tex_content,
+        ))
+        if not _has_longtable_pkg:
+            inject_lines.append("\\usepackage{longtable}")
 
         if not inject_lines:
             return tex_content

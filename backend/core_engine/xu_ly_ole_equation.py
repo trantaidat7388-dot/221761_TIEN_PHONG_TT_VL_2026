@@ -135,7 +135,7 @@ _LATEX_SPECIAL = {'%': r'\%', '&': r'\&', '#': r'\#', '_': r'\_', '$': r'\$'}
 # PARSER: MTEF Binary → Parse Tree
 
 class MTEFParser:
-    # Parser cho MTEF v3 binary (Equation Editor 3.0)
+    """Parser cho MTEF v3 binary (Equation Editor 3.0)."""
 
     def __init__(self, data: bytes):
         self.data = data
@@ -148,6 +148,7 @@ class MTEFParser:
         self.pos = 5
 
     def _read_byte(self):
+        """Đọc 1 byte, trả None nếu vượt giới hạn."""
         if self.pos >= len(self.data):
             return None
         b = self.data[self.pos]
@@ -155,11 +156,13 @@ class MTEFParser:
         return b
 
     def _peek_byte(self):
+        """Xem trước 1 byte mà không tăng con trỏ."""
         if self.pos >= len(self.data):
             return None
         return self.data[self.pos]
 
     def _read_uint16_le(self):
+        """Đọc uint16 little-endian an toàn."""
         if self.pos + 1 >= len(self.data):
             self.pos = len(self.data)
             return 0
@@ -169,7 +172,7 @@ class MTEFParser:
         return (hi << 8) | lo
 
     def parse(self):
-        # Parse toàn bộ MTEF → danh sách record
+        """Parse toàn bộ MTEF thành danh sách record."""
         records = []
         while self.pos < len(self.data):
             rec = self._parse_record()
@@ -179,6 +182,7 @@ class MTEFParser:
         return records
 
     def _parse_record(self):
+        """Parse một record MTEF theo tag/type."""
         if self.pos >= len(self.data):
             return None
         tag = self._read_byte()
@@ -211,6 +215,7 @@ class MTEFParser:
             return ('UNKNOWN', tag)
 
     def _parse_line(self, options):
+        """Parse LINE record (danh sách con cho đến END)."""
         children = []
         while self.pos < len(self.data):
             rec = self._parse_record()
@@ -220,12 +225,14 @@ class MTEFParser:
         return ('LINE', children)
 
     def _parse_char(self, options):
+        """Parse CHAR record (font + mã Unicode)."""
         typeface = self._read_byte() or 0x81
         char_code = self._read_uint16_le()
         font_style = typeface - 128
         return ('CHAR', font_style, char_code)
 
     def _parse_tmpl(self, options):
+        """Parse TMPL record (template như phân số, căn, ngoặc...)."""
         selector = self._read_byte() or 0
         variation = self._read_byte() or 0
         # Variation 2 bytes nếu bit 7 set (chủ yếu MTEF v5)
@@ -252,7 +259,7 @@ class MTEFParser:
         return ('TMPL', selector, variation, slots)
 
     def _parse_slot(self):
-        # Đọc danh sách record cho đến END
+        """Đọc danh sách record cho đến END."""
         records = []
         while self.pos < len(self.data):
             rec = self._parse_record()
@@ -262,6 +269,7 @@ class MTEFParser:
         return records
 
     def _parse_pile(self, options):
+        """Parse PILE record (dạng xếp chồng)."""
         halign = self._read_byte() or 0
         lines = []
         while self.pos < len(self.data):
@@ -272,6 +280,7 @@ class MTEFParser:
         return ('PILE', halign, lines)
 
     def _parse_matrix(self, options):
+        """Parse MATRIX record (ma trận)."""
         rows = self._read_byte() or 1
         cols = self._read_byte() or 1
         # Đọc alignment cho mỗi cột
@@ -286,6 +295,7 @@ class MTEFParser:
         return ('MATRIX', rows, cols, cells)
 
     def _parse_embell(self, options):
+        """Parse EMBELL record (dấu mũ, vector...)."""
         embell_type = self._read_byte() or 0
         return ('EMBELL', embell_type)
 
@@ -317,7 +327,7 @@ _EMBELL_MAP = {
 }
 
 def _char_to_latex(font_style, char_code):
-    # Chuyển 1 ký tự MTEF → LaTeX string
+    """Chuyển một ký tự MTEF thành LaTeX."""
     # Kiểm tra bảng Unicode → LaTeX
     if char_code in _UNICODE_TO_LATEX:
         return _UNICODE_TO_LATEX[char_code]
@@ -353,8 +363,7 @@ def _char_to_latex(font_style, char_code):
         return ch
 
 def _split_by_size_markers(records):
-    # Chia danh sách record theo marker FULL/SUB/SYM
-    # Trả về dict: {'full': [...], 'sub': [...], 'sym': [...], ...}
+    """Chia record theo marker FULL/SUB/SYM."""
     parts = {}
     current_key = 'full'
     for rec in records:
@@ -369,14 +378,14 @@ def _split_by_size_markers(records):
     return parts
 
 def _records_to_latex(records):
-    # Chuyển danh sách record → LaTeX string
+    """Chuyển danh sách record thành chuỗi LaTeX."""
     parts = []
     for rec in records:
         parts.append(_node_to_latex(rec))
     return ''.join(parts)
 
 def _node_to_latex(node):
-    # Chuyển 1 node trong parse tree → LaTeX string
+    """Chuyển 1 node parse tree sang LaTeX."""
     if not node:
         return ''
 

@@ -1,4 +1,6 @@
 # chuyen_doi.py - Bộ điều khiển chính: đọc Word, sinh LaTeX
+# Mục đích: điều phối toàn bộ pipeline Word -> LaTeX, gom xử lý ảnh/toán/bảng.
+# Luồng xử lý: load Word -> duyệt phần tử -> chuyển đổi -> ghép template.
 #
 # Lớp ChuyenDoiWordSangLatex đóng vai trò controller:
 #   - Đọc file .docx (python-docx)

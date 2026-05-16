@@ -7,19 +7,35 @@ from docx.table import Table
 from docx.oxml.ns import qn
 
 from .config import OMML_NAMESPACE, W_NAMESPACE, OLE_NAMESPACE, VML_NAMESPACE, R_NAMESPACE, A_NAMESPACE, REL_NAMESPACE
-from .utils import loc_ky_tu
+from .utils import loc_ky_tu, phat_hien_loai_tai_lieu
 from .xu_ly_ole_equation import ole_equation_to_latex
 
 
 class BoXuLyBang:
-    # Bộ xử lý bảng, tách khỏi controller để đảm bảo SRP
+    """Bộ xử lý bảng, tách khỏi controller để đảm bảo SRP."""
 
-    def __init__(self, bo_chuyen):
-        # Nhận tham chiếu đến ChuyenDoiWordSangLatex để dùng lại các hàm xử lý run/ảnh/toán
+    def __init__(self, bo_chuyen, doc_class: str = ""):
+        """Khởi tạo với tham chiếu ChuyenDoiWordSangLatex để tái sử dụng logic.
+
+        Args:
+            bo_chuyen: Tham chiếu đến ChuyenDoiWordSangLatex.
+            doc_class: Loại template ('ieee', 'springer', 'acm', ...). Nếu rỗng,
+                       sẽ tự suy ra từ đường dẫn template của bo_chuyen.
+        """
         self.bo_chuyen = bo_chuyen
+        # Suy ra doc_class từ template nếu chưa được cung cấp
+        if doc_class:
+            self.doc_class = doc_class
+        else:
+            try:
+                template_path = getattr(bo_chuyen, 'duong_dan_template', '')
+                template_src = open(template_path, 'r', encoding='utf-8', errors='ignore').read()
+                self.doc_class = phat_hien_loai_tai_lieu(template_src)
+            except Exception:
+                self.doc_class = "generic"
 
     def la_table_of_contents(self, bang: Table) -> bool:
-        # Phát hiện bảng Mục lục (TOC) dựa trên từ khóa + cấu trúc
+        """Phát hiện bảng Mục lục (TOC) dựa trên từ khóa và cấu trúc."""
         try:
             if len(bang.rows) < 5:
                 return False
@@ -81,7 +97,7 @@ class BoXuLyBang:
         return False
 
     def la_bang_chua_anh(self, bang: Table) -> bool:
-        # Phát hiện bảng chứa chủ yếu ảnh (figure layout)
+        """Phát hiện bảng chứa chủ yếu ảnh (figure layout)."""
         try:
             so_cell_co_anh = 0
             so_cell_co_text_dai = 0
@@ -90,7 +106,7 @@ class BoXuLyBang:
 
             for hang in bang.rows:
                 for cell in hang.cells:
-                    cell_id = id(cell._tc)
+                    cell_id = id(getattr(cell, '_tc', cell))
                     if cell_id in cells_da_kiem:
                         continue
                     cells_da_kiem.add(cell_id)
@@ -133,7 +149,7 @@ class BoXuLyBang:
         return False
 
     def la_bang_layout(self, bang: Table) -> bool:
-        # Phát hiện bảng layout metadata (đầu bài báo: ISSN, Abstract, Keywords...)
+        """Phát hiện bảng layout metadata (đầu bài báo)."""
         try:
             if self.bo_chuyen.tong_so_phan_tu > 0:
                 vi_tri_phan_tram = (self.bo_chuyen.vi_tri_hien_tai / self.bo_chuyen.tong_so_phan_tu) * 100
@@ -170,7 +186,7 @@ class BoXuLyBang:
         return False
 
     def la_bang_metadata(self, bang: Table) -> bool:
-        # Nhận diện bảng Metadata dựa trên từ khóa đầu bài
+        """Nhận diện bảng Metadata dựa trên từ khóa đầu bài."""
         try:
             if self.bo_chuyen.dem_bang > 5:
                 return False
@@ -193,7 +209,7 @@ class BoXuLyBang:
             return False
 
     def tao_latex_minipage_metadata(self, bang: Table) -> str:
-        # Chuyển bảng Metadata thành hai cột minipage (Info | Abstract)
+        """Chuyển bảng Metadata thành hai cột minipage (Info | Abstract)."""
         try:
             latex = []
             latex.append(r"\vspace{0.5cm}")
@@ -227,7 +243,7 @@ class BoXuLyBang:
             return ""
 
     def la_bang_tieu_su(self, bang: Table) -> bool:
-        # Nhận diện bảng tiểu sử tác giả (ảnh + đoạn text dài)
+        """Nhận diện bảng tiểu sử tác giả (ảnh + đoạn text dài)."""
         try:
             if len(bang.columns) != 2:
                 return False
@@ -242,14 +258,17 @@ class BoXuLyBang:
                 if co_anh:
                     break
 
-            text_len = len(bang.rows[0].cells[0].text) + len(bang.rows[0].cells[1].text)
+            cells_hang_0 = bang.rows[0].cells
+            if len(cells_hang_0) < 2:
+                return False
+            text_len = len(cells_hang_0[0].text) + len(cells_hang_0[1].text)
             return co_anh and text_len > 50
         except Exception as e:
             print(f'[Cảnh báo] Lỗi im lặng ở xu_ly_bang.py dòng 242: {e}')
             return False
 
     def trich_xuat_anh_trong_cell(self, cell) -> list:
-        # Trích xuất ảnh từ một ô bảng bằng cách duyệt các paragraph
+        """Trích xuất ảnh từ một ô bảng bằng cách duyệt các paragraph."""
         danh_sach_anh = []
         for para in cell.paragraphs:
             anh_list, _ = self.bo_chuyen.trich_xuat_anh(para)
@@ -257,7 +276,7 @@ class BoXuLyBang:
         return danh_sach_anh
 
     def tao_latex_tieu_su_tac_gia(self, bang: Table) -> str:
-        # Tạo layout tiểu sử tác giả bằng minipage ảnh + text
+        """Tạo layout tiểu sử tác giả bằng minipage ảnh + text."""
         try:
             latex = []
             for hang in bang.rows:
@@ -300,7 +319,7 @@ class BoXuLyBang:
             return ""
 
     def xu_ly_doan_van_trong_cell(self, cell, che_do_inline: bool = True) -> str:
-        # Gộp và xử lý nội dung các paragraph bên trong một ô bảng
+        """Gộp và xử lý nội dung các paragraph bên trong một ô bảng."""
         noi_dung = []
         for p in cell.paragraphs:
             text = self.bo_chuyen.xu_ly_doan_van(p, che_do_inline=che_do_inline)
@@ -309,7 +328,7 @@ class BoXuLyBang:
         return "\n".join(noi_dung)
 
     def la_bang_cong_thuc(self, bang: Table) -> bool:
-        # Phát hiện bảng công thức toán: 2 cột, cột cuối là số thứ tự (1), (2)...
+        """Phát hiện bảng công thức: 2 cột, cột cuối là số thứ tự (1), (2)..."""
         try:
             if len(bang.columns) != 2:
                 return False
@@ -329,7 +348,7 @@ class BoXuLyBang:
         return False
 
     def trich_xuat_noi_dung_bang_layout(self, bang: Table) -> str:
-        # Trích xuất nội dung text từ bảng layout (bỏ cấu trúc bảng)
+        """Trích xuất nội dung text từ bảng layout (bỏ cấu trúc bảng)."""
         ket_qua = []
         da_xuat_para = set()
         try:
@@ -351,7 +370,7 @@ class BoXuLyBang:
         return ''.join(ket_qua)
 
     def trich_xuat_omml_tu_cell(self, cell) -> str:
-        # Trích xuất công thức (OMML hoặc OLE) từ một cell của bảng
+        """Trích xuất công thức (OMML hoặc OLE) từ một cell của bảng."""
         cong_thuc_parts = []
         try:
             for para in cell.paragraphs:
@@ -411,7 +430,9 @@ class BoXuLyBang:
                                                 ten_anh = f'formula_{self.bo_chuyen.dem_anh}.png'
                                                 duong_dan_png = os.path.join(self.bo_chuyen.thu_muc_anh, ten_anh)
                                                 new_size = (img.size[0] * 3, img.size[1] * 3)
-                                                img_resized = img.resize(new_size, Image.LANCZOS)
+                                                # Pillow >= 10: LANCZOS chuyển vào Image.Resampling
+                                                _resample = getattr(Image.Resampling, 'LANCZOS', None) or getattr(Image, 'LANCZOS', Image.BICUBIC)
+                                                img_resized = img.resize(new_size, _resample)
                                                 img_resized.save(duong_dan_png)
                                                 os.remove(duong_dan_anh)
                                             except Exception as e:
@@ -444,7 +465,8 @@ class BoXuLyBang:
             for hang in bang.rows:
                 if len(hang.cells) >= 2:
                     cong_thuc = self.trich_xuat_omml_tu_cell(hang.cells[0])
-                    cell_so = (hang.cells[1].text or "").strip()
+                    cells = hang.cells
+                    cell_so = (cells[1].text or "").strip()
 
                     so_match = re.match(r'^\((\d+)\)$', cell_so)
                     if so_match:
@@ -553,28 +575,36 @@ class BoXuLyBang:
 
     def _xay_dung_luoi_o(self, bang: Table):
         # Xây dựng ma trận cell theo vị trí thực để xử lý rowspan/colspan
-        tbl = bang._tbl
-        tr_list = list(tbl.tr_lst)
+        # Dùng getattr để bypass type stubs: _tbl là thuộc tính internal không được khai báo trong stubs
+        tbl = getattr(bang, '_tbl', None)
+        if tbl is None:
+            return [], {}, {}, 0, 0
+        # Dùng getattr để bypass type stubs của python-docx (tr_lst không có trong stubs)
+        tr_list = list(getattr(tbl, 'tr_lst', []))
 
         # Ước lượng số cột theo tblGrid, fallback theo số tc lớn nhất
+        # Dùng findall trên XML thay vì gridCol_lst (không có trong type stubs của python-docx)
         so_cot = 0
         try:
-            grid_cols = tbl.tblGrid.gridCol_lst
-            so_cot = len(grid_cols)
+            from docx.oxml.ns import qn as _qn
+            grid_els = tbl.tblGrid.findall(_qn('w:gridCol'))
+            so_cot = len(grid_els)
         except Exception as e:
             print(f'[Cảnh báo] Lỗi im lặng ở xu_ly_bang.py dòng 548: {e}')
             so_cot = 0
 
         if so_cot <= 0:
             for tr in tr_list:
-                so_cot = max(so_cot, len(list(tr.tc_lst)))
+                so_cot = max(so_cot, len(list(getattr(tr, 'tc_lst', []))))
 
-        luoi = [[None for _ in range(so_cot)] for _ in range(len(tr_list))]
+        # Khai báo kiểu tường minh để tránh lỗi type-checker khi gán cell_id (int)
+        from typing import Optional
+        luoi: list[list[Optional[int]]] = [[None for _ in range(so_cot)] for _ in range(len(tr_list))]
         meta = {}
 
         for r, tr in enumerate(tr_list):
             c = 0
-            for tc in list(tr.tc_lst):
+            for tc in list(getattr(tr, 'tc_lst', [])):
                 while c < so_cot and luoi[r][c] is not None:
                     c += 1
                 if c >= so_cot:
@@ -641,13 +671,17 @@ class BoXuLyBang:
         # Bỏ kẻ sọc dọc '|' theo chuẩn booktabs
         # Sửa lại: Dùng đường kẻ dọc và ngang tiêu chuẩn (giống Word)
         cot = '|' + '|'.join([f"p{{{width_frac:.3f}\\linewidth}}" for _ in range(so_cot)]) + '|'
-        vi_tri = "[!ht]"
 
         # Nếu số cột > 4, khả năng cao cần chiếm 2 cột trong IEEE/ACM
         is_wide = so_cot > 4
         env_name = "table*" if is_wide else "table"
         scale_width = "\\textwidth" if is_wide else "\\columnwidth"
-        
+
+        # Theo chuẩn IEEEtran:
+        #   - table* (bảng 2 cột) BẮT BUỘC dùng [t] hoặc [b], không được [H] hay [h]
+        #   - table thường dùng [htbp] để LaTeX tự lấp đầy khoảng trắng
+        vi_tri = "[t]" if is_wide else "[htbp]"
+
         latex = rf"\begin{{{env_name}}}{vi_tri}" + "\n"
         latex += r"  \centering" + "\n"
         
@@ -697,7 +731,7 @@ class BoXuLyBang:
                 try:
                     cell_obj = bang.rows[r].cells[0]
                     for candidate in bang.rows[r].cells:
-                        if id(candidate._tc) == id(info['tc']):
+                        if id(getattr(candidate, '_tc', None)) == id(info['tc']):
                             cell_obj = candidate
                             break
                 except Exception:
@@ -768,8 +802,193 @@ class BoXuLyBang:
 
         return latex
 
+    # -------------------------------------------------------------------------
+    # Phân loại và xử lý bảng siêu dài
+    # -------------------------------------------------------------------------
+
+    NGUONG_BANG_SIEU_DAI = 12  # Số hàng tối đa trước khi coi là "siêu dài"
+
+    def _la_bang_sieu_dai(self, bang: Table) -> bool:
+        """Phát hiện bảng có quá nhiều hàng, vượt quá chiều dọc 1 trang."""
+        return len(bang.rows) > self.NGUONG_BANG_SIEU_DAI
+
+    def _render_bang_sieu_dai(self, bang: Table) -> str:
+        """
+        Render bảng dài vượt trang bằng môi trường longtable.
+
+        Phân nhánh theo doc_class:
+
+        **Springer (LLNCS / svjour3 - 1 cột)**:
+          - longtable hoạt động trực tiếp vì định dạng 1 cột.
+          - Dùng \\linewidth (= \\textwidth trong 1 cột).
+          - KHÔNG cần \\onecolumn / \\twocolumn.
+
+        **IEEE / ACM (twocolumn)**:
+          - longtable KHÔNG hoạt động trong chế độ twocolumn.
+          - Phải dùng \\onecolumn -> longtable -> \\twocolumn.
+          - Dùng \\textwidth (toàn trang sau khi thoát 2 cột).
+        """
+        try:
+            luoi, meta, rowspan_map, so_cot, so_hang = self._xay_dung_luoi_o(bang)
+
+            if so_cot <= 0:
+                return self._render_tabular_merge(bang)
+
+            # Phân nhánh: Springer 1-cột vs IEEE/ACM 2-cột
+            is_springer = (self.doc_class == 'springer')
+
+            if is_springer:
+                # Springer LLNCS: 1 cột - longtable đơn giản với \linewidth
+                width_unit = '\\linewidth'
+                prefix_lines: list = []
+                suffix_lines: list = []
+            else:
+                # IEEE / ACM twocolumn: phải thoát ra 1 cột trước
+                width_unit = '\\textwidth'
+                prefix_lines = [r'\onecolumn', '']
+                suffix_lines = ['', r'\twocolumn', '']
+
+            width_frac = 0.97 / so_cot
+            cot_spec = (
+                '|'
+                + '|'.join([f'p{{{width_frac:.3f}{width_unit}}}' for _ in range(so_cot)])
+                + '|'
+            )
+
+            caption = self.bo_chuyen.bat_caption_bang()
+            if caption:
+                caption_clean = re.sub(
+                    r'^(Bảng|Table)\s*\d+\s*[:\.\-–—]?\s*', '', caption, flags=re.IGNORECASE
+                ).strip()
+            else:
+                caption_clean = f'Bảng {self.bo_chuyen.dem_bang}'
+
+            label = f'tab:bang{self.bo_chuyen.dem_bang}'
+
+            latex = list(prefix_lines)
+            latex.append(r'  \setlength{\arrayrulewidth}{0.4pt}')
+            latex.append(rf'  \begin{{longtable}}{{{cot_spec}}}')
+            # Caption trước nội dung - chuẩn IEEE và Springer
+            latex.append(rf'  \caption{{{caption_clean}}}\label{{{label}}}\\\\')
+            latex.append(r'  \hline')
+
+            # ---- Render từng hàng ----
+            occupied_cells: dict = {}
+
+            for r in range(so_hang):
+                tex_cells = []
+                c_logical = 0
+
+                while c_logical < so_cot:
+                    if occupied_cells.get((r, c_logical)):
+                        tex_cells.append('')
+                        c_logical += 1
+                        continue
+
+                    info = meta.get((r, c_logical))
+                    if not info or not info.get('start') or meta.get((r, c_logical)) != info:
+                        tex_cells.append('')
+                        c_logical += 1
+                        continue
+
+                    colspan = int(info.get('colspan') or 1)
+                    cell_id = info['id']
+                    rowspan = int(rowspan_map.get(cell_id, 1))
+
+                    for dr in range(rowspan):
+                        for dc in range(colspan):
+                            if dr > 0 or dc > 0:
+                                occupied_cells[(r + dr, c_logical + dc)] = True
+
+                    try:
+                        cell_obj = bang.rows[r].cells[0]
+                        for candidate in bang.rows[r].cells:
+                            # _tc là thuộc tính internal, dùng getattr để bypass stubs
+                            if id(getattr(candidate, '_tc', None)) == id(info['tc']):
+                                cell_obj = candidate
+                                break
+                    except Exception:
+                        cell_obj = None
+
+                    noi_dung = self.xu_ly_doan_van_trong_cell(cell_obj) if cell_obj else ''
+                    token = (noi_dung.strip()
+                             .replace('\r\n', '\n').replace('\r', '\n')
+                             .replace('\n', r'\\ '))
+
+                    if rowspan > 1:
+                        token = rf'\multirow{{{rowspan}}}{{*}}{{{token}}}'
+                    if colspan > 1:
+                        mc_width = colspan * width_frac
+                        mc_fmt = (
+                            rf'|p{{{mc_width:.3f}{width_unit}}}|'
+                            if c_logical == 0 else
+                            rf'p{{{mc_width:.3f}{width_unit}}}|'
+                        )
+                        token = rf'\multicolumn{{{colspan}}}{{{mc_fmt}}}{{{token}}}'
+
+                    tex_cells.append(token)
+                    c_logical += colspan
+
+                # Lọc multicolumn skip
+                dong_filtered = []
+                skip_mc = 0
+                for cell_str in tex_cells:
+                    if skip_mc > 0:
+                        skip_mc -= 1
+                        continue
+                    dong_filtered.append(cell_str)
+                    mc_match = re.match(r'\\multicolumn\{(\d+)\}', cell_str)
+                    if mc_match:
+                        skip_mc = int(mc_match.group(1)) - 1
+
+                latex.append('    ' + ' & '.join(dong_filtered) + r' \\')
+
+                # Đường kẻ ngang (\hline hoặc \cline)
+                spanning_cols: set = set()
+                for ci in range(so_cot):
+                    info_ci = meta.get((r, ci))
+                    if info_ci and info_ci.get('start'):
+                        cell_id_ci = info_ci['id']
+                        rspan = int(rowspan_map.get(cell_id_ci, 1))
+                        if rspan > 1:
+                            for dc in range(int(info_ci.get('colspan', 1) or 1)):
+                                spanning_cols.add(ci + dc)
+
+                if spanning_cols and r < so_hang - 1:
+                    cline_parts = []
+                    range_start = None
+                    for ci in range(so_cot):
+                        if ci not in spanning_cols:
+                            if range_start is None:
+                                range_start = ci
+                        else:
+                            if range_start is not None:
+                                cline_parts.append(rf'\cline{{{range_start + 1}-{ci}}}')
+                                range_start = None
+                    if range_start is not None:
+                        cline_parts.append(rf'\cline{{{range_start + 1}-{so_cot}}}')
+                    latex.append('  ' + ''.join(cline_parts) if cline_parts else r'  \hline')
+                else:
+                    latex.append(r'  \hline')
+
+            latex.append(r'  \end{longtable}')
+            latex.extend(suffix_lines)
+
+            return '\n'.join(latex) + '\n'
+
+        except Exception as e:
+            print(f'[Cảnh báo] Lỗi _render_bang_sieu_dai, fallback sang tabular: {e}')
+            return self._render_tabular_merge(bang)
+
+
     def xu_ly_bang(self, bang: Table) -> str:
-        # Phân loại và xử lý bảng: Metadata, Tiểu sử, hoặc bảng dữ liệu thường
+        """Phân loại và xử lý bảng theo 4 tầng:
+
+        1. Bảng đặc biệt (Metadata, Tiểu sử, Layout, Công thức, TOC, Ảnh)
+        2. Bảng dữ liệu siêu dài (>12 hàng) → onecolumn + longtable + twocolumn
+        3. Bảng rộng (>4 cột, ≤12 hàng) → table*[t] + resizebox{textwidth}
+        4. Bảng thường (≤4 cột, ≤12 hàng) → table[htbp] + resizebox{columnwidth}
+        """
         try:
             if self.la_bang_metadata(bang):
                 return self.tao_latex_minipage_metadata(bang)
@@ -803,6 +1022,12 @@ class BoXuLyBang:
             self.bo_chuyen.so_bang_noi_dung += 1
             self.bo_chuyen.dem_bang += 1
 
+            # Bảng siêu dài (>12 hàng): dùng onecolumn + longtable + twocolumn
+            # vì longtable không hoạt động trong chế độ twocolumn của IEEE
+            if self._la_bang_sieu_dai(bang):
+                return self._render_bang_sieu_dai(bang)
+
+            # Bảng bình thường: table[htbp] hoặc table*[t] với resizebox
             return self._render_tabular_merge(bang)
         except Exception as e:
             print(f"Lỗi xử lý bảng: {e}")

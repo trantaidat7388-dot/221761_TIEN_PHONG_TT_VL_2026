@@ -4,13 +4,13 @@ import math
 from PIL import Image, ImageStat, ImageFilter
 
 class BoLocAnh:
-    # Bộ lọc ảnh: phân biệt ảnh nội dung (photo, chart) và ảnh trang trí (logo, icon)
+    """Bộ lọc ảnh: phân biệt ảnh nội dung và ảnh trang trí."""
 
     # PHÂN TÍCH ẢNH ĐƠN LẺ
 
     @staticmethod
     def tinh_entropy_anh(duong_dan_hoac_anh) -> float:
-        # Tính entropy (Shannon) đo độ hỗn loạn màu: trang trí <3.5, nội dung >5.0
+        """Tính entropy (Shannon) để đo độ hỗn loạn màu."""
         try:
             if isinstance(duong_dan_hoac_anh, str):
                 im = Image.open(duong_dan_hoac_anh)
@@ -29,7 +29,7 @@ class BoLocAnh:
 
     @staticmethod
     def tinh_so_mau_anh(duong_dan_hoac_anh) -> int:
-        # Đếm số màu duy nhất: logo ít màu (<50), photo nhiều màu (>1000)
+        """Đếm số màu duy nhất để phân biệt logo/ảnh thật."""
         try:
             if isinstance(duong_dan_hoac_anh, str):
                 im = Image.open(duong_dan_hoac_anh)
@@ -45,7 +45,7 @@ class BoLocAnh:
 
     @staticmethod
     def tinh_do_phuc_tap_anh(duong_dan_hoac_anh) -> dict:
-        # Phát hiện cạnh (Edge Detection) và đo độ biến thiên (variance)
+        """Đo độ phức tạp ảnh (edge + variance)."""
         try:
             if isinstance(duong_dan_hoac_anh, str):
                 im = Image.open(duong_dan_hoac_anh).convert('L')
@@ -70,7 +70,7 @@ class BoLocAnh:
 
     @staticmethod
     def phan_tich_histogram(duong_dan_hoac_anh) -> dict:
-        # Phân tích histogram: logo ít peaks + dominant cao, photo ngược lại
+        """Phân tích histogram để ước lượng mức đa dạng màu."""
         try:
             if isinstance(duong_dan_hoac_anh, str):
                 im = Image.open(duong_dan_hoac_anh).convert('L')
@@ -100,7 +100,7 @@ class BoLocAnh:
 
     @classmethod
     def la_anh_noi_dung(cls, duong_dan_hoac_anh) -> bool:
-        # Tổng hợp điểm từ các tiêu chí: >= 4 = nội dung, < 4 = trang trí (max 12)
+        """Chấm điểm theo nhiều tiêu chí để xác định ảnh nội dung."""
         try:
             if isinstance(duong_dan_hoac_anh, str):
                 im = Image.open(duong_dan_hoac_anh)
@@ -158,6 +158,7 @@ class BoLocAnh:
                           tong_so_phan_tu: int,
                           vi_tri_hien_tai: int,
                           kich_thuoc_anh_da_xem: list) -> bool:
+        """Xác định ảnh trang trí dựa trên metadata và ngữ cảnh."""
         # Bỏ qua lọc ảnh trang trí: báo cáo khoa học ít khi có ảnh trang trí,
         # và việc lọc thường loại nhầm các sơ đồ/biểu đồ đơn giản.
         return False

@@ -1,4 +1,8 @@
 import os
+"""
+Mục đích: parse Word -> IR (metadata + body) độc lập bố cục LaTeX.
+Luồng xử lý: load Word -> trích phần tử theo thứ tự -> state machine phân loại.
+"""
 import re
 import hashlib
 import base64
@@ -28,10 +32,10 @@ from .semantic_parser import du_doan_loai_node
 from .word_loader import mo_tai_lieu_word_co_fallback
 
 class WordASTParser:
-    """
-    Parser converts a Word document (.docx) into an Intermediate Representation (IR).
-    The IR is a JSON-serializable dictionary capturing the semantic meaning of the document
-    (Metadata + Body Nodes) independently of LaTeX layout.
+    """Parser chuyển tài liệu Word (.docx) thành IR (Intermediate Representation).
+
+    IR là dict có thể serialize JSON, lưu trữ ý nghĩa ngữ nghĩa của tài liệu
+    (metadata + các node body) độc lập với bố cục LaTeX.
     """
     def __init__(self, doc_path: str, thu_muc_anh: str = "images", mode: str = "latex"):
         self.doc_path = doc_path
@@ -50,14 +54,16 @@ class WordASTParser:
                 "authors": [],
                 "abstract": "",
                 "keywords": [],
-                "total_formulas": 0
+                "total_formulas": 0,
+                "total_tables": 0,
+                "total_images": 0
             },
             "body": [],
             "references": []
         }
         
     def parse(self) -> Dict[str, Any]:
-        """Main entry point to parse the document."""
+        """Điểm vào chính để phân tích tài liệu và trả về IR."""
         try:
             self.doc, self._temp_word_files = mo_tai_lieu_word_co_fallback(self.doc_path)
 
@@ -78,7 +84,7 @@ class WordASTParser:
                     pass
         
     def _extract_elements_in_order(self) -> List[tuple]:
-        """Flatten the document body including elements inside content controls."""
+        """Trích danh sách phần tử theo thứ tự, bao gồm cả nội dung trong content control."""
         elements = []
         # Guard against uninitialized parser state (helps static analyzers)
         if not self.doc:
@@ -90,7 +96,7 @@ class WordASTParser:
                 return
             tag = node.tag.split("}")[-1]
             if tag == "p":
-                elements.append(("paragraph", Paragraph(node, cast(DocxDocument, self.doc))))
+                elements.append(("paragraph", Paragraph(node, self.doc)))
             elif tag in ("oMathPara", "oMath"):
                 elements.append(("omml", node))
                 # Capture nested blocks only from explicit containers where paragraph
@@ -118,7 +124,7 @@ class WordASTParser:
         return elements
         
     def _get_style_name(self, element: Any) -> str:
-        """Safely extract style name from a Paragraph object, handling missing styles or attribute errors."""
+        """Lấy tên style của Paragraph an toàn, xử lý trường hợp thiếu thuộc tính."""
         try:
             if hasattr(element, "style") and element.style is not None:
                 name = getattr(element.style, "name", "")
@@ -128,14 +134,17 @@ class WordASTParser:
         return ""
 
     def _is_abstract_label(self, text: str) -> bool:
+        """Nhận diện nhãn Abstract/Tóm tắt ngắn ở đầu phần."""
         norm = re.sub(r"^[\d\.]+\s*", "", (text or "").strip().upper())
         return norm.startswith("ABSTRACT") or norm.startswith("TÓM TẮT") or norm.startswith("TOM TAT")
         
     def _is_keywords_label(self, text: str) -> bool:
+        """Nhận diện nhãn Keywords/Index Terms (kể cả ACM)."""
         # ACM style often uses "Additional Keywords and Phrases:"
         return bool(re.match(r'^(?:(?:ADDITIONAL\s+)?KEYWORDS?|TỪ KHÓA|TU KHOA|INDEX TERMS)\b', (text or "").strip(), re.IGNORECASE))
 
     def _image_ext_from_content_type(self, content_type: str) -> str:
+        """Suy ra đuôi ảnh từ content-type của quan hệ Word."""
         ct = (content_type or '').lower()
         if 'jpeg' in ct:
             return 'jpg'
@@ -148,7 +157,7 @@ class WordASTParser:
         return 'png'
 
     def _save_image_from_relationship(self, rel) -> Optional[str]:
-        """Persist image blob and return LaTeX path; convert EMF/WMF to PNG when possible."""
+        """Lưu ảnh từ relationship và trả về đường dẫn LaTeX; chuyển EMF/WMF sang PNG nếu có thể."""
         try:
             img_blob = rel.target_part.blob
             img_ext = self._image_ext_from_content_type(getattr(rel.target_part, 'content_type', ''))
@@ -194,10 +203,11 @@ class WordASTParser:
             return None
 
     def _includegraphics_options(self, width_expr: str) -> str:
-        """Use bounded image sizing to preserve layout when source vector crop info is lossy."""
+        """Tạo option \includegraphics để giữ tỉ lệ khi ảnh vector mất thông tin crop."""
         return f"width={width_expr},keepaspectratio"
         
     def _is_body_label(self, text: str) -> bool:
+        """Heuristic nhận diện heading mở đầu thân bài."""
         norm = re.sub(r"^[\d\.]+\s*", "", (text or "").strip().upper())
         for kw in ["INTRODUCTION", "GIỚI THIỆU", "GIOI THIEU", "MỞ ĐẦU", "CHAPTER 1", "BACKGROUND"]:
             if norm.startswith(kw):
@@ -207,6 +217,7 @@ class WordASTParser:
         return False
 
     def _is_authors_label(self, text: str) -> bool:
+        """Heuristic nhận diện nhãn tác giả."""
         norm = (text or "").strip().upper()
         for kw in ["AUTHORS", "TÁC GIẢ", "TAC GIA"]:
             if kw in norm and len(text) < 15:
@@ -214,6 +225,7 @@ class WordASTParser:
         return False
 
     def _is_references_label(self, text: str) -> bool:
+        """Nhận diện nhãn References/Tài liệu tham khảo."""
         norm = re.sub(r"^[\d\.]+\s*", "", (text or "").strip().upper())
         # Avoid false positives like "References and Footnotes" in publisher templates.
         if re.match(r"^REFERENCES\s*[:\.]?$", norm):
@@ -225,6 +237,7 @@ class WordASTParser:
         return False
 
     def _looks_like_reference_entry(self, text: str) -> bool:
+        """Heuristic kiểm tra dòng có giống entry tài liệu tham khảo không."""
         t = (text or '').strip()
         if not t or len(t) < 12:
             return False
@@ -264,15 +277,16 @@ class WordASTParser:
         return False
 
     def _get_para_text_with_br(self, p) -> str:
-        """Helper to reliably extract text from a paragraph, including OMML math equations.
-        Previously, iterating over p.runs ignored all math nodes."""
+        """Lấy text paragraph ổn định, bao gồm cả OMML math.
+
+        Trước đây duyệt p.runs sẽ bỏ sót node toán.
+        """
         return self._parse_paragraph(p).get("text", "").strip()
 
     # ====== HEURISTIC: Table/Image detection (ported from legacy xu_ly_bang.py) ======
 
     def _la_bang_chua_anh(self, table: Table) -> bool:
-        """Phát hiện bảng chứa chủ yếu ảnh (figure layout).
-        Ported from BoXuLyBang.la_bang_chua_anh()."""
+        """Phát hiện bảng chứa chủ yếu ảnh (figure layout)."""
         try:
             so_cell_co_anh = 0
             so_cell_co_text_dai = 0
@@ -321,8 +335,7 @@ class WordASTParser:
         return False
 
     def _trich_xuat_anh_tu_bang(self, table: Table) -> List[str]:
-        """Trích xuất ảnh từ bảng figure-layout, lưu vào thu_muc_anh.
-        Ported from BoXuLyBang.trich_xuat_anh_tu_bang()."""
+        """Trích xuất ảnh từ bảng figure-layout, lưu vào thu_muc_anh."""
         danh_sach_anh = []
         seen_names = set()
         for hang in table.rows:
@@ -369,8 +382,7 @@ class WordASTParser:
         return danh_sach
 
     def _bat_caption_bang(self, elements: List[tuple], idx: int, used_nodes: set) -> Optional[str]:
-        """Bắt caption thật của bảng từ paragraph ngay phía TRÊN (idx - 1).
-        Ported from ChuyenDoiWordSangLatex.bat_caption_bang()."""
+        """Bắt caption thật của bảng từ paragraph ngay phía trên (idx - 1)."""
         try:
             idx_prev = idx - 1
             if idx_prev < 0 or idx_prev >= len(elements):
@@ -415,11 +427,7 @@ class WordASTParser:
         return None
 
     def _bat_caption_hinh_theo_style(self, elements: List[tuple], idx: int, used_nodes: set) -> Optional[str]:
-        """Fallback caption extraction for templates using dedicated caption styles.
-
-        Supports patterns like "Example of a figure caption. (figure caption)"
-        even when they do not start with "Figure/Fig".
-        """
+        """Bắt caption theo style riêng của template (fallback khi không có Figure/Fig)."""
         def _extract_text(raw: str) -> str:
             txt = loc_ky_tu((raw or '').strip())
             if not txt:
@@ -474,8 +482,7 @@ class WordASTParser:
         return None
 
     def _bat_caption_hinh(self, elements: List[tuple], idx: int, used_nodes: set) -> Optional[str]:
-        """Bắt caption thật của hình từ paragraph phía DƯỚI (tìm tối đa 5 đoạn).
-        Ported from ChuyenDoiWordSangLatex.bat_caption_hinh()."""
+        """Bắt caption thật của hình từ paragraph phía dưới (tìm tối đa 5 đoạn)."""
         try:
             for buoc in range(1, 6):
                 idx_sau = idx + buoc
@@ -503,11 +510,7 @@ class WordASTParser:
         return None
 
     def _chuan_hoa_ten_caption(self, text: str, kind: str) -> str:
-        """Return pure caption content without leading label/number.
-
-        This ensures display style (Table/Fig naming) is delegated to the
-        LaTeX template/class instead of duplicating labels from Word input.
-        """
+        """Chuẩn hóa caption, bỏ nhãn/số đầu dòng để template tự hiển thị."""
         caption_text = loc_ky_tu((text or '').strip())
         if not caption_text:
             return caption_text
@@ -537,7 +540,7 @@ class WordASTParser:
         return caption_text
 
     def _is_title_paragraph(self, p: Paragraph, idx: int) -> bool:
-        """Heuristic for title: usually bold, large, or specific style 'Title'."""
+        """Heuristic nhận diện tiêu đề: thường in đậm, cỡ lớn, hoặc style Title."""
         text = (p.text or "").strip()
         if not text or len(text) < 3:
             return False
@@ -567,7 +570,7 @@ class WordASTParser:
         return False
 
     def _build_semantic_tree(self, elements: List[tuple]):
-        """State machine to classify elements into Metadata vs Body nodes."""
+        """State machine phân loại phần tử thành Metadata và Body node."""
         print(f"[*] _build_semantic_tree: Processing {len(elements)} elements")
         state = "pre_title"
 
@@ -659,13 +662,13 @@ class WordASTParser:
                         omml_str = etree.tostring(element, encoding='unicode')
                         omml_b64 = base64.b64encode(omml_str.encode('utf-8')).decode('utf-8')
                         if is_block:
-                            node_text = f"\\begin{{equation}}\n«OMML:{omml_b64}»\n\\end{{equation}}\n"
+                            node_text = f"\\begin{{equation}}\n«OMML:{omml_b64}»\n\\end{{equation}}"
                         else:
                             node_text = f" «OMML:{omml_b64}» "
                     except Exception:
                         latex_math = self.bo_toan.omml_element_to_latex(element)
                         if is_block:
-                            node_text = f"\\begin{{equation}}\n{latex_math}\n\\end{{equation}}\n"
+                            node_text = f"\\begin{{equation}}\n{latex_math}\n\\end{{equation}}"
                         else:
                             node_text = f" ${latex_math}$ "
 
@@ -743,6 +746,7 @@ class WordASTParser:
                     
                     # Safety: if abstract contains a table, it likely means the abstract block is over (IEEE style)
                     if etype == "table":
+                        self.ir["metadata"]["total_tables"] += 1
                         state = "body"
 
                 elif state == "keywords":
@@ -974,6 +978,49 @@ class WordASTParser:
                     extracted_title = p_node.get("text").strip()
                     self.ir["body"].pop(i)
                     break
+
+        # Salvage abstract/keywords if they ended up in body (common in IEEE Word).
+        if not abstract_buf or not keywords_buf:
+            new_body = []
+            abstract_found = bool(abstract_buf)
+            keywords_found = bool(keywords_buf)
+            for p_node in self.ir["body"]:
+                if p_node.get("type") != "paragraph":
+                    new_body.append(p_node)
+                    continue
+
+                p_text = (p_node.get("text") or "").strip()
+                if not p_text:
+                    new_body.append(p_node)
+                    continue
+
+                if not abstract_found and re.match(r"^(?:\\textbf\{)?\s*(abstract|t[oó]m\s+t[aắ]t)\b", p_text, re.IGNORECASE):
+                    cleaned = re.sub(
+                        r"^(?:\\textbf\{)?\s*(abstract|t[oó]m\s+t[aắ]t)\s*\}?\s*[:\.\-–—]*\s*",
+                        "",
+                        p_text,
+                        flags=re.IGNORECASE,
+                    ).strip()
+                    if cleaned:
+                        abstract_buf.append(cleaned)
+                        abstract_found = True
+                        continue
+
+                if not keywords_found and re.match(r"^(?:\\textbf\{)?\s*(keywords?|index\s+terms?|t[uừ]\s+kh[oó]a)\b", p_text, re.IGNORECASE):
+                    cleaned = re.sub(
+                        r"^(?:\\textbf\{)?\s*(keywords?|index\s+terms?|t[uừ]\s+kh[oó]a)\s*\}?\s*[:\.\-–—]*\s*",
+                        "",
+                        p_text,
+                        flags=re.IGNORECASE,
+                    ).strip()
+                    if cleaned:
+                        keywords_buf.append(cleaned)
+                        keywords_found = True
+                        continue
+
+                new_body.append(p_node)
+
+            self.ir["body"] = new_body
         
         if not authors_buf and len(self.ir["body"]) > 0:
             author_candidates = []
@@ -987,17 +1034,38 @@ class WordASTParser:
                 else:
                     break
             authors_buf.extend(author_candidates)
+
+        # Remove stray affiliation line before the first section (common in IEEE output).
+        if self.ir["body"]:
+            first_section_idx = None
+            for i, node in enumerate(self.ir["body"]):
+                if node.get("type") == "section":
+                    first_section_idx = i
+                    break
+
+            if first_section_idx is None:
+                first_section_idx = len(self.ir["body"])
+
+            if first_section_idx > 0:
+                lead = self.ir["body"][0]
+                if lead.get("type") == "paragraph":
+                    lead_text = (lead.get("text") or "").strip()
+                    if lead_text and re.search(r"@[A-Za-z0-9_.-]+\.[A-Za-z]{2,}", lead_text):
+                        self.ir["body"].pop(0)
                      
         # Final metadata assignment
         self.ir["metadata"]["title"] = extracted_title
         parsed_authors = self._parse_authors(authors_raw=authors_buf)
         self.ir["metadata"]["authors"] = parsed_authors
         self.ir["metadata"]["author_block"] = ""  # Will be generated by renderer based on template class
-        self.ir["metadata"]["abstract"] = "\n\n".join(abstract_buf).strip()
+        abstract_text = "\n\n".join(abstract_buf).strip()
+        abstract_text = re.sub(r"^\}+\s*", "", abstract_text)
+        self.ir["metadata"]["abstract"] = abstract_text
         kw_candidates = [k.strip() for k in " ".join(keywords_buf).replace(";", ",").split(",") if k.strip()]
         kw_list = []
         for kw in kw_candidates:
             clean_kw = re.sub(r"^(Additional Keywords and Phrases\s*[:\-–—]|Keywords?\s*[:\-–—]|Index Terms\s*[:\-–—]|Từ khóa\s*[:\-–—])\s*", "", kw, flags=re.IGNORECASE).strip()
+            clean_kw = re.sub(r"^\}+\s*", "", clean_kw)
             clean_kw = re.sub(r"^[\-–—,;:.\s]+", "", clean_kw)
             clean_kw = re.sub(r"[\-–—,;:.\s]+$", "", clean_kw)
             clean_kw = clean_kw.strip("\"'`“”‘’")
@@ -1058,7 +1126,34 @@ class WordASTParser:
                             
             merged_body.append(node)
             
-        self.ir["body"] = merged_body
+        final_body = []
+        i = 0
+        while i < len(merged_body):
+            node = merged_body[i]
+            if node.get("type") == "paragraph":
+                text = node.get("text", "").strip()
+                if re.match(r'^Algorithm\s+\d+', text, re.IGNORECASE) or re.match(r'^Thuật toán\s+\d+', text, re.IGNORECASE):
+                    alg_steps = []
+                    j = i + 1
+                    while j < len(merged_body):
+                        nxt = merged_body[j]
+                        if nxt.get("type") == "paragraph" and (nxt.get("has_border") or nxt.get("is_list") or "\\leftarrow" in nxt.get("text", "") or "\\begin{equation}" in nxt.get("text", "")):
+                            alg_steps.append(nxt)
+                            j += 1
+                        else:
+                            break
+                    if alg_steps:
+                        final_body.append({
+                            "type": "algorithm",
+                            "caption": text,
+                            "steps": alg_steps
+                        })
+                        i = j
+                        continue
+            final_body.append(node)
+            i += 1
+            
+        self.ir["body"] = final_body
 
     def _extract_author_with_superscripts(self, p) -> str:
         """Extract author text preserving superscript markers as \\textsuperscript{}."""
@@ -1310,7 +1405,7 @@ class WordASTParser:
                 if num_match:
                     raw_markers = num_match.group(1)
                     markers = re.findall(r'\d+|[*†‡]', raw_markers)
-                    a["name"] = name[:num_match.start()].strip()
+                    a["name"] = str(name[:num_match.start()]).strip()
                     a["affiliations"] = []
                     for mk in markers:
                         if mk in affil_map:
@@ -1378,7 +1473,7 @@ class WordASTParser:
         )
         cleaned_authors = []
         for a in authors:
-            name = (a.get('name') or '').strip()
+            name = str(a.get('name') or '').strip()
             affs = a.get('affiliations', [])
             if not name:
                 continue
@@ -1479,12 +1574,20 @@ class WordASTParser:
                 has_math = True
                 self.total_formulas += 1
                 latex_math = self.bo_toan.omml_element_to_latex(node)
+                if in_table:
+                    try:
+                        omml_str = etree.tostring(node, encoding='unicode')
+                        omml_b64 = base64.b64encode(omml_str.encode('utf-8')).decode('utf-8')
+                        text += f" «OMML:{omml_b64}» "
+                    except Exception:
+                        text += f" ${latex_math}$ "
+                    return
                 try:
                     omml_str = etree.tostring(node, encoding='unicode')
                     omml_b64 = base64.b64encode(omml_str.encode('utf-8')).decode('utf-8')
-                    text += f"\n\\begin{{equation}}\n«OMML:{omml_b64}»\n\\end{{equation}}\n"
+                    text += f"\\begin{{equation}}\n«OMML:{omml_b64}»\n\\end{{equation}}"
                 except Exception:
-                    text += f"\n\\begin{{equation}}\n{latex_math}\n\\end{{equation}}\n"
+                    text += f"\\begin{{equation}}\n{latex_math}\n\\end{{equation}}"
                 return
             
             if node.tag == f"{{{ns_m}}}oMath":
@@ -1535,7 +1638,7 @@ class WordASTParser:
                     elif c_tag == "drawing" or c_tag == "object" or c_tag == "pict":
                         # Process inline graphic elements by recursing into them
                         # But we need to flush current accumulated text first
-                        if run_text_acc:
+                        if len(run_text_acc) > 0:
                             # In word2word mode, preserve raw Unicode text (no LaTeX escaping).
                             text += loc_ky_tu(run_text_acc) if self.mode != "word2word" else run_text_acc
                             run_text_acc = ""
@@ -1588,12 +1691,14 @@ class WordASTParser:
                                 return
                             
                             if in_table:
+                                self.ir["metadata"]["total_images"] += 1
                                 img_opts = self._includegraphics_options("\\linewidth")
                                 latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                             else:
                                 self.dem_anh += 1
+                                self.ir["metadata"]["total_images"] += 1
                                 img_opts = self._includegraphics_options("\\columnwidth")
-                                latex_img = f"\n\\begin{{figure}}[H]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                                latex_img = f"\\begin{{figure}}[H]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}"
                             text += latex_img
                         except Exception:
                             pass
@@ -1609,12 +1714,14 @@ class WordASTParser:
                             if not latex_path:
                                 return
                             if in_table:
+                                self.ir["metadata"]["total_images"] += 1
                                 img_opts = self._includegraphics_options("\\linewidth")
                                 latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                             else:
                                 self.dem_anh += 1
+                                self.ir["metadata"]["total_images"] += 1
                                 img_opts = self._includegraphics_options("\\columnwidth")
-                                latex_img = f"\n\\begin{{figure}}[H]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                                latex_img = f"\\begin{{figure}}[H]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}"
                             text += latex_img
                         except Exception:
                             pass
@@ -1628,12 +1735,14 @@ class WordASTParser:
                         if not latex_path:
                             return
                         if in_table:
+                            self.ir["metadata"]["total_images"] += 1
                             img_opts = self._includegraphics_options("\\linewidth")
                             latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
                         else:
                             self.dem_anh += 1
+                            self.ir["metadata"]["total_images"] += 1
                             img_opts = self._includegraphics_options("\\columnwidth")
-                            latex_img = f"\n\\begin{{figure}}[H]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}\n"
+                            latex_img = f"\\begin{{figure}}[H]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}"
                         text += latex_img
                     except Exception:
                         pass
@@ -1655,9 +1764,12 @@ class WordASTParser:
                 formula_text = eq_text.replace('½', '\\frac{1}{2}')
                 formula_text = formula_text.replace('×', '\\times')
                 formula_text = formula_text.replace('−', '-')
-                text = f"\\begin{{equation}}\n{formula_text}\n\\tag{{{eq_num}}}\n\\end{{equation}}"
+                if in_table:
+                    text = f"${formula_text}$"
+                else:
+                    text = f"\\begin{{equation}}\n{formula_text}\n\\tag{{{eq_num}}}\n\\end{{equation}}"
+                    level = None
                 has_math = True
-                level = None
         
         # Merge multiple figures inside the same paragraph into a single figure block
         # This handles paragraphs with several inline images that each got their own
@@ -1708,7 +1820,19 @@ class WordASTParser:
             
         # Standard paragraph
         # Ideally, we would preserve bold/italics here. For now, just raw text.
-        return {"type": "paragraph", "text": text or "", "has_math": has_math}
+        has_border = False
+        is_list = False
+        try:
+            pPr = p._element.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}pPr")
+            if pPr is not None:
+                if pPr.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}pBdr") is not None:
+                    has_border = True
+                if pPr.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}numPr") is not None:
+                    is_list = True
+        except Exception:
+            pass
+
+        return {"type": "paragraph", "text": text or "", "has_math": has_math, "has_border": has_border, "is_list": is_list}
 
     def _lay_gridspan(self, tc) -> int:
         try:
@@ -1777,7 +1901,7 @@ class WordASTParser:
                 usable_twips = _len_to_float(getattr(sec, 'page_width', 0)) - _len_to_float(getattr(sec, 'left_margin', 0)) - _len_to_float(getattr(sec, 'right_margin', 0))
                 if usable_twips <= 0:
                     return None
-                ratio = twips / float(usable_twips)
+                ratio = twips / usable_twips
                 return max(0.2, min(0.95, ratio))
         except Exception:
             return None
@@ -1935,7 +2059,7 @@ class WordASTParser:
             
         is_floating_word_table = t._tbl.find(f".//{{{W_NAMESPACE}}}tblpPr") is not None
 
-        return {
+        res = {
             "type": "table",
             "rows": len(tr_list), 
             "cols": so_cot,
@@ -1944,3 +2068,5 @@ class WordASTParser:
             "width_ratio": width_ratio,
             "is_floating_word_table": bool(is_floating_word_table),
         }
+        self.ir["metadata"]["total_tables"] += 1
+        return res

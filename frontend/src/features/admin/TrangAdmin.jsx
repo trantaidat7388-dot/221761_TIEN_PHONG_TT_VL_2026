@@ -18,7 +18,7 @@ const TABS = [
   { key: 'thanh-toan', label: 'Thanh toán', icon: CreditCard },
   { key: 'template', label: 'Template', icon: Files },
   { key: 'lich-su', label: 'Lịch sử', icon: History },
-  { key: 'token-ledger', label: 'Token Ledger', icon: Coins },
+  { key: 'token-ledger', label: 'Nhật ký phát sinh Token', icon: Coins },
   { key: 'cau-hinh', label: 'Cấu hình', icon: Settings },
   { key: 'quan-tri-giao-dien', label: 'Quản trị Giao diện', icon: Paintbrush },
 ];

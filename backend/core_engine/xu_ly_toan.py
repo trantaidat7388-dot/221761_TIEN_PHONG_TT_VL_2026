@@ -33,7 +33,7 @@ _OMML_NSMAP = {
 }
 
 class BoXuLyToan:
-    # Bộ xử lý toán: chuyển OMML XML element → LaTeX string
+    """Bộ xử lý toán: chuyển OMML XML element → LaTeX string."""
 
     def __init__(self, duong_dan_xslt: str = None):
         self._xslt_transform = None
@@ -50,6 +50,7 @@ class BoXuLyToan:
     # KHỞI TẠO
 
     def _init_xslt(self, xslt_path: str | None):
+        """Khởi tạo XSLT transform nếu tìm thấy file."""
         if not xslt_path or not os.path.exists(xslt_path):
             return
         try:
@@ -60,6 +61,7 @@ class BoXuLyToan:
             self._xslt_transform = None
 
     def _init_mathml_converter(self):
+        """Khởi tạo bộ chuyển MathML → LaTeX (nếu có thư viện hỗ trợ)."""
         # Tìm thư viện MathML→LaTeX có sẵn trong môi trường
         # latex2mathml (có hàm ngược mathml→latex ở phiên bản mới)
         try:
@@ -78,6 +80,7 @@ class BoXuLyToan:
         self._mathml_to_latex_fn = None
 
     def _kiem_tra_pandoc(self) -> bool:
+        """Kiểm tra pandoc có sẵn để dùng làm fallback hay không."""
         if self._co_pandoc is not None:
             return self._co_pandoc
         try:
@@ -94,7 +97,7 @@ class BoXuLyToan:
     # API CHÍNH
 
     def omml_element_to_latex(self, omath) -> str:
-        # Chuyển một <m:oMath> element thành chuỗi LaTeX (XSLT → thủ công → Pandoc)
+        """Chuyển <m:oMath> thành LaTeX theo thứ tự ưu tiên: XSLT → manual → Pandoc."""
         latex = ""
         found = False
         
@@ -134,6 +137,7 @@ class BoXuLyToan:
     # HƯỚNG 1: XSLT  (OMML → MathML → LaTeX)
 
     def _via_xslt(self, omath) -> str:
+        """Chuyển OMML qua XSLT (OMML → MathML → LaTeX)."""
         if self._xslt_transform is None:
             return ""
         try:
@@ -155,7 +159,7 @@ class BoXuLyToan:
             return ""
 
     def _mathml_to_latex(self, mathml_str: str) -> str:
-        # Chuyển chuỗi MathML → LaTeX (dùng thư viện hoặc fallback)
+        """Chuyển chuỗi MathML → LaTeX (dùng thư viện hoặc fallback)."""
         # Dùng thư viện nếu có
         if self._mathml_to_latex_fn is not None:
             try:
@@ -168,7 +172,7 @@ class BoXuLyToan:
         return self._mathml_simple_to_latex(mathml_str)
 
     def _mathml_simple_to_latex(self, mathml_str: str) -> str:
-        # Parser MathML → LaTeX đơn giản (fallback khi không có thư viện)
+        """Parser MathML → LaTeX đơn giản (fallback khi không có thư viện)."""
         try:
             # Xóa namespace prefixes để parse dễ hơn
             clean = re.sub(r'<(/?)mml:', r'<\1', mathml_str)
@@ -180,6 +184,7 @@ class BoXuLyToan:
             return ""
 
     def _parse_mathml_node(self, node) -> str:
+        """Đệ quy parse node MathML thành LaTeX đơn giản."""
         tag = etree.QName(node.tag).localname if '}' in node.tag else node.tag
         children_latex = [self._parse_mathml_node(c) for c in node]
 
@@ -251,6 +256,7 @@ class BoXuLyToan:
     # HƯỚNG 2: PANDOC
 
     def _via_pandoc(self, omath) -> str:
+        """Dùng pandoc chuyển OMML sang LaTeX (fallback)."""
         if not self._kiem_tra_pandoc():
             return ""
         try:
@@ -294,6 +300,7 @@ class BoXuLyToan:
     # HƯỚNG 3: PARSER THỦ CÔNG (đệ quy)
 
     def _via_manual_parser(self, omath) -> str:
+        """Fallback thủ công: parse OMML bằng đệ quy nội bộ."""
         try:
             parts = []
             self._process_omml_element(omath, parts)
@@ -303,7 +310,7 @@ class BoXuLyToan:
             return ""
 
     def _process_omml_element(self, elem, parts: list):
-        # Đệ quy xử lý các phần tử OMML (f, rad, sSub, sSup, nary, d, func...)
+        """Đệ quy xử lý các phần tử OMML (f, rad, sSub, sSup, nary, d, func...)."""
         tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
         ns = OMML_NAMESPACE
 

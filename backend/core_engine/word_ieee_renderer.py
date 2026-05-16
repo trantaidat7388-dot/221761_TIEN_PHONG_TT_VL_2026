@@ -81,7 +81,7 @@ _IEEE_CAPTION_LINE_SPACING = 1.0
 
 
 def _to_roman(n: int) -> str:
-    n = max(1, int(n))
+    n = max(1, n)
     parts: list[str] = []
     for value, numeral in _ROMAN_MAP:
         while n >= value:
@@ -91,12 +91,11 @@ def _to_roman(n: int) -> str:
 
 
 class IEEEWordRenderer:
-    """Render IR output into an IEEE-formatted Word document.
+    """Render IR thành tài liệu Word theo chuẩn IEEE.
 
-        Renderer hỗ trợ hai chế độ:
-            1) **Tạo mới từ đầu**: tạo một tài liệu trống mới với style giống IEEE.
-            2) **Dựa trên template**: mở template IEEE .docx được tải lên, xóa body
-                 và dựng lại toàn bộ nội dung bằng style/bố cục của template.
+    Renderer hỗ trợ hai chế độ:
+        1) **Tạo mới từ đầu**: tạo tài liệu mới với style IEEE.
+        2) **Dựa trên template**: mở template IEEE .docx, xóa body và dựng lại nội dung.
     """
 
     def render(
@@ -106,6 +105,7 @@ class IEEEWordRenderer:
         image_root_dir: str | None = None,
         ieee_template_path: str | None = None,
     ) -> str:
+        """Kết xuất IR ra file Word IEEE tại output_path."""
         temp_files: list[str] = []
         try:
             if ieee_template_path:
@@ -174,11 +174,7 @@ class IEEEWordRenderer:
         body_nodes: List[Dict[str, Any]],
         references: List[Dict[str, Any]],
     ) -> None:
-        """Dựng lại nội dung bằng style của template tải lên đồng thời xóa text hướng dẫn của template.
-
-        Ta giữ nguyên thiết lập document/section (margin, cột, khổ trang) bằng cách giữ
-        sectPr ở cuối body XML và chỉ tạo lại phần nội dung người dùng.
-        """
+        """Dựng lại nội dung theo style template và xóa text hướng dẫn có sẵn."""
         self._clear_document_body_preserve_layout(doc)
         self._add_title_section(doc, metadata)
         authors = metadata.get("authors") or []
@@ -212,8 +208,7 @@ class IEEEWordRenderer:
         body_nodes: List[Dict[str, Any]],
         references: List[Dict[str, Any]],
     ) -> None:
-        """Điền dữ liệu vào template IEEE bằng cách tìm các paragraph neo quan trọng
-        rồi thay nội dung của chúng nhưng vẫn giữ định dạng, cột và ngắt section."""
+        """Điền dữ liệu vào template IEEE, giữ nguyên định dạng/cột/section."""
 
         # 1. Điền Metadata (Title, Authors, Abstract, Keywords)
         self._replace_metadata(doc, metadata)
@@ -222,6 +217,7 @@ class IEEEWordRenderer:
         self._replace_body_and_refs(doc, body_nodes, references)
 
     def _replace_metadata(self, doc: DocxDocument, metadata: Dict[str, Any]) -> None:
+        """Thay thế metadata (title/abstract/keywords/authors) trong template."""
         title = (metadata.get("title") or "").strip()
         abstract = self._latex_to_plain(metadata.get("abstract") or "")
         keywords = [self._latex_to_plain(str(k)) for k in (metadata.get("keywords") or [])]
@@ -280,7 +276,7 @@ class IEEEWordRenderer:
         body_nodes: List[Dict[str, Any]],
         references: List[Dict[str, Any]],
     ) -> None:
-        """Finds the INTRODUCTION heading, anchors there, and replaces the rest of the body."""
+        """Tìm heading INTRODUCTION làm điểm neo và thay body còn lại."""
         intro_idx = -1
         ref_idx = -1
         all_paras = list(doc.paragraphs)
@@ -325,10 +321,14 @@ class IEEEWordRenderer:
                 self._insert_table_before(doc, anchor_p, node)
                 continue
 
+            if node_type == "algorithm":
+                self._insert_algorithm_before(doc, anchor_p, node)
+                continue
+
             if node_type == "paragraph":
                 text = node.get("text") or ""
                 # Handle equations slightly differently
-                if r"\begin{equation}" in text or r"$$" in text or r"\[" in text or "«OMML:" in text:
+                if r"\begin{equation}" in text or r"$$" in text or r"\[" in text or re.search(r"[«\uFFFD]OMML:", text):
                     self._insert_equation_before(doc, anchor_p, text)
                 else:
                     self._insert_rich_paragraph_before(anchor_p, text)
@@ -351,6 +351,7 @@ class IEEEWordRenderer:
     # -----------------------------------------------------------------------
 
     def _insert_paragraph_before(self, anchor_p, text: str, size: int = 10, align=WD_ALIGN_PARAGRAPH.JUSTIFY):
+        """Chèn paragraph thường trước anchor, giữ font/size IEEE."""
         new_p = anchor_p.insert_paragraph_before()
         new_p.alignment = align
         run = new_p.add_run(text)
@@ -359,6 +360,7 @@ class IEEEWordRenderer:
         return new_p
 
     def _insert_rich_paragraph_before(self, anchor_p, raw_text: str):
+        """Chèn paragraph có rich-text (bold/italic/hyperlink)."""
         # 1. Strip figures if any
         raw_text, figures = self._extract_figures_from_text(raw_text)
         
@@ -373,9 +375,9 @@ class IEEEWordRenderer:
             self._insert_figure_before(anchor_p, fig)
 
     def _insert_equation_before(self, doc: DocxDocument, anchor_p, raw_text: str) -> None:
-        """Render an equation node as centered OMML or stylized text before an anchor using an invisible table for layout."""
+        """Chèn công thức (OMML hoặc text) trước anchor, căn giữa theo IEEE."""
         # Check for OMML marker first
-        omml_match = re.search(r"«OMML:([A-Za-z0-9+/=]+)»", raw_text)
+        omml_match = re.search(r"[«\uFFFD]OMML:([A-Za-z0-9+/=]+)»?", raw_text)
         tag_match = re.search(r"\\tag\{([^}]*)\}", raw_text)
         if tag_match:
             # Normalize tag content to avoid hidden newlines that break as "(1" then ")".
@@ -395,7 +397,7 @@ class IEEEWordRenderer:
                     b64_xml = omml_match.group(1)
                     self._insert_omml_to_paragraph(p, b64_xml)
                 except Exception:
-                    clean = re.sub(r"«OMML:([A-Za-z0-9+/=]+)»", "", raw_text)
+                    clean = re.sub(r"[«\uFFFD]OMML:([A-Za-z0-9+/=]+)»?", "", raw_text)
                     run = p.add_run(self._latex_math_to_readable(clean).strip())
                     run.font.name = "Times New Roman"
                     run.font.size = self._equation_font_size_for_text(run.text)
@@ -429,7 +431,7 @@ class IEEEWordRenderer:
         try:
             temp_table = doc.add_table(rows=1, cols=2)
         except TypeError:
-            temp_table = doc.add_table(rows=1, cols=2, width=Inches(3.3))
+            temp_table = doc.add_table(rows=1, cols=2)
 
         col_width = self._get_current_column_width_inch(doc)
         number_width = 0.34
@@ -462,7 +464,7 @@ class IEEEWordRenderer:
                 b64_xml = omml_match.group(1)
                 self._insert_omml_to_paragraph(p_eq, b64_xml)
             except Exception:
-                clean = re.sub(r"«OMML:([A-Za-z0-9+/=]+)»", "", raw_text)
+                clean = re.sub(r"[«\uFFFD]OMML:([A-Za-z0-9+/=]+)»?", "", raw_text)
                 run = p_eq.add_run(self._latex_math_to_readable(clean).strip())
                 run.font.name = "Times New Roman"
                 run.font.size = self._equation_font_size_for_text(run.text)
@@ -532,6 +534,43 @@ class IEEEWordRenderer:
             run.italic = True
             run.font.name = "Times New Roman"
             run.font.size = Pt(10)
+
+    def _insert_algorithm_before(self, doc, anchor_p, node: Dict[str, Any]):
+        caption = self._latex_to_plain(node.get("caption") or "Algorithm")
+        steps = node.get("steps", [])
+
+        cap_p = anchor_p.insert_paragraph_before()
+        cap_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        cap_run = cap_p.add_run(caption)
+        cap_run.font.name = "Times New Roman"
+        cap_run.font.size = Pt(10)
+        cap_run.bold = True
+
+        if not steps:
+            return
+
+        table = doc.add_table(rows=len(steps), cols=1)
+        for i, step_node in enumerate(steps):
+            cell = table.cell(i, 0)
+            p = cell.paragraphs[0]
+            text = step_node.get("text") or ""
+            # Prevent nested OMML issue with prefix by separating prefix into a run
+            prefix = ""
+            if not re.match(r'^\s*\d+\.', text):
+                prefix = f"{i+1}. "
+            
+            if prefix:
+                run = p.add_run(prefix)
+                run.font.name = "Times New Roman"
+                run.font.size = Pt(10)
+            
+            self._add_rich_runs(p, text)
+            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(2)
+
+        self._force_table_borders(table)
+        parent = anchor_p._p.getparent()
+        parent.insert(parent.index(anchor_p._p), table._tbl)
 
     def _insert_table_before(self, doc, anchor_p, node: Dict[str, Any]):
         label = f"TABLE {_to_roman(self._heading_counters_table)}"
@@ -864,7 +903,7 @@ class IEEEWordRenderer:
             cell = table.cell(r, c)
             cell.text = ""
             name_text = str(block.get("name") or "")
-            lines = [str(x) for x in (block.get("lines") or []) if str(x).strip()]
+            lines = [x for x in (block.get("lines") or []) if x.strip()]
 
             # IEEE template expects one Author-style paragraph per author block,
             # with line breaks inside (not multiple paragraphs), otherwise spacing gets too loose.
@@ -907,11 +946,12 @@ class IEEEWordRenderer:
                 edge.set(qn("w:val"), "nil")
                 tblBorders.append(edge)
             
-            existing_borders = tblPr.xpath('w:tblBorders')
+            tblPr_any: Any = tblPr
+            existing_borders = tblPr_any.xpath('w:tblBorders')
             if existing_borders:
-                tblPr.replace(existing_borders[0], tblBorders)
+                tblPr_any.replace(existing_borders[0], tblBorders)
             else:
-                tblPr.append(tblBorders)
+                tblPr_any.append(tblBorders)
                 
             # 2. Cell level
             for row in table.rows:
@@ -1014,6 +1054,10 @@ class IEEEWordRenderer:
                     self._add_table_node(doc, node, force_full_width=False)
                 continue
 
+            if node_type == "algorithm":
+                self._add_algorithm_node(doc, node)
+                continue
+
             if node_type == "list":
                 self._add_list_node(doc, node)
                 continue
@@ -1094,7 +1138,7 @@ class IEEEWordRenderer:
         style_applied = False
         if heading_style_name in self._available_styles:
             try:
-                p.style = doc.styles[heading_style_name]
+                p.style = heading_style_name
                 style_applied = True
                 self._remove_paragraph_numbering(p)
             except Exception:
@@ -1141,6 +1185,40 @@ class IEEEWordRenderer:
             run.font.name = "Times New Roman"
             run.font.size = Pt(10)
 
+    def _add_algorithm_node(self, doc, node: Dict[str, Any]):
+        caption = self._latex_to_plain(node.get("caption") or "Algorithm")
+        steps = node.get("steps", [])
+
+        cap_p = doc.add_paragraph()
+        cap_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        cap_run = cap_p.add_run(caption)
+        cap_run.font.name = "Times New Roman"
+        cap_run.font.size = Pt(10)
+        cap_run.bold = True
+
+        if not steps:
+            return
+
+        table = doc.add_table(rows=len(steps), cols=1)
+        for i, step_node in enumerate(steps):
+            cell = table.cell(i, 0)
+            p = cell.paragraphs[0]
+            text = step_node.get("text") or ""
+            prefix = ""
+            if not re.match(r'^\s*\d+\.', text):
+                prefix = f"{i+1}. "
+            
+            if prefix:
+                run = p.add_run(prefix)
+                run.font.name = "Times New Roman"
+                run.font.size = Pt(10)
+
+            self._add_rich_runs(p, text)
+            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(2)
+
+        self._force_table_borders(table)
+
     def _add_table_node(self, doc: DocxDocument, node: Dict[str, Any], force_full_width: bool = False) -> None:
         """Render a table IR node as a real Word table."""
         self._table_index += 1
@@ -1166,7 +1244,8 @@ class IEEEWordRenderer:
         table_style_name = self._resolve_table_style_name(doc)
         if table_style_name:
             try:
-                table.style = table_style_name
+                table_style_name_any: Any = table_style_name
+                table.style = table_style_name_any
             except Exception:
                 pass
         # Apply IEEE-correct borders (top/bottom/insideH only, thin lines)
@@ -1309,7 +1388,7 @@ class IEEEWordRenderer:
         # Handle tab-layout equations from IEEE Word re-parsing:
         # Pattern: \t<equation text>\t(N)
         tab_eq_match = re.match(r"^\t(.+?)\t(\([A-Za-z0-9.\-]+\))\s*$", raw_text)
-        if tab_eq_match and "«OMML:" not in raw_text and "\\begin{" not in raw_text:
+        if tab_eq_match and not re.search(r"[«\uFFFD]OMML:", raw_text) and "\\begin{" not in raw_text:
             eq_text = tab_eq_match.group(1).strip()
             eq_num = tab_eq_match.group(2).strip()
             p = doc.add_paragraph()
@@ -1318,7 +1397,7 @@ class IEEEWordRenderer:
             return
 
         # Check for OMML marker first
-        omml_match = re.search(r"«OMML:([A-Za-z0-9+/=]+)»", raw_text)
+        omml_match = re.search(r"[«\uFFFD]OMML:([A-Za-z0-9+/=]+)»?", raw_text)
         
         # Determine the equation number (tag) if present
         tag_match = re.search(r"\\tag\{([^}]*)\}", raw_text)
@@ -1329,7 +1408,7 @@ class IEEEWordRenderer:
             eq_num = ""
 
         clean = raw_text
-        clean = re.sub(r"«OMML:([A-Za-z0-9+/=]+)»", "", clean)
+        clean = re.sub(r"[«\uFFFD]OMML:([A-Za-z0-9+/=]+)»?", "", clean)
         clean = re.sub(r"\\begin\{equation\*?\}", "", clean)
         clean = re.sub(r"\\end\{equation\*?\}", "", clean)
         clean = re.sub(r"\\tag\{([^}]*)\}", "", clean)
@@ -1489,12 +1568,12 @@ class IEEEWordRenderer:
         Also handles embedded OMML math markers.
         """
         # Handle OMML markers first (they might be inline)
-        if "«OMML:" in raw_text:
-            parts = re.split(r"(«OMML:[A-Za-z0-9+/=]+»)", raw_text)
+        if re.search(r"[«\uFFFD]OMML:", raw_text):
+            parts = re.split(r"([«\uFFFD]OMML:[A-Za-z0-9+/=]+»?)", raw_text)
             for part in parts:
-                if part.startswith("«OMML:") and part.endswith("»"):
+                if part.startswith("«OMML:") or part.startswith("\uFFFDOMML:"):
                     try:
-                        b64_xml = part[6:-1]
+                        b64_xml = part[6:-1] if part.endswith("»") else part[6:]
                         self._insert_omml_to_paragraph(paragraph, b64_xml)
                     except Exception:
                         pass
@@ -1693,7 +1772,7 @@ class IEEEWordRenderer:
         if not text:
             return ""
 
-        s = str(text)
+        s = text
         s = s.replace("\\\\", "\n")
 
         # Convert LaTeX-style quotes to proper Unicode quotes early
@@ -1712,6 +1791,7 @@ class IEEEWordRenderer:
 
         # Handle inline math: convert to readable
         s = re.sub(r"\$([^$]+)\$", lambda m: self._latex_math_to_readable(m.group(1)), s)
+        s = re.sub(r"[«\uFFFD]OMML:[A-Za-z0-9+/=]+»?", "Equation", s)
 
         def __replace_cite(m):
             refs = m.group(1).split(",")
@@ -1816,7 +1896,7 @@ class IEEEWordRenderer:
             # The XML might have namespace declarations that need fixing for lxml insertion
             # We use etree to parse and then append the element
             omml_elem = etree.fromstring(xml_str.encode('utf-8'))
-            tag_name = etree.QName(omml_elem.tag).localname
+            tag_name = omml_elem.tag.split("}")[-1] if "}" in str(omml_elem.tag) else str(omml_elem.tag)
             if tag_name == "oMathPara":
                 math_nodes = list(omml_elem.findall(".//{http://schemas.openxmlformats.org/officeDocument/2006/math}oMath"))
                 if not math_nodes:
@@ -1829,13 +1909,13 @@ class IEEEWordRenderer:
             print(f"[Cảnh báo] Lỗi chèn OMML: {e}")
 
     def _is_equation_like_paragraph(self, raw_text: str) -> bool:
-        text = str(raw_text or "")
+        text = raw_text or ""
         if "\\begin{equation" in text or "\\[" in text or "$$" in text:
             return True
         if "\\tag{" in text:
             return True
-        if "«OMML:" in text:
-            without_markers = re.sub(r"«OMML:[A-Za-z0-9+/=]+»", "", text)
+        if re.search(r"[«\uFFFD]OMML:", text):
+            without_markers = re.sub(r"[«\uFFFD]OMML:[A-Za-z0-9+/=]+»?", "", text)
             without_markers = re.sub(r"\\tag\{[^}]*\}", "", without_markers)
             without_markers = re.sub(r"[\\\s{}\[\]()]+", "", without_markers)
             if not without_markers:
@@ -1901,7 +1981,7 @@ class IEEEWordRenderer:
         section.right_margin = Cm(1.65)
         self._set_section_columns(section, 1)
 
-        normal_style = doc.styles["Normal"]
+        normal_style: Any = doc.styles["Normal"]
         normal_style.font.name = "Times New Roman"
         normal_style.font.size = Pt(10)
         normal_style.paragraph_format.space_before = Pt(0)
@@ -1941,8 +2021,8 @@ class IEEEWordRenderer:
         if cols is None:
             cols = OxmlElement("w:cols")
             sect_pr.append(cols)
-        cols.set(qn("w:num"), str(max(1, int(num))))
-        cols.set(qn("w:space"), str(max(0, int(space_twips))))
+        cols.set(qn("w:num"), str(max(1, num)))
+        cols.set(qn("w:space"), str(max(0, space_twips)))
 
     def _force_table_borders(self, table: Table) -> None:
         """Apply IEEE-standard table borders.
@@ -2277,6 +2357,7 @@ class IEEEWordRenderer:
             text = "\n".join(parts)
         else:
             text = self._latex_to_plain(raw_text)
+        text = re.sub(r"[«\uFFFD]OMML:[A-Za-z0-9+/=]+»?", "Equation", text)
         # Remove LaTeX escape artifacts that _latex_to_plain may miss
         text = text.replace("\\%", "%")
         text = text.replace("\\&", "&")

@@ -27,6 +27,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
         image_root_dir: str | None = None,
         ieee_template_path: str | None = None,
     ) -> str:
+        """Kết xuất IR sang Word theo phong cách Springer."""
         rendered_path = super().render(
             ir_data=ir_data,
             output_path=output_path,
@@ -51,9 +52,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
         body_nodes: List[Dict[str, Any]],
         references: List[Dict[str, Any]],
     ) -> None:
-        '''Ghi đè cách xóa body mặc định để dùng kiểu điền tại chỗ cho template Springer.
-        Cách này giữ nguyên macro, bookmark, field và header/footer của Springer.
-        '''
+        """Ghi đè hành vi xóa body để điền tại chỗ cho template Springer."""
         self._fill_springer_template(doc, metadata, body_nodes, references)
 
     def _fill_springer_template(
@@ -63,6 +62,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
         body_nodes: List[Dict[str, Any]],
         references: List[Dict[str, Any]],
     ) -> None:
+        """Điền metadata/body/references vào template Springer có sẵn."""
         title = (metadata.get("title") or "").strip()
         abstract = self._latex_to_plain(metadata.get("abstract") or "")
         abstract = re.sub(r"^\s*(?:abstract|t[oó]m\s+t[aắ]t)\s*[:.\u2013\u2014\-]+\s*", "", abstract, flags=re.IGNORECASE)
@@ -197,6 +197,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 run_text.font.size = Pt(9)
 
     def _insert_springer_authors_before(self, anchor_p, authors: List[Dict[str, Any]]) -> None:
+        """Chèn khối tác giả trước anchor theo style Springer."""
         author_style = self._pick_style_name(["author", "Author"])
         address_style = self._pick_style_name(["address", "Address", "institute"])
         email_style = self._pick_style_name(["email", "Email", "address", "Normal"])
@@ -294,6 +295,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
             p_email.add_run(", ".join(all_emails))
 
     def _insert_springer_body_before(self, doc: DocxDocument, anchor_p, body_nodes: List[Dict[str, Any]]) -> None:
+        """Chèn body nodes vào tài liệu Springer theo thứ tự ngữ nghĩa."""
         self._section_index = 0
         self._subsection_counters = {}
         prev_rendered_type = None
@@ -381,6 +383,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
                 prev_rendered_type = "paragraph"
 
     def _insert_springer_heading_before(self, anchor_p, text: str, level: int) -> None:
+        """Chèn heading Springer theo level (heading1/2/3)."""
         clean = self._latex_to_plain(text)
         if not clean:
             return

@@ -2,7 +2,7 @@ import re
 
 
 def _escape_latex_text(text: str) -> str:
-    """Escape LaTeX special chars in plain metadata fields (author/affiliation)."""
+    """Escape ký tự đặc biệt LaTeX trong metadata (author/affiliation)."""
     if not text:
         return ""
     from .utils import loc_ky_tu
@@ -10,10 +10,7 @@ def _escape_latex_text(text: str) -> str:
 
 
 def _split_affiliation_line(line: str) -> list:
-    """Split long comma-separated affiliation into shorter chunks for IEEE blocks.
-
-    This helps reduce block width so multi-author rows are less likely to wrap.
-    """
+    """Tách affiliation dài thành các cụm ngắn hơn cho khối IEEE."""
     clean = line.strip()
     if not clean:
         return []
@@ -37,13 +34,13 @@ def _split_affiliation_line(line: str) -> list:
     return chunks
 
 class AuthorBlockStrategy:
-    """Base strategy for generating author block in various LaTeX templates."""
+    """Chiến lược gốc để sinh khối tác giả theo từng template LaTeX."""
     def generate(self, authors: list) -> str:
         raise NotImplementedError
 
 class IEEEAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
-        """Generate author block in IEEEtran format."""
+        """Sinh khối tác giả theo định dạng IEEEtran."""
         symbol_only_re = re.compile(r'^[*†‡]+$')
         email_re = re.compile(r'[\w\.\-\+]+@[\w\.\-]+')
 
@@ -95,7 +92,7 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
 
 class SpringerAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
-        """Generate author block in Springer LNCS format (\\author + \\institute)."""
+        """Sinh khối tác giả theo định dạng Springer LNCS (\\author + \\institute)."""
         email_re = re.compile(r'[\w\.\-\+]+@[\w\.\-]+')
         symbol_only_re = re.compile(r'^[*†‡]+$')
 
@@ -162,7 +159,7 @@ class SpringerAuthorStrategy(AuthorBlockStrategy):
 
 class ElsevierAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
-        """Generate author block in Elsevier format (\\author + \\affiliation)."""
+        """Sinh khối tác giả theo định dạng Elsevier (\\author + \\affiliation)."""
         parts = []
         for author in authors:
             parts.append(f"\\author{{{_escape_latex_text(author['name'])}}}")
@@ -191,7 +188,7 @@ class ElsevierAuthorStrategy(AuthorBlockStrategy):
 
 class ACMAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
-        """Generate author block in ACM format."""
+        """Sinh khối tác giả theo định dạng ACM."""
         parts = []
         for author in authors:
             parts.append(f"\\author{{{_escape_latex_text(author['name'])}}}")
@@ -251,7 +248,7 @@ class ACMAuthorStrategy(AuthorBlockStrategy):
 
 class MDPIAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
-        r"""Generate author block in MDPI format (\Author + \address)."""
+        r"""Sinh khối tác giả theo định dạng MDPI (\Author + \address)."""
         affil_map = {}
         affil_emails = {}
         for author in authors:
@@ -304,9 +301,10 @@ class MDPIAuthorStrategy(AuthorBlockStrategy):
 
 class OSCMAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
-        r"""Generate author block in OSCM Journal format.
-        OSCM uses: \author[*]{Name}{Affiliation, Country}{email}
-        where [*] marks the corresponding author (first author by default).
+        r"""Sinh khối tác giả theo định dạng OSCM.
+
+        OSCM dùng: \author[*]{Name}{Affiliation, Country}{email}
+        với [*] đánh dấu tác giả liên hệ (mặc định là tác giả đầu).
         """
         parts = []
         for i, author in enumerate(authors):
@@ -341,8 +339,9 @@ class OSCMAuthorStrategy(AuthorBlockStrategy):
 
 class JOVAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
-        r"""Generate author block for JOV Journal format.
-        JOV uses: \author{Family name}{First name(s)}{Institution}{Address}{homepage}{email}
+        r"""Sinh khối tác giả theo định dạng JOV.
+
+        JOV dùng: \author{Họ}{Tên}{Cơ quan}{Địa chỉ}{homepage}{email}
         """
         parts = []
         for author in authors:
@@ -380,7 +379,7 @@ class JOVAuthorStrategy(AuthorBlockStrategy):
 
 class GenericAuthorStrategy(AuthorBlockStrategy):
     def generate(self, authors: list) -> str:
-        """Generate a generic \\author{} block with standard LaTeX commands."""
+        """Sinh khối \\author{} chung với lệnh LaTeX tiêu chuẩn."""
         affils = []
         for a in authors:
             for aff in a.get('affiliations', []):

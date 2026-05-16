@@ -633,7 +633,7 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu, danhSac
                 </div>
               )} />
 
-              <DetailSection title="Token Ledger" icon={Coins} items={chiTietLedgerUser} renderItem={(item) => (
+              <DetailSection title="Nhật ký phát sinh Token" icon={Coins} items={chiTietLedgerUser} renderItem={(item) => (
                 <div key={item.id} className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.03]">
                   <p className="text-sm text-white font-medium">{item.reason}</p>
                   {item.meta_json && <p className="text-[11px] text-slate-500 mt-0.5">{item.meta_json}</p>}
@@ -697,7 +697,16 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu, danhSac
               </div>
 
               <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/[0.03] border border-white/5">
-                <div className="h-10 w-10 rounded-full bg-primary-500/20 flex items-center justify-center text-primary-300 font-bold text-xs">
+                {tokenModal.user?.photo_url ? (
+                  <img
+                    src={tokenModal.user.photo_url}
+                    alt={tokenModal.user?.username || 'Avatar'}
+                    referrerPolicy="no-referrer"
+                    className="h-10 w-10 rounded-full object-cover border border-white/10 shadow-sm"
+                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                  />
+                ) : null}
+                <div className={`h-10 w-10 rounded-full bg-primary-500/20 flex items-center justify-center text-primary-300 font-bold text-xs ${tokenModal.user?.photo_url ? 'hidden' : 'flex'}`}>
                   {avatarChars(tokenModal.user)}
                 </div>
                 <div>
@@ -717,7 +726,7 @@ const TabNguoiDung = ({ danhSachNguoiDung, taiDuLieu, setDanhSachLichSu, danhSac
                     placeholder="0" 
                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white text-2xl font-black focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 focus:outline-none transition-all placeholder:text-white/10" 
                   />
-                  <div className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">TK</div>
+                  <div className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">Token</div>
                 </div>
                 {tokenModal.user && tokenModal.amount && Number(tokenModal.amount) > 0 && (
                   <p className="text-[11px] text-slate-500 mt-2">

@@ -368,18 +368,26 @@ async def chuyen_doi_file(
         # Bỏ qua biên dịch PDF, chỉ chuyển Word → LaTeX
         if not output_path.exists(): raise Exception("Không tạo được file .tex đầu ra")
 
-        tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
-        so_hinh_anh = len(re.findall(r'\\includegraphics', tex_raw))
-        so_bang = len(re.findall(r'\\begin\{table', tex_raw))
-        ir = getattr(bo_chuyen_doi, 'ir', None)
-        if ir and ir.get("metadata", {}).get("total_formulas", 0) > 0:
-            so_cong_thuc = ir["metadata"]["total_formulas"]
-        else:
-            so_cong_thuc = len(re.findall(r'\\begin\{(equation\*?|align\*?|eqnarray\*?)\}', tex_raw)) + \
-                           len(re.findall(r'\\\[', tex_raw)) + len(re.findall(r'\\\(', tex_raw)) + \
-                           len(re.findall(r'\$\$', tex_raw)) // 2
-        
         thoi_gian_xu_ly_giay = max(0.0, time.time() - t0)
+        
+        ir = getattr(bo_chuyen_doi, 'ir', None)
+        meta = ir.get("metadata", {}) if ir else {}
+        
+        so_hinh_anh = meta.get("total_images", 0)
+        if so_hinh_anh <= 0:
+            so_hinh_anh = len(re.findall(r'\\includegraphics', tex_raw))
+            
+        so_bang = meta.get("total_tables", 0)
+        if so_bang <= 0:
+            so_bang = len(re.findall(r'\\begin\{(?:table\*?|longtable)\}', tex_raw))
+            
+        if meta.get("total_formulas", 0) > 0:
+            so_cong_thuc = meta["total_formulas"]
+        else:
+            so_cong_thuc = len(re.findall(r'\\begin\{(equation\*?|align\*?|eqnarray\*?|oMathPara|oMath)\}', tex_raw)) + \
+                           len(re.findall(r'\\\[', tex_raw)) + len(re.findall(r'\\\(', tex_raw)) + \
+                           len(re.findall(r'\$\$', tex_raw)) // 2 + \
+                           len(re.findall(r'«OMML:', tex_raw))
         dong_goi_thu_muc_dau_ra(str(job_folder), str(zip_path), generated_tex_name=output_filename)
 
         da_thanh_cong = True
@@ -874,16 +882,25 @@ async def chuyen_doi_file_stream(
 
             yield sse_event(4, "Đang đóng gói kết quả...")
             tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
-            so_hinh_anh = len(re.findall(r'^[^%\n]*\\includegraphics', tex_raw, re.MULTILINE))
-            so_bang = len(re.findall(r'^[^%\n]*\\begin\{table', tex_raw, re.MULTILINE))
             
             ir = getattr(bo_chuyen_doi, 'ir', None)
-            if ir and ir.get("metadata", {}).get("total_formulas", 0) > 0:
-                so_cong_thuc = ir["metadata"]["total_formulas"]
+            meta = ir.get("metadata", {}) if ir else {}
+
+            so_hinh_anh = meta.get("total_images", 0)
+            if so_hinh_anh <= 0:
+                so_hinh_anh = len(re.findall(r'\\includegraphics', tex_raw))
+
+            so_bang = meta.get("total_tables", 0)
+            if so_bang <= 0:
+                so_bang = len(re.findall(r'\\begin\{(?:table\*?|longtable)\}', tex_raw))
+            
+            if meta.get("total_formulas", 0) > 0:
+                so_cong_thuc = meta["total_formulas"]
             else:
-                so_cong_thuc = len(re.findall(r'\\begin\{(equation\*?|align\*?|eqnarray\*?)\}', tex_raw)) + \
+                so_cong_thuc = len(re.findall(r'\\begin\{(equation\*?|align\*?|eqnarray\*?|oMathPara|oMath)\}', tex_raw)) + \
                                len(re.findall(r'\\\[', tex_raw)) + len(re.findall(r'\\\(', tex_raw)) + \
-                               len(re.findall(r'\$\$', tex_raw)) // 2
+                               len(re.findall(r'\$\$', tex_raw)) // 2 + \
+                               len(re.findall(r'«OMML:', tex_raw))
             
             thoi_gian_xu_ly_giay = max(0.0, time.time() - t0)
             zip_filename = output_filename.replace('.tex', '.zip')

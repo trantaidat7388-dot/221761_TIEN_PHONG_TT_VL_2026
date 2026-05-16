@@ -1,8 +1,7 @@
-"""
-Compatibility helpers for python-docx integration.
+"""Tiện ích tương thích cho python-docx.
 
-This module isolates monkey-patch behavior so patches are applied in one place,
-with explicit invocation and idempotent guards.
+Module này gom các monkey-patch vào một nơi, áp dụng có kiểm soát
+và đảm bảo idempotent.
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ _PATCH_APPLIED = False
 
 
 def mo_tai_lieu_word(docx_path: str | None = None) -> Any:
-    """Load a Word document supporting both docx and docm MIME types."""
+    """Nạp tài liệu Word, hỗ trợ cả docx và docm."""
     from docx.api import _default_docx_path
 
     candidate_path = _default_docx_path() if docx_path is None else docx_path
@@ -42,7 +41,7 @@ def mo_tai_lieu_word(docx_path: str | None = None) -> Any:
 
 
 def _lay_toan_bo_van_ban(self) -> str:
-    """Robust text extraction using namespace-agnostic XPath."""
+    """Trích xuất text ổn định bằng XPath không phụ thuộc namespace."""
     try:
         # local-name() matches the tag name regardless of prefix
         res = "".join(node.text for node in self._element.xpath(".//*[local-name()='t']") if node.text)
@@ -57,7 +56,7 @@ def _lay_toan_bo_van_ban(self) -> str:
 
 
 def _lay_toan_bo_run(self) -> list[Run]:
-    """Robust run extraction using namespace-agnostic XPath."""
+    """Trích xuất run ổn định bằng XPath không phụ thuộc namespace."""
     try:
         return [Run(r, self) for r in self._element.xpath(".//*[local-name()='r']")]
     except Exception:
@@ -66,7 +65,7 @@ def _lay_toan_bo_run(self) -> list[Run]:
 
 
 def ap_dung_ban_va_tuong_thich_docx() -> None:
-    """Apply all python-docx compatibility patches exactly once."""
+    """Áp dụng các bản vá tương thích python-docx đúng một lần."""
     global _PATCH_APPLIED
     if _PATCH_APPLIED:
         return

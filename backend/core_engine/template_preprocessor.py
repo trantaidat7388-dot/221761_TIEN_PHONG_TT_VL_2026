@@ -12,15 +12,16 @@ except Exception:
     PUBLISHERS_MANIFEST = {}
 
 class TemplatePreprocessor:
-    """
-    Universal LaTeX template preprocessor for Jinja2 tagging.
-    Supports: IEEE, ACM, Springer (LLNCS), Elsevier, MDPI, and generic templates.
-    Injects Jinja2 variables (e.g. << metadata.title >>, << body >>)
-    using custom delimiters << >> to avoid { } conflict.
+    """Tiền xử lý template LaTeX để gắn thẻ Jinja2.
+
+    Hỗ trợ IEEE, ACM, Springer (LLNCS), Elsevier, MDPI và template chung.
+    Chèn biến Jinja2 (vd: << metadata.title >>, << body >>) bằng delimiter << >>
+    để tránh xung đột với dấu { } của LaTeX.
     """
 
     @classmethod
     def auto_tag(cls, tex_content: str, config: dict | None = None) -> str:
+        """Tự động gắn thẻ metadata/body vào template theo nhà xuất bản."""
         # 1. Detect publisher logic
         tex_content = cls._trim_after_first_end_document(tex_content)
         doc_class = phat_hien_loai_tai_lieu(tex_content)
@@ -299,12 +300,7 @@ class TemplatePreprocessor:
 
     @classmethod
     def _trim_after_first_end_document(cls, tex: str) -> str:
-        """Keep a single LaTeX document by dropping accidental trailing content.
-
-        Some uploaded templates are malformed and contain a second full document
-        appended after the first ``\\end{document}``. We keep everything through the
-        first active ``\\end{document}`` and discard anything that follows.
-        """
+        """Giữ lại duy nhất một tài liệu LaTeX, bỏ phần dư sau \end{document} đầu tiên."""
         end_match = re.search(r'^[ \t]*\\end\{document\}', tex, re.MULTILINE)
         if not end_match:
             return tex
@@ -312,7 +308,7 @@ class TemplatePreprocessor:
 
     @classmethod
     def _normalize_paragraph_spacing(cls, tex: str, doc_class: str) -> str:
-        """Keep paragraph spacing compact and line breaks smoother for Springer-like templates."""
+        """Chuẩn hóa khoảng cách đoạn cho template kiểu Springer."""
         if doc_class != 'springer':
             return tex
 
@@ -348,7 +344,7 @@ class TemplatePreprocessor:
 
     @classmethod
     def _find_matching_brace(cls, text: str, start_index: int) -> int:
-        """Tìm vị trí đóng ngoặc nhọn } khớp với { tại start_index."""
+        """Tìm vị trí ngoặc } khớp với { tại start_index."""
         if start_index >= len(text) or text[start_index] != '{':
             return -1
         count = 0
@@ -363,11 +359,7 @@ class TemplatePreprocessor:
 
     @classmethod
     def _remove_command(cls, tex: str, cmd_regex: str, *, multi_brace: bool = False) -> str:
-        """Remove all occurrences of a LaTeX command with its balanced brace arguments.
-
-        cmd_regex: regex matching the command (e.g. r'\\\\author').
-        multi_brace: if True, consume additional {...} groups after the first.
-        """
+        """Xóa lệnh LaTeX kèm các nhóm ngoặc cân bằng theo regex."""
         pattern = cmd_regex + r'\s*(?:\[[^\]]*\])?\s*\{'
         _failsafe = 0
         while True:
