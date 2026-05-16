@@ -997,16 +997,18 @@ class JinjaLaTeXRenderer:
             inject_lines.append("\\usepackage{graphicx}")
 
         if "\\begin{algorithm}" in tex_content:
-            if "algorithm" not in tex_content:
+            if "\\usepackage{algorithm}" not in tex_content:
                 inject_lines.append("\\usepackage{algorithm}")
                 # Thêm khung cho thuật toán (Boxed style)
                 inject_lines.append("\\floatstyle{boxed}")
                 inject_lines.append("\\restylefloat{algorithm}")
-            if "algorithmic" not in tex_content:
+            if "\\usepackage{algorithmic}" not in tex_content:
                 inject_lines.append("\\usepackage{algorithmic}")
+            if "\\usepackage{float}" not in tex_content:
+                inject_lines.append("\\usepackage{float}")
         
         # Đảm bảo mathtools được nạp để dùng các ký hiệu như \coloneqq
-        if "mathtools" not in tex_content:
+        if "\\usepackage{mathtools}" not in tex_content:
             inject_lines.append("\\usepackage{mathtools}")
             
         if "IEEEtran" in tex_content:
