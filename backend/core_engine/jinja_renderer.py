@@ -669,15 +669,9 @@ class JinjaLaTeXRenderer:
 
             inner = _collapse_spaced_letters(inner)
 
-            if len(inner) < 120:
-                softened = re.sub(r"\.(?=[A-Za-z])", r".\\allowbreak ", inner)
-                softened = re.sub(r",\s*", r",\\allowbreak ", softened)
-                softened = re.sub(r"\(\s*", r"(\\allowbreak ", softened)
-                softened = re.sub(r"\s+", " ", softened).strip()
-                return f"\\begin{{{env}}}\n{softened}\n\\end{{{env}}}"
-
-            # For very long equations, scale to fit the IEEE column.
-            if len(inner) >= 120:
+            # Lowered threshold for IEEE columns (approx 70 chars)
+            # Narrow columns often overflow around 65-75 characters.
+            if len(inner) >= 70:
                 scaled = re.sub(r"\s+", " ", inner).strip()
                 return (
                     f"\\begin{{{env}}}\n"
@@ -685,10 +679,14 @@ class JinjaLaTeXRenderer:
                     f"\\end{{{env}}}"
                 )
 
-            softened = re.sub(r"\.(?=[A-Za-z])", r".\\allowbreak ", inner)
+            # For medium equations, try to insert allowbreak at common points (dots, commas)
+            # Note: Standard equation env doesn't break, but this helps if user changes to dmath/multline
+            softened = inner
+            softened = re.sub(r"\.(?=[A-Za-z])", r".\\allowbreak ", softened)
             softened = re.sub(r",\s*", r",\\allowbreak ", softened)
             softened = re.sub(r"\(\s*", r"(\\allowbreak ", softened)
             softened = re.sub(r"\s+", " ", softened).strip()
+            
             return f"\\begin{{{env}}}\n{softened}\n\\end{{{env}}}"
 
         return re.sub(
@@ -992,6 +990,9 @@ class JinjaLaTeXRenderer:
             inject_lines.append("\\fi")
         if not has_multirow:
             inject_lines.append("\\usepackage{multirow}")
+        
+        if "graphicx" not in tex_content:
+            inject_lines.append("\\usepackage{graphicx}")
         
         # Đảm bảo mathtools được nạp để dùng các ký hiệu như \coloneqq
         if "mathtools" not in tex_content:
