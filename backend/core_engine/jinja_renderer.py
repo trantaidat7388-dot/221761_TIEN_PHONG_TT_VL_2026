@@ -1148,8 +1148,18 @@ class JinjaLaTeXRenderer:
         out.append(f"\\caption{{{caption}}}")
         out.append("\\begin{algorithmic}[1]")
         
-        for step in steps:
-            line_text = step.get("text", "").strip()
+        raw_steps = [s.get("text", "").strip() for s in steps if s.get("text", "").strip()]
+        
+        # Merge split lines (common in Word parsing)
+        merged_txt_steps = []
+        for txt in raw_steps:
+            # If line starts with assignment arrow or is very short and follows a variable name
+            if (txt.startswith("<-") or txt.startswith("leftarrow") or txt.startswith("=")) and merged_txt_steps:
+                merged_txt_steps[-1] += " " + txt
+            else:
+                merged_txt_steps.append(txt)
+
+        for line_text in merged_txt_steps:
             # Remove leading line numbers if present
             line_text = re.sub(r'^\d+[:.]\s*', '', line_text)
             

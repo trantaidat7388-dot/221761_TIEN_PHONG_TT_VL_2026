@@ -1137,7 +1137,28 @@ class WordASTParser:
                     j = i + 1
                     while j < len(merged_body):
                         nxt = merged_body[j]
-                        if nxt.get("type") == "paragraph" and (nxt.get("has_border") or nxt.get("is_list") or "\\leftarrow" in nxt.get("text", "") or "\\begin{equation}" in nxt.get("text", "")):
+                        if nxt.get("type") != "paragraph":
+                            break
+                        
+                        nxt_text = (nxt.get("text") or "").strip()
+                        l_nxt_text = nxt_text.lower()
+                        
+                        # Greedy indicators for algorithm steps
+                        is_step = (
+                            nxt.get("has_border") or 
+                            nxt.get("is_list") or 
+                            "leftarrow" in l_nxt_text or 
+                            "<-" in nxt_text or
+                            "\\leftarrow" in nxt_text or
+                            "\\begin{equation}" in nxt_text or
+                            re.match(r'^(if|then|else|for|while|return|do|until|endif|endfor|endwhile|exception)\b', l_nxt_text) or
+                            nxt.get("first_line_indent", 0) > 0 or 
+                            nxt.get("left_indent", 0) > 0 or
+                            # If it's a very short line right after the caption, it's likely a step
+                            (j == i + 1 and len(nxt_text.split()) < 10)
+                        )
+                        
+                        if is_step:
                             alg_steps.append(nxt)
                             j += 1
                         else:
