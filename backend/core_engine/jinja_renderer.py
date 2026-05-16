@@ -96,6 +96,8 @@ class JinjaLaTeXRenderer:
                         out.append(f"{para_text}\n")
                     else:
                         out.append(f"{para_text}\n\n")
+            elif t == "algorithm":
+                out.append(self._render_algorithm(node))
             elif t == "table":
                 table_counter += 1
                 cols = node.get("cols", 1)
@@ -993,6 +995,12 @@ class JinjaLaTeXRenderer:
         
         if "graphicx" not in tex_content:
             inject_lines.append("\\usepackage{graphicx}")
+
+        if "\\begin{algorithm}" in tex_content:
+            if "algorithm" not in tex_content:
+                inject_lines.append("\\usepackage{algorithm}")
+            if "algorithmic" not in tex_content:
+                inject_lines.append("\\usepackage{algorithmic}")
         
         # Đảm bảo mathtools được nạp để dùng các ký hiệu như \coloneqq
         if "mathtools" not in tex_content:
@@ -1126,3 +1134,61 @@ class JinjaLaTeXRenderer:
                 f.write("}\n\n")
                 
         return bib_path
+
+    def _render_algorithm(self, node: dict) -> str:
+        """Render algorithm node to LaTeX algorithm/algorithmic environment."""
+        caption = node.get("caption", "Algorithm")
+        # Clean up "Algorithm 1:" from caption
+        caption = re.sub(r'^(Algorithm|Thuật toán)\s+\d+:?\s*', '', caption, flags=re.IGNORECASE).strip()
+        
+        steps = node.get("steps", [])
+        
+        out = []
+        out.append("\\begin{algorithm}")
+        out.append(f"\\caption{{{caption}}}")
+        out.append("\\begin{algorithmic}[1]")
+        
+        for step in steps:
+            line_text = step.get("text", "").strip()
+            # Remove leading line numbers if present
+            line_text = re.sub(r'^\d+[:.]\s*', '', line_text)
+            
+            # Map common symbols to LaTeX math
+            line_text = line_text.replace("<-", "$\\leftarrow$")
+            if "leftarrow" in line_text and "$\\leftarrow$" not in line_text:
+                line_text = line_text.replace("leftarrow", "$\\leftarrow$")
+            
+            # Map keywords to algorithmic commands
+            l_text = line_text.lower()
+            if l_text.startswith("if ") and " then" in l_text:
+                m = re.match(r'^if\s+(.*)\s+then', line_text, re.IGNORECASE)
+                cond = m.group(1) if m else line_text[3:-4]
+                out.append(f"  \\IF{{{cond}}}")
+            elif l_text.startswith("else if ") and " then" in l_text:
+                m = re.match(r'^else if\s+(.*)\s+then', line_text, re.IGNORECASE)
+                cond = m.group(1) if m else line_text[7:-4]
+                out.append(f"  \\ELSIF{{{cond}}}")
+            elif l_text == "else":
+                out.append("  \\ELSE")
+            elif l_text == "end if" or l_text == "endif":
+                out.append("  \\ENDIF")
+            elif l_text.startswith("for ") and " do" in l_text:
+                m = re.match(r'^for\s+(.*)\s+do', line_text, re.IGNORECASE)
+                cond = m.group(1) if m else line_text[4:-2]
+                out.append(f"  \\FOR{{{cond}}}")
+            elif l_text == "end for" or l_text == "endfor":
+                out.append("  \\ENDFOR")
+            elif l_text.startswith("while ") and " do" in l_text:
+                m = re.match(r'^while\s+(.*)\s+do', line_text, re.IGNORECASE)
+                cond = m.group(1) if m else line_text[6:-2]
+                out.append(f"  \\WHILE{{{cond}}}")
+            elif l_text == "end while" or l_text == "endwhile":
+                out.append("  \\ENDWHILE")
+            elif l_text.startswith("return "):
+                out.append(f"  \\RETURN {line_text[7:].strip()}")
+            else:
+                out.append(f"  \\STATE {line_text}")
+                
+        out.append("\\end{algorithmic}")
+        out.append("\\end{algorithm}")
+        return "\n".join(out)
