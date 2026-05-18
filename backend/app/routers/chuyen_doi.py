@@ -1136,7 +1136,7 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = 
 
 
 @router.api_route("/tai-ve-pdf/{job_id}", methods=["GET", "HEAD"])
-def tai_ve_pdf_theo_job(job_id: str) -> FileResponse:
+def tai_ve_pdf_theo_job(job_id: str, download: int = 0) -> FileResponse:
     """Tải file PDF đã biên dịch từ job folder."""
     job_folder = TEMP_FOLDER / f"job_{job_id}"
     if not job_folder.exists() or not job_folder.is_dir():
@@ -1157,10 +1157,12 @@ def tai_ve_pdf_theo_job(job_id: str) -> FileResponse:
     elif pdf_path.name == "job_output.pdf":
         ten_hien_thi = "document.pdf"
 
+    disposition = "attachment" if download == 1 else "inline"
+
     return FileResponse(
         path=str(pdf_path), filename=ten_hien_thi, media_type="application/pdf",
         headers={
-            "Content-Disposition": f"inline; filename=\"{ten_hien_thi}\"", 
+            "Content-Disposition": f"{disposition}; filename=\"{ten_hien_thi}\"", 
             "Access-Control-Expose-Headers": "Content-Disposition"
         }
     )

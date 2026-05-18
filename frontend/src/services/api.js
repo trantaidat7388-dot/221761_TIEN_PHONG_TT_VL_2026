@@ -313,7 +313,7 @@ export const taiFilePDF = async (jobId) => {
       const baseUrl = DIA_CHI_API_GOC || window.location.origin;
       window.FlutterBridge.postMessage(JSON.stringify({
         type: 'OPEN_URL',
-        url: `${baseUrl}/api/tai-ve-pdf/${jobId}`
+        url: `${baseUrl}/api/tai-ve-pdf/${jobId}?download=1`
       }));
       return { thanhCong: true };
     }
