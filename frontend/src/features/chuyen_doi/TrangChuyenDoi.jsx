@@ -912,7 +912,8 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                           <NutBam
                             onClick={() => {
                               if (window.FlutterBridge) {
-                                window.FlutterBridge.postMessage(JSON.stringify({ type: 'OPEN_URL', url: pdfKetQua.pdfUrl }));
+                                const baseUrl = pdfKetQua.pdfUrl.startsWith('http') ? '' : window.location.origin;
+                                window.FlutterBridge.postMessage(JSON.stringify({ type: 'OPEN_URL', url: baseUrl + pdfKetQua.pdfUrl }));
                               } else {
                                 window.open(pdfKetQua.pdfUrl, '_blank');
                               }

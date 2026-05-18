@@ -209,9 +209,10 @@ export const taiFileWordTheoJob = async (jobId, tenFileWordFallback = '') => {
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
     if (window.FlutterBridge) {
+      const baseUrl = DIA_CHI_API_GOC || window.location.origin;
       window.FlutterBridge.postMessage(JSON.stringify({
         type: 'OPEN_URL',
-        url: `${DIA_CHI_API_GOC}/api/tai-ve-word/${jobId}`
+        url: `${baseUrl}/api/tai-ve-word/${jobId}`
       }));
       return { thanhCong: true };
     }
@@ -252,9 +253,10 @@ export const taiFileZip = async (jobId, tenFileZipFallback = '') => {
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
     if (window.FlutterBridge) {
+      const baseUrl = DIA_CHI_API_GOC || window.location.origin;
       window.FlutterBridge.postMessage(JSON.stringify({
         type: 'OPEN_URL',
-        url: `${DIA_CHI_API_GOC}/api/tai-ve-zip/${jobId}`
+        url: `${baseUrl}/api/tai-ve-zip/${jobId}`
       }));
       return { thanhCong: true };
     }
@@ -308,9 +310,10 @@ export const taiFilePDF = async (jobId) => {
   try {
     if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
     if (window.FlutterBridge) {
+      const baseUrl = DIA_CHI_API_GOC || window.location.origin;
       window.FlutterBridge.postMessage(JSON.stringify({
         type: 'OPEN_URL',
-        url: `${DIA_CHI_API_GOC}/api/tai-ve-pdf/${jobId}`
+        url: `${baseUrl}/api/tai-ve-pdf/${jobId}`
       }));
       return { thanhCong: true };
     }
