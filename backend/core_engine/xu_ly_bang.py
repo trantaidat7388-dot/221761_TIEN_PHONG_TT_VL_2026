@@ -476,7 +476,7 @@ class BoXuLyBang:
                             latex += f"  {cong_thuc}\n"
                         else:
                             latex += f"  \\text{{[Công thức {so}]}}\n"
-                        latex += rf"  \tag{{{so}}}" + "\n"
+                        latex += rf"  \tag{{{so}}}\label{{eq:eq_{so}}}" + "\n"
                         latex += r"\end{equation}" + "\n\n"
         except Exception as e:
             print(f'[Cảnh báo] Lỗi im lặng ở xu_ly_bang.py dòng 447: {e}')
@@ -689,6 +689,8 @@ class BoXuLyBang:
         caption = self.bo_chuyen.bat_caption_bang()
         if caption:
             caption_clean = re.sub(r'^(Bảng|Table)\s*\d+\s*[:\.\-–—]?\s*', '', caption, flags=re.IGNORECASE).strip()
+            # Bảo vệ \url{} trong caption (Moving Argument)
+            caption_clean = caption_clean.replace(r"\url{", r"\protect\url{")
             latex += rf"  \caption{{{caption_clean}}}" + "\n"
         
         latex += rf"  \resizebox{{{scale_width}}}{{!}}{{%." + "\n"
@@ -862,6 +864,8 @@ class BoXuLyBang:
                 ).strip()
             else:
                 caption_clean = f'Bảng {self.bo_chuyen.dem_bang}'
+            # Bảo vệ \url{} trong caption (Moving Argument)
+            caption_clean = caption_clean.replace(r"\url{", r"\protect\url{")
 
             label = f'tab:bang{self.bo_chuyen.dem_bang}'
 

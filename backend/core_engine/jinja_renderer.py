@@ -47,9 +47,27 @@ class JinjaLaTeXRenderer:
 
     def render_body_nodes(self, body_nodes: list, doc_class: str = "generic") -> str:
         """Kết xuất danh sách node ngữ nghĩa (body) sang chuỗi LaTeX."""
+        # Tiền xử lý để nhóm các paragraph có "is_list" liên tiếp thành "list_block"
+        grouped_nodes = []
+        i = 0
+        while i < len(body_nodes):
+            node = body_nodes[i]
+            if node.get("type") == "paragraph" and node.get("is_list"):
+                list_items = []
+                while i < len(body_nodes) and body_nodes[i].get("type") == "paragraph" and body_nodes[i].get("is_list"):
+                    list_items.append(body_nodes[i])
+                    i += 1
+                grouped_nodes.append({
+                    "type": "list_block",
+                    "items": list_items
+                })
+            else:
+                grouped_nodes.append(node)
+                i += 1
+
         out = []
         table_counter = 0
-        for node in body_nodes:
+        for node in grouped_nodes:
             t = node.get("type", "")
             if t == "section":
                 lvl = node.get("level", 1)
@@ -58,12 +76,19 @@ class JinjaLaTeXRenderer:
                 if doc_class == "springer" and text.isupper() and len(text) > 3:
                     text = text.title()
                     
+                # Tạo nhãn Section duy nhất động cho liên kết chéo
+                sec_label = re.sub(r'[^a-zA-Z0-9]', '_', text.lower()).strip('_')
+                sec_label = re.sub(r'_{2,}', '_', sec_label)
+                label_str = f"\\label{{sec:{sec_label}}}" if sec_label else ""
+                
                 if lvl == 1:
-                    out.append(f"\\section{{{text}}}\n")
+                    out.append(f"\\section{{{text}}}{label_str}\n")
                 elif lvl == 2:
-                    out.append(f"\\subsection{{{text}}}\n")
+                    out.append(f"\\subsection{{{text}}}{label_str}\n")
                 else:
-                    out.append(f"\\subsubsection{{{text}}}\n")
+                    out.append(f"\\subsubsection{{{text}}}{label_str}\n")
+            elif t == "list_block":
+                out.append(self._render_list_block(node))
             elif t == "paragraph":
                 para_text = str(node.get('text', '') or '')
                 para_text = para_text.replace("\\n\\label{", " \\label{")
@@ -78,6 +103,10 @@ class JinjaLaTeXRenderer:
                 para_text = re.sub(r'[\u200b\u200c\u200d\ufeff\xa0]+', ' ', para_text)
                 para_text = re.sub(r'\s*\n+\s*', ' ', para_text)
                 para_text = re.sub(r'[ \t]{2,}', ' ', para_text).strip()
+                
+                # Áp dụng tự động hóa liên kết chéo cho Figure, Table, Equation, Section
+                para_text = self._apply_cross_referencing(para_text)
+                
                 if doc_class in ("springer", "ieee"):
                     promoted_eq = self._promote_inline_equation_paragraph(para_text)
                     if promoted_eq:
@@ -103,9 +132,24 @@ class JinjaLaTeXRenderer:
                 cols = node.get("cols", 1)
                 rows_data = node.get("data", [])
 
+                # Phân tích độ dài văn bản trong bảng biểu để thiết lập chế độ co giãn thông minh (Autofit)
+                total_chars = 0
+                cell_count = 0
+                max_cell_len = 0
+                for row in rows_data:
+                    for cell in row:
+                        cell_text = (cell.get("text") or "").strip()
+                        cell_len = len(cell_text)
+                        total_chars += cell_len
+                        cell_count += 1
+                        if cell_len > max_cell_len:
+                            max_cell_len = cell_len
+                avg_cell_len = total_chars / cell_count if cell_count > 0 else 0
+                
+                is_small_table = cols <= 3 and max_cell_len <= 20 and avg_cell_len <= 10
+                used_resizebox = not is_small_table
+
                 # Thiết lập độ rộng cột. Với bảng metadata 3 cột phổ biến
-                # (Feature/Type/Description), làm cột mô tả rộng hơn
-                # để tránh bẻ dòng quá nhiều và hàng bị cao bất thường.
                 col_widths = None
                 if cols == 3 and rows_data:
                     first_row = rows_data[0]
@@ -124,18 +168,18 @@ class JinjaLaTeXRenderer:
                     width_frac = 0.98 / cols if cols > 0 else 0.15
                     col_widths = [width_frac] * cols
 
-                col_def = "|" + "|".join([f"p{{{w:.3f}\\linewidth}}" for w in col_widths]) + "|"
+                if is_small_table:
+                    # Bảng nhỏ hiển thị tự nhiên với căn giữa đẹp mắt
+                    col_def = "|" + "|".join(["c"] * cols) + "|"
+                else:
+                    col_def = "|" + "|".join([f"p{{{w:.3f}\\linewidth}}" for w in col_widths]) + "|"
                 
                 # Phát hiện bảng có nên là dạng rộng (trải qua hai cột) hay không
                 is_wide = cols > 4 or node.get("is_wide", False)
-                # Theo yêu cầu: IEEE chỉ được dùng 1 cột, không dùng table*
                 env_name = "table*" if (is_wide and doc_class == "acm") else "table"
                 scale_width = "\\textwidth" if env_name == "table*" else "\\columnwidth"
 
                 # Bảng siêu dài (>12 hàng): dùng longtable
-                # - Springer (1 cột): longtable hoạt động trực tiếp
-                # - ACM/generic (twocolumn): bọc \onecolumn + longtable + \twocolumn
-                # - IEEE: Theo yêu cầu, giữ nguyên 2 cột, không dùng longtable phá vỡ layout
                 NGUONG_SIEU_DAI = 12
                 is_springer_long = (
                     doc_class == "springer"
@@ -155,24 +199,21 @@ class JinjaLaTeXRenderer:
 
                 # Theo chuẩn IEEE: caption nằm TRÊN bảng
                 table_caption = node.get("caption", "Table")
-                # Logic độ rộng được xử lý bằng col_def p{} theo tỷ lệ bên dưới.
-                # Dùng \resizebox như một lớp an toàn cho bảng rộng ngay cả trong một cột.
-                # Giữ bảng IEEE neo vị trí để bảo toàn thứ tự giống Word.
+                table_caption = table_caption.replace(r"\url{", r"\protect\url{")
                 if env_name == "table*":
-                    # table* trong IEEE/ACM twocolumn BẮT BUỘC dùng [t] hoặc [b].
-                    # Không được dùng [H] hay [h] – IEEEtran sẽ bỏ qua hoặc báo lỗi.
                     table_pos = "[t]"
                 elif doc_class == "springer":
                     table_pos = "[htbp]"
                 else:
-                    # IEEE, ACM, generic: dùng float tự nhiên [htbp] để LaTeX
-                    # tự lấp đầy khoảng trắng. KHÔNG dùng [H] trong tài liệu học thuật.
                     table_pos = "[htbp]"
                 
                 out.append(f"\\begin{{{env_name}}}{table_pos}\n\\centering\n")
                 out.append(f"\\caption{{{table_caption}}}\\label{{tab{table_counter}}}\n")
-                out.append(f"\\resizebox{{{scale_width}}}{{!}}{{%.\n")
-                out.append("\\begingroup\\small\\setlength{\\tabcolsep}{3pt}\\setlength{\\arrayrulewidth}{0.4pt}\\renewcommand{\\arraystretch}{0.95}\n")
+                if used_resizebox:
+                    out.append(f"\\resizebox{{{scale_width}}}{{!}}{{%.\n")
+                    out.append("\\begingroup\\small\\setlength{\\tabcolsep}{3pt}\\setlength{\\arrayrulewidth}{0.4pt}\\renewcommand{\\arraystretch}{0.95}\n")
+                else:
+                    out.append("\\begingroup\\setlength{\\tabcolsep}{10pt}\\setlength{\\arrayrulewidth}{0.4pt}\\renewcommand{\\arraystretch}{1.1}\n")
                 out.append(f"\\begin{{tabular}}{{{col_def}}}\n\\hline\n")
                 
                 # Theo dõi các multirow đang hoạt động: col_index -> số hàng còn lại
@@ -283,7 +324,8 @@ class JinjaLaTeXRenderer:
                     
                 out.append("\\end{tabular}\n")
                 out.append("\\endgroup\n")
-                out.append("}\n") # End of \resizebox
+                if used_resizebox:
+                    out.append("}\n") # End of \resizebox
                 out.append(f"\\end{{{env_name}}}\n\n")
         
         # Đảm bảo mọi phần tử trong `out` đều là chuỗi
@@ -320,7 +362,7 @@ class JinjaLaTeXRenderer:
         Dùng \\linewidth thay vì \\textwidth để đúng với kích thước text block.
         """
         rows_data = node.get("data", [])
-        table_caption = node.get("caption", "Table")
+        table_caption = node.get("caption", "Table").replace(r"\url{", r"\protect\url{")
         has_header = bool(node.get("has_header"))
 
         # Dùng linewidth (đúng cho Springer 1-cột)
@@ -445,7 +487,7 @@ class JinjaLaTeXRenderer:
         Dùng ``\\textwidth`` (toàn trang) thay vì ``\\linewidth`` (nửa cột).
         """
         rows_data = node.get("data", [])
-        table_caption = node.get("caption", "Table")
+        table_caption = node.get("caption", "Table").replace(r"\url{", r"\protect\url{")
         has_header = bool(node.get("has_header"))
 
         # Dùng textwidth (toàn trang sau khi thoát 2 cột)
@@ -756,10 +798,6 @@ class JinjaLaTeXRenderer:
         # Fix specific LaTeX compilation errors caused by double-escaped arrows inside algorithms or math
         tex_content = tex_content.replace(r"\\\\leftarrow", r"\leftarrow")
         tex_content = tex_content.replace(r"\\leftarrow", r"\leftarrow")
-        
-        # Un-nest if already in math mode (just safe un-nesting)
-        tex_content = tex_content.replace(r"$\leftarrow$", r"\leftarrow")
-        tex_content = tex_content.replace(r"\ensuremath{\leftarrow}", r"\leftarrow")
 
         # Ưu tiên pdfLaTeX theo mặc định, nhưng chuyển sang XeLaTeX khi nội dung
         # đã render có package cần engine Unicode.
@@ -943,7 +981,7 @@ class JinjaLaTeXRenderer:
             return None
 
         num = m.group("num")
-        return f"\\begin{{equation}}\n{expr}\n\\tag{{{num}}}\n\\end{{equation}}\n\n"
+        return f"\\begin{{equation}}\n{expr}\n\\tag{{{num}}}\\label{{eq:eq_{num}}}\n\\end{{equation}}\n\n"
 
     def _remove_float_barriers(self, body_tex: str) -> str:
         """Remove legacy FloatBarrier markers that can force awkward page breaks."""
@@ -953,15 +991,14 @@ class JinjaLaTeXRenderer:
         """Choose a safe TeX engine hint for editors/Overleaf based on content.
         
         Priority:
-        1. Packages requiring XeLaTeX (fontspec, unicode-math, polyglossia)
+        1. Packages or content requiring XeLaTeX (fontspec, unicode-math, polyglossia, Vietnamese chars)
         2. Explicit pdfTeX in documentclass options
         3. Default to pdflatex (fallback to xelatex happens during compilation if needed)
         """
-        if re.search(r"\\usepackage\{fontspec\}", tex_content):
-            return "xelatex"
-        if re.search(r"\\usepackage\{unicode-math\}", tex_content):
-            return "xelatex"
-        if re.search(r"\\usepackage\{polyglossia\}", tex_content):
+        if re.search(r"\\usepackage\{fontspec\}", tex_content) or \
+           re.search(r"\\usepackage\{unicode-math\}", tex_content) or \
+           re.search(r"\\usepackage\{polyglossia\}", tex_content) or \
+           re.search(r'[à-ỹÀ-ỸđĐ\u1E00-\u1EFF]', tex_content):
             return "xelatex"
 
         # Tôn trọng template đã ghim pdfTeX trực tiếp trong options của documentclass.
@@ -1053,6 +1090,10 @@ class JinjaLaTeXRenderer:
         ))
         if not _has_longtable_pkg:
             inject_lines.append("\\usepackage{longtable}")
+            
+        # Ensure enumitem is loaded for professional list support
+        if "enumitem" not in tex_content:
+            inject_lines.append("\\usepackage{enumitem}")
 
         if not inject_lines:
             return tex_content
@@ -1127,7 +1168,7 @@ class JinjaLaTeXRenderer:
         return "\\begin{thebibliography}{" + width_label + "}\n" + "\n".join(items) + "\n\\end{thebibliography}"
 
     def _generate_bib_file(self, references: list, output_path: str) -> str:
-        """Generates a references.bib file alongside the TeX output if references exist."""
+        """Generates a semantic references.bib file alongside the TeX output if references exist."""
         if not references:
             return ""
             
@@ -1141,10 +1182,11 @@ class JinjaLaTeXRenderer:
                 # Xóa số đầu dòng kiểu "[1]" hoặc "1. " khỏi mục tài liệu tham khảo
                 text = re.sub(r'^\[?\d+\]?\s*\.?\s*', '', text).strip()
                 
-                # Ghi entry @misc tối giản vì việc parse sâu citation sang Author/Title nằm ngoài phạm vi 
-                f.write(f"@misc{{ref{i+1},\n")
-                f.write(f"  note = {{{text}}}\n")
-                f.write("}\n\n")
+                # Parse deep BibTeX metadata
+                entry = self._parse_deep_bib_entry(text, i + 1)
+                
+                # Write entry to the BibTeX file
+                f.write(self._serialize_bib_entry(entry) + "\n")
                 
         return bib_path
 
@@ -1175,49 +1217,299 @@ class JinjaLaTeXRenderer:
             else:
                 merged_txt_steps.append(txt)
 
+        open_blocks = []
+
         for line_text in merged_txt_steps:
             # Remove leading line numbers if present
             line_text = re.sub(r'^\d+[:.]\s*', '', line_text)
             
             # Map common symbols to LaTeX math safely
-            line_text = line_text.replace("\\\\leftarrow", "leftarrow")
-            line_text = line_text.replace("\\leftarrow", "leftarrow")
-            line_text = line_text.replace("<-", "leftarrow")
-            line_text = line_text.replace("leftarrow", r" $\leftarrow$ ")
+            line_text = line_text.replace("\\\\leftxarrow", "leftxarrow") # protect from double mapping if any
+            line_text = line_text.replace("\\\\leftarrow", "leftxarrow")
+            line_text = line_text.replace("\\leftarrow", "leftxarrow")
+            line_text = line_text.replace("<-", "leftxarrow")
+            line_text = line_text.replace("leftxarrow", r" $\leftarrow$ ")
             line_text = line_text.replace('$ $', ' ').replace('  ', ' ')
             line_text = line_text.replace('$$', '$')
             
+            # Match leading indentation formatting like \quad, \qquad, spaces, tildes
+            leading_indent_match = re.match(r'^((?:\\quad|\\qquad|\s|~|\\ )*)(.*)$', line_text, re.IGNORECASE)
+            if leading_indent_match:
+                indent, clean_line = leading_indent_match.groups()
+            else:
+                indent, clean_line = "", line_text
+                
+            clean_line = clean_line.strip()
+            l_text = clean_line.lower()
+            
+            if not clean_line:
+                continue
+                
+            # Check if it is a raw algorithmic LaTeX command
+            latex_cmd_match = re.match(
+                r'^\\(STATE|IF|ELSIF|ELSE|ENDIF|FOR|ENDFOR|WHILE|ENDWHILE|REQUIRE|ENSURE|RETURN|PRINT)\b',
+                clean_line,
+                re.IGNORECASE
+            )
+            
+            if latex_cmd_match:
+                cmd = latex_cmd_match.group(1).upper()
+                if cmd == "IF":
+                    open_blocks.append("IF")
+                elif cmd == "FOR":
+                    open_blocks.append("FOR")
+                elif cmd == "WHILE":
+                    open_blocks.append("WHILE")
+                elif cmd == "ENDIF" and open_blocks and open_blocks[-1] == "IF":
+                    open_blocks.pop()
+                elif cmd == "ENDFOR" and open_blocks and open_blocks[-1] == "FOR":
+                    open_blocks.pop()
+                elif cmd == "ENDWHILE" and open_blocks and open_blocks[-1] == "WHILE":
+                    open_blocks.pop()
+                
+                # Output raw LaTeX command directly
+                out.append(f"  {clean_line}")
+                continue
+                
             # Map keywords to algorithmic commands
-            l_text = line_text.lower()
-            if l_text.startswith("if ") and " then" in l_text:
-                m = re.match(r'^if\s+(.*)\s+then', line_text, re.IGNORECASE)
-                cond = m.group(1) if m else line_text[3:-4]
+            if l_text.startswith("if "):
+                cond = clean_line[3:].strip()
+                if cond.lower().endswith(" then"):
+                    cond = cond[:-5].strip()
                 out.append(f"  \\IF{{{cond}}}")
-            elif l_text.startswith("else if ") and " then" in l_text:
-                m = re.match(r'^else if\s+(.*)\s+then', line_text, re.IGNORECASE)
-                cond = m.group(1) if m else line_text[7:-4]
+                open_blocks.append("IF")
+            elif l_text.startswith("else if "):
+                cond = clean_line[8:].strip()
+                if cond.lower().endswith(" then"):
+                    cond = cond[:-5].strip()
                 out.append(f"  \\ELSIF{{{cond}}}")
             elif l_text == "else":
                 out.append("  \\ELSE")
-            elif l_text == "end if" or l_text == "endif":
+            elif l_text in ("end if", "endif", "end_if"):
+                if open_blocks and open_blocks[-1] == "IF":
+                    open_blocks.pop()
                 out.append("  \\ENDIF")
-            elif l_text.startswith("for ") and " do" in l_text:
-                m = re.match(r'^for\s+(.*)\s+do', line_text, re.IGNORECASE)
-                cond = m.group(1) if m else line_text[4:-2]
+            elif l_text.startswith("for "):
+                cond = clean_line[4:].strip()
+                if cond.lower().endswith(" do"):
+                    cond = cond[:-3].strip()
                 out.append(f"  \\FOR{{{cond}}}")
-            elif l_text == "end for" or l_text == "endfor":
+                open_blocks.append("FOR")
+            elif l_text in ("end for", "endfor", "end_for"):
+                if open_blocks and open_blocks[-1] == "FOR":
+                    open_blocks.pop()
                 out.append("  \\ENDFOR")
-            elif l_text.startswith("while ") and " do" in l_text:
-                m = re.match(r'^while\s+(.*)\s+do', line_text, re.IGNORECASE)
-                cond = m.group(1) if m else line_text[6:-2]
+            elif l_text.startswith("while "):
+                cond = clean_line[6:].strip()
+                if cond.lower().endswith(" do"):
+                    cond = cond[:-3].strip()
                 out.append(f"  \\WHILE{{{cond}}}")
-            elif l_text == "end while" or l_text == "endwhile":
+                open_blocks.append("WHILE")
+            elif l_text in ("end while", "endwhile", "end_while"):
+                if open_blocks and open_blocks[-1] == "WHILE":
+                    open_blocks.pop()
                 out.append("  \\ENDWHILE")
             elif l_text.startswith("return "):
-                out.append(f"  \\RETURN {line_text[7:].strip()}")
+                out.append(f"  \\RETURN {clean_line[7:].strip()}")
+            elif re.match(r'^end\b\.?', l_text):
+                # Generic "end" closes the most recent block
+                if open_blocks:
+                    last_block = open_blocks.pop()
+                    if last_block == "IF":
+                        out.append("  \\ENDIF")
+                    elif last_block == "FOR":
+                        out.append("  \\ENDFOR")
+                    elif last_block == "WHILE":
+                        out.append("  \\ENDWHILE")
+                    else:
+                        out.append(f"  \\STATE {indent}{clean_line}")
+                else:
+                    out.append(f"  \\STATE {indent}{clean_line}")
             else:
-                out.append(f"  \\STATE {line_text}")
+                out.append(f"  \\STATE {indent}{clean_line}")
+                
+        # Automatically close any remaining open blocks to guarantee successful TeX compilation
+        while open_blocks:
+            last_block = open_blocks.pop()
+            if last_block == "IF":
+                out.append("  \\ENDIF")
+            elif last_block == "FOR":
+                out.append("  \\ENDFOR")
+            elif last_block == "WHILE":
+                out.append("  \\ENDWHILE")
                 
         out.append("\\end{algorithmic}")
         out.append("\\end{algorithm}")
+        return "\n".join(out)
+
+    def _render_list_block(self, node: dict) -> str:
+        """Render a list block containing nested lists of enumerate and itemize."""
+        items = node.get("items", [])
+        if not items:
+            return ""
+            
+        out = []
+        stack = []  # Stack stores tuples of (list_type, list_level)
+        
+        for item in items:
+            text = item.get("text", "").strip()
+            if not text:
+                continue
+                
+            level = item.get("list_level", 0)
+            l_type = item.get("list_type", "itemize")
+            
+            # 1. Close deeper lists if we are returning to a shallower level
+            while stack and stack[-1][1] > level:
+                closed_type, _ = stack.pop()
+                out.append(f"\\end{{{closed_type}}}")
+                
+            # 2. Open nested list if we are going to a deeper level (or starting the list)
+            if not stack or stack[-1][1] < level:
+                stack.append((l_type, level))
+                out.append(f"\\begin{{{l_type}}}")
+            # 3. If levels are same but list types changed
+            elif stack and stack[-1][1] == level and stack[-1][0] != l_type:
+                closed_type, _ = stack.pop()
+                out.append(f"\\end{{{closed_type}}}")
+                stack.append((l_type, level))
+                out.append(f"\\begin{{{l_type}}}")
+                
+            # Render item text and apply cross-referencing inside lists too!
+            text = self._apply_cross_referencing(text)
+            out.append(f"  \\item {text}")
+            
+        # Close all remaining open lists
+        while stack:
+            closed_type, _ = stack.pop()
+            out.append(f"\\end{{{closed_type}}}")
+            
+        return "\n".join(out) + "\n\n"
+
+    def _apply_cross_referencing(self, text: str) -> str:
+        """Automatically convert static Figure, Table, Equation, Section text into LaTeX references."""
+        # 1. Figure references: e.g. "Figure 1", "Fig. 2", "Hình 3" -> Figure~\ref{fig:img_X}
+        text = re.sub(r'\b(?:Figure|Fig\.|Hình)\s+(\d+)\b', r'Figure~\\ref{fig:img_\1}', text, flags=re.IGNORECASE)
+        
+        # 2. Table references: e.g. "Table I", "Table 1", "Bảng 2" -> Table~\ref{tabX}
+        def table_repl(match):
+            val = match.group(1)
+            roman_map = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5", "vi": "6", "vii": "7", "viii": "8", "ix": "9", "x": "10"}
+            val_clean = roman_map.get(val.lower(), val)
+            return f"Table~\\ref{{tab{val_clean}}}"
+            
+        text = re.sub(r'\b(?:Table|Bảng)\s+([0-9a-zA-Z]+)\b', table_repl, text, flags=re.IGNORECASE)
+        
+        # 3. Equation references: e.g. "Equation (3)", "Eq. (4)", "Công thức (5)" -> Equation~\eqref{eq:eq_X}
+        text = re.sub(r'\b(?:Equation|Eq\.|Công thức)\s*\((\d+)\)\b', r'Equation~\\eqref{eq:eq_\1}', text, flags=re.IGNORECASE)
+        
+        # 4. Section references: e.g. "Section III", "Section 4", "Mục V"
+        def section_repl(match):
+            val = match.group(1)
+            roman_map = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5", "vi": "6", "vii": "7", "viii": "8", "ix": "9", "x": "10"}
+            val_clean = roman_map.get(val.lower(), val)
+            return f"Section~\\ref{{sec_{val_clean}}}"
+            
+        text = re.sub(r'\b(?:Section|Mục)\s+([IVXivx\d]+)\b', section_repl, text, flags=re.IGNORECASE)
+        
+        return text
+
+    def _parse_deep_bib_entry(self, text: str, index: int) -> dict:
+        """Extract semantic bibtex fields from a raw reference string using context-aware regexes."""
+        entry = {
+            "key": f"ref{index}",
+            "type": "misc",
+            "author": "",
+            "title": "",
+            "year": "",
+            "journal": "",
+            "booktitle": "",
+            "volume": "",
+            "number": "",
+            "pages": "",
+            "doi": "",
+            "url": "",
+            "publisher": "",
+            "school": "",
+            "institution": "",
+            "note": text
+        }
+        
+        # 1. Clean the text
+        text_clean = text.strip()
+        
+        # 2. Extract DOI and URL
+        doi_match = re.search(r'(?:https?://doi\.org/|doi:)\s*([^\s,;}]+)', text_clean, re.IGNORECASE)
+        if doi_match:
+            entry["doi"] = doi_match.group(1).strip(",. ")
+            
+        url_match = re.search(r'\\url\{([^}]+)\}|(https?://[^\s,;}]+)', text_clean)
+        if url_match:
+            url_val = url_match.group(1) or url_match.group(2)
+            entry["url"] = url_val.strip(",. ")
+            
+        # 3. Extract Year
+        year_match = re.search(r'\b(19\d{2}|20\d{2})\b', text_clean)
+        if year_match:
+            entry["year"] = year_match.group(1)
+            
+        # 4. Try to parse into standard components (Authors. Year. Title. Journal/Booktitle...)
+        parts = [p.strip() for p in re.split(r'\.\s+', text_clean) if p.strip()]
+        
+        if len(parts) >= 3:
+            # First part is highly likely to be Authors
+            entry["author"] = parts[0]
+            
+            # Second part might contain Year or be the Title
+            second_part = parts[1]
+            if re.search(r'\b(19\d{2}|20\d{2})\b', second_part):
+                # If year is in second part (like "2004"), then third part is Title
+                entry["title"] = parts[2].strip('"\'` ')
+                remaining = ". ".join(parts[3:])
+            else:
+                # Otherwise, second part is Title
+                entry["title"] = second_part.strip('"\'` ')
+                remaining = ". ".join(parts[2:])
+                
+            # Classify based on remaining keywords
+            if remaining:
+                remaining_clean = re.sub(r'\\url\{[^}]+\}|https?://[^\s]+|doi:[^\s]+', '', remaining).strip()
+                remaining_clean = re.sub(r'\b(19\d{2}|20\d{2})\b', '', remaining_clean).strip(" ,.()")
+                
+                # Check for PhD thesis or Technical report
+                if "PhD Thesis" in remaining_clean or "PhD Dissertation" in remaining_clean or "Thesis" in remaining_clean:
+                    entry["type"] = "phdthesis"
+                    entry["school"] = remaining_clean
+                elif "Technical Report" in remaining_clean or "Tech. Rep." in remaining_clean:
+                    entry["type"] = "techreport"
+                    entry["institution"] = remaining_clean
+                elif "Proceedings of" in remaining_clean or "Conference" in remaining_clean or "Workshop" in remaining_clean:
+                    entry["type"] = "inproceedings"
+                    entry["booktitle"] = remaining_clean
+                elif any(kw in remaining_clean.lower() for kw in ("commun. acm", "journal", "trans.", "tcs", "j. acm", "ieee access", "sensors")):
+                    entry["type"] = "article"
+                    entry["journal"] = remaining_clean
+                elif "book" in remaining_clean.lower() or "press" in remaining_clean.lower() or "publisher" in remaining_clean.lower() or "verlag" in remaining_clean.lower():
+                    entry["type"] = "book"
+                    entry["publisher"] = remaining_clean
+                else:
+                    entry["journal"] = remaining_clean
+                    
+        return entry
+
+    def _serialize_bib_entry(self, entry: dict) -> str:
+        """Serialize entry dict to BibTeX format."""
+        out = []
+        out.append("@" + entry['type'] + "{" + entry['key'] + ",")
+        
+        # Write fields if present
+        for field in ("author", "title", "year", "journal", "booktitle", "volume", "number", "pages", "doi", "url", "publisher", "school", "institution"):
+            if entry.get(field):
+                val = entry[field].replace("{", "").replace("}", "") # clean braces
+                out.append("  " + field + " = {" + val + "},")
+                
+        # Always write note with raw text for safety
+        note_clean = entry['note'].replace("{", "").replace("}", "")
+        out.append("  note = {" + note_clean + "}")
+        out.append("}\n")
         return "\n".join(out)

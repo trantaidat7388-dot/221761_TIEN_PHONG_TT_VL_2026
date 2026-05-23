@@ -25,3 +25,4 @@ TexSoup>=0.3.3
 
 # Optional: nếu muốn compile LaTeX trên server
 # python-pdflatex==0.1.3
+pywin32>=306

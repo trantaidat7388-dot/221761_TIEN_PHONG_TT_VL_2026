@@ -870,6 +870,8 @@ class ChuyenDoiWordSangLatex:
             r'^(Hình|Figure|Fig\.?)\s*\d+\s*[:\.\-–—]?\s*',
             '', caption_final, flags=re.IGNORECASE
         ).strip()
+        # Bảo vệ \url{} trong caption (Moving Argument)
+        caption_final = caption_final.replace(r"\url{", r"\protect\url{")
         latex += rf"  \caption{{{caption_final}}}" + "\n"
         latex += rf"  \label{{{label}}}" + "\n"
         latex += r"\end{figure}" + "\n\n"
@@ -925,6 +927,8 @@ class ChuyenDoiWordSangLatex:
             r'^(Hình|Figure|Fig\.?)\s*\d+\s*[:\.\-–—]?\s*',
             '', caption_final, flags=re.IGNORECASE
         ).strip()
+        # Bảo vệ \url{} trong caption (Moving Argument)
+        caption_final = caption_final.replace(r"\url{", r"\protect\url{")
         latex += rf"  \caption{{{caption_final}}}" + "\n"
         latex += rf"  \label{{fig:nhom{self.dem_anh}}}" + "\n"
         latex += r"\end{figure}" + "\n\n"

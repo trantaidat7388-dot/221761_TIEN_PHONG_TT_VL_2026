@@ -252,8 +252,8 @@ def loc_ky_tu(text: str) -> str:
     ket_qua = re.sub(pattern_to_protect, _protect_latex, ket_qua)
 
 
-    # Remove directional control chars and uncommon script noise (Hebrew, Armenian, etc.)
-    ket_qua = re.sub(r'[\u200e\u200f\u202a-\u202e\u2066-\u2069]', '', ket_qua)
+    # Remove directional control chars, function application (U+2061) and uncommon script noise (Hebrew, Armenian, etc.)
+    ket_qua = re.sub(r'[\u200e\u200f\u202a-\u202e\u2061\u2066-\u2069]', '', ket_qua)
     ket_qua = re.sub(r'[\u0530-\u05FF]+', ' ', ket_qua) # Armenian + Hebrew range
     
     # Normalize Mathematical Alphanumeric Symbols (U+1D400-U+1D7FF) to standard letters
@@ -334,9 +334,18 @@ def loc_ky_tu(text: str) -> str:
         ket_qua = ket_qua.replace(placeholder, latex_cmd)
         
     # Restore protected LaTeX commands
+    math_only_cmds = {
+        '\\alpha', '\\beta', '\\gamma', '\\delta', '\\epsilon', '\\theta', '\\lambda', '\\mu', '\\pi', '\\sigma', '\\omega', '\\phi',
+        '\\times', '\\cdot', '\\pm', '\\leq', '\\geq', '\\neq', '\\approx', '\\rightarrow', '\\leftarrow', '\\in', '\\notin',
+        '\\subset', '\\supset', '\\cup', '\\cap', '\\forall', '\\exists', '\\coloneqq', '\\land', '\\lor', '\\mapsto', '\\ast',
+        '\\sum', '\\prod', '\\int', '\\infty', '\\sqrt', '\\ldots'
+    }
     for i, cmd in enumerate(protected_commands):
         placeholder = f"LATEXCMDPROTECT{i:04d}x"
-        ket_qua = ket_qua.replace(placeholder, cmd)
+        if cmd in math_only_cmds:
+            ket_qua = ket_qua.replace(placeholder, f"\\ensuremath{{{cmd}}}")
+        else:
+            ket_qua = ket_qua.replace(placeholder, cmd)
 
     # BƯỚC CUỐI: Thay tab (\t) thành \quad trong LaTeX (làm cuối cùng để không bị escape)
     ket_qua = ket_qua.replace('\t', r'\quad ')
@@ -423,10 +432,11 @@ def phat_hien_engine(duong_dan_tex: str) -> str:
         with open(duong_dan_tex, 'r', encoding='utf-8', errors='ignore') as f:
             noi_dung = f.read(5000)
             
-        # 🛡️ Fallback: Các gói bắt buộc phải dùng XeLaTeX/LuaLaTeX
+        # 🛡️ Fallback: Các gói bắt buộc phải dùng XeLaTeX/LuaLaTeX hoặc chứa tiếng Việt có dấu
         if re.search(r'\\usepackage\{fontspec\}', noi_dung) or \
            re.search(r'\\usepackage\{unicode-math\}', noi_dung) or \
-           re.search(r'\\usepackage\{polyglossia\}', noi_dung):
+           re.search(r'\\usepackage\{polyglossia\}', noi_dung) or \
+           re.search(r'[à-ỹÀ-ỸđĐ\u1E00-\u1EFF]', noi_dung):
             return 'xelatex'
             
         # 🛡️ Fallback: Nếu thấy tùy chọn pdftex trong documentclass
@@ -455,7 +465,8 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
         engine = phat_hien_engine(duong_dan_dau_ra)
 
     # Trên Windows, cwd quá dài có thể làm XeLaTeX không mở được file/ảnh.
-    if len(os.path.abspath(thu_muc)) > 180:
+    # Sử dụng ngưỡng thấp hơn (140 ký tự) để đảm bảo tối đa an toàn cho giới hạn MAX_PATH 260 ký tự trên Windows.
+    if len(os.path.abspath(thu_muc)) > 140:
         staging_dir = tempfile.mkdtemp(prefix="latex_job_")
         shutil.copytree(thu_muc, staging_dir, dirs_exist_ok=True)
         runtime_cwd = staging_dir
@@ -465,7 +476,8 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine
     compile_file_path = os.path.join(runtime_cwd, compile_file)
 
     # Windows/XeLaTeX can fail with very long .tex filenames; compile via a short alias.
-    if len(ten_file) > 120:
+    # Sử dụng ngưỡng thấp hơn (40 ký tự) hoặc khi toàn bộ đường dẫn quá dài (>200 ký tự).
+    if len(ten_file) > 40 or len(os.path.abspath(source_tex_path)) > 200:
         compile_file = "__compile_main__.tex"
         compile_file_path = os.path.join(runtime_cwd, compile_file)
         shutil.copyfile(source_tex_path, compile_file_path)

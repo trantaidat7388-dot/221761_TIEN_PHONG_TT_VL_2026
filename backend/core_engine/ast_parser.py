@@ -46,6 +46,7 @@ class WordASTParser:
         self.bo_toan = BoXuLyToan()
         self.dem_anh = 0
         self.total_formulas = 0
+        self.exported_charts: Dict[str, str] = {}
         
         # Intermediate Representation
         self.ir: Dict[str, Any] = {
@@ -67,6 +68,9 @@ class WordASTParser:
         try:
             self.doc, self._temp_word_files = mo_tai_lieu_word_co_fallback(self.doc_path)
 
+            # Pre-export charts using MS Word COM on Windows if available
+            self._pre_export_charts()
+
             elements = self._extract_elements_in_order()
             self._build_semantic_tree(elements)
             # Skip citation post-processing in word2word mode to avoid
@@ -82,6 +86,101 @@ class WordASTParser:
                         os.remove(temp_path)
                 except Exception:
                     pass
+
+    def _pre_export_charts(self) -> None:
+        """Tìm và trích xuất tất cả các biểu đồ (charts) từ Word thành ảnh PNG bằng COM trên Windows."""
+        self.exported_charts = {}
+        if not self.doc:
+            return
+
+        ns_c = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+        ns_r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+        chart_rids = []
+        body = self.doc.element.body
+        for node in body.iter():
+            if node.tag == f"{{{ns_c}}}chart":
+                r_id = node.get(f"{{{ns_r}}}id")
+                if r_id:
+                    chart_rids.append(r_id)
+
+        if not chart_rids:
+            return
+
+        if os.name != 'nt':
+            print("[INFO] Chart extraction via COM is only supported on Windows.")
+            return
+
+        try:
+            import win32com.client
+        except ImportError:
+            print("[WARN] win32com is not installed, charts cannot be exported.")
+            return
+
+        # Prepare paths
+        doc_abs_path = os.path.abspath(self.doc_path)
+        out_dir = os.path.abspath(self.thu_muc_anh) if self.thu_muc_anh else os.path.abspath('.')
+        os.makedirs(out_dir, exist_ok=True)
+        ten_thu_muc = os.path.basename(self.thu_muc_anh) if self.thu_muc_anh else ''
+
+        print(f"[*] Pre-exporting {len(chart_rids)} charts via Word COM API...")
+        word = None
+        w_doc = None
+        try:
+            # Safe COM initialization for multi-threaded systems
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+            except Exception:
+                pass
+
+            word = win32com.client.Dispatch("Word.Application")
+            word.Visible = False
+            word.DisplayAlerts = False
+
+            w_doc = word.Documents.Open(doc_abs_path, ReadOnly=True)
+
+            chart_idx = 0
+            def export_shape(shape):
+                nonlocal chart_idx
+                if shape.HasChart:
+                    if chart_idx < len(chart_rids):
+                        r_id = chart_rids[chart_idx]
+                        out_name = f"chart_{r_id}.png"
+                        out_path = os.path.join(out_dir, out_name)
+                        try:
+                            shape.Chart.Export(out_path, "PNG")
+                            if os.path.exists(out_path):
+                                self.exported_charts[r_id] = f"{ten_thu_muc}/{out_name}" if ten_thu_muc else out_name
+                                print(f"[*] Exported chart {r_id} successfully.")
+                        except Exception as ex:
+                            print(f"[WARN] Failed to export chart index {chart_idx} (RID {r_id}): {ex}")
+                    chart_idx += 1
+
+            for shape in w_doc.InlineShapes:
+                export_shape(shape)
+
+            for shape in w_doc.Shapes:
+                export_shape(shape)
+
+        except Exception as e:
+            print(f"[WARN] COM chart pre-export error: {e}")
+        finally:
+            if w_doc:
+                try:
+                    w_doc.Close(SaveChanges=False)
+                except Exception:
+                    pass
+            if word:
+                try:
+                    word.Quit()
+                except Exception:
+                    pass
+            try:
+                import pythoncom
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
         
     def _extract_elements_in_order(self) -> List[tuple]:
         """Trích danh sách phần tử theo thứ tự, bao gồm cả nội dung trong content control."""
@@ -855,7 +954,8 @@ class WordASTParser:
                             if not caption:
                                 caption = self._bat_caption_hinh_theo_style(elements, idx, used_nodes)
                             if caption:
-                                node['text'] = node_text.replace('\\caption{}', f'\\caption{{{caption}}}')
+                                caption_protected = caption.replace(r"\url{", r"\protect\url{")
+                                node['text'] = node_text.replace('\\caption{}', f'\\caption{{{caption_protected}}}')
                             if img_path:
                                 seen_figure_paths.add(img_path)
                         self.ir["body"].append(node)
@@ -943,7 +1043,8 @@ class WordASTParser:
                                 f"  \\includegraphics[width=\\columnwidth,height=0.4\\textheight,"
                                 f"keepaspectratio]{{{img_path}}}\n"
                             )
-                        fig_tex += f"  \\caption{{{caption_chinh or ''}}}\n"
+                        caption_chinh_protected = (caption_chinh or '').replace(r"\url{", r"\protect\url{")
+                        fig_tex += f"  \\caption{{{caption_chinh_protected}}}\n"
                         fig_tex += f"  \\label{{fig:img_{self.dem_anh}}}\n"
                         fig_tex += "\\end{figure}\n\n"
                         self.ir["body"].append({"type": "paragraph", "text": fig_tex})
@@ -1221,7 +1322,8 @@ class WordASTParser:
                                     continue
                                 for line in txt.split('\n'):
                                     if line.strip():
-                                        steps.append({"type": "paragraph", "text": line.strip()})
+                                        processed_txt = loc_ky_tu(line.strip()) if self.mode != "word2word" else line.strip()
+                                        steps.append({"type": "paragraph", "text": processed_txt})
                     
                     final_body.append({
                         "type": "algorithm",
@@ -1805,6 +1907,32 @@ class WordASTParser:
                             text += latex_img
                         except Exception:
                             pass
+                else:
+                    # Check if it has a chart
+                    ns_c = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+                    chart_node = node.find(f".//{{{ns_c}}}chart")
+                    if chart_node is not None:
+                        r_id = chart_node.get(f"{{{ns_r}}}id")
+                        if r_id:
+                            latex_path = self.exported_charts.get(r_id)
+                            if latex_path:
+                                if in_table:
+                                    self.ir["metadata"]["total_images"] += 1
+                                    img_opts = self._includegraphics_options("\\linewidth")
+                                    latex_img = f"\n\\begin{{center}}\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\end{{center}}\n"
+                                else:
+                                    self.dem_anh += 1
+                                    self.ir["metadata"]["total_images"] += 1
+                                    img_opts = self._includegraphics_options("\\columnwidth")
+                                    latex_img = f"\\begin{{figure}}[H]\n\\centering\n\\includegraphics[{img_opts}]{{{latex_path}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}"
+                                text += latex_img
+                            else:
+                                # Standard cross-platform placeholder fallback for charts
+                                print(f"[INFO] Chart RID {r_id} has no exported COM image. Adding placeholder.")
+                                if not in_table:
+                                    self.dem_anh += 1
+                                    latex_img = f"\\begin{{figure}}[H]\n\\centering\n\\framebox[\\columnwidth]{{\\parbox{{\\columnwidth}}{{\\centering \\vspace{{2cm}} [Chart: {r_id}] \\vspace{{2cm}}}}}}\n\\caption{{}}\n\\label{{fig:img_{self.dem_anh}}}\n\\end{{figure}}"
+                                    text += latex_img
                 return
             elif node.tag == f"{{{ns_a}}}blip":
                 r_id = node.get(f"{{{ns_r}}}embed")
@@ -1899,21 +2027,60 @@ class WordASTParser:
             clean_text = re.sub(r'^\s*(?:[A-Z0-9IVX]+(?:\.\d+)*\.?|\d+(?:\.\d+)*)\s+', '', text)
             return {"type": "section", "level": level, "text": clean_text}
             
-        # Standard paragraph
-        # Ideally, we would preserve bold/italics here. For now, just raw text.
         has_border = False
         is_list = False
+        list_level = 0
+        list_type = "itemize"
         try:
             pPr = p._element.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}pPr")
             if pPr is not None:
                 if pPr.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}pBdr") is not None:
                     has_border = True
-                if pPr.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}numPr") is not None:
+                numPr = pPr.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}numPr")
+                if numPr is not None:
                     is_list = True
+                    ilvl_el = numPr.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}ilvl")
+                    if ilvl_el is not None:
+                        val_attr = ilvl_el.get(f"{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}val")
+                        if val_attr is not None:
+                            list_level = int(val_attr)
         except Exception:
             pass
 
-        return {"type": "paragraph", "text": text or "", "has_math": has_math, "has_border": has_border, "is_list": is_list}
+        if is_list and text:
+            text_clean = text.strip()
+            # Enumerate prefix: e.g. "1.", "(a)", "a)", "I.", "1)", "[1]"
+            enum_match = re.match(r'^(\(?\s*(?:[a-zA-Z\d]+|[IVXivx]+)\s*[\.\)]|\[\s*\d+\s*\])\s+(.*)$', text_clean)
+            # Itemize prefix: e.g. "-", "*", "•", "U+2022"
+            item_match = re.match(r'^([\-\*•\u2022\u25E6\u2023\u25C9\u25AA])\s+(.*)$', text_clean)
+            
+            if enum_match:
+                list_type = "enumerate"
+                text = enum_match.group(2).strip()
+            elif item_match:
+                list_type = "itemize"
+                text = item_match.group(2).strip()
+            else:
+                # Guess based on style name or first word
+                style_lower = (p.style.name or "").lower() if p.style else ""
+                if "number" in style_lower or "enum" in style_lower or re.match(r'^\s*(?:\d+|[a-zA-Z])[\.\)]', text_clean):
+                    list_type = "enumerate"
+                    # Strip number prefix if present without space
+                    text = re.sub(r'^\s*(?:\d+|[a-zA-Z])[\.\)]\s*', '', text_clean)
+                else:
+                    list_type = "itemize"
+                    # Strip bullet prefix if present without space
+                    text = re.sub(r'^\s*[\-\*•\u2022\u25E6]\s*', '', text_clean)
+
+        return {
+            "type": "paragraph",
+            "text": text or "",
+            "has_math": has_math,
+            "has_border": has_border,
+            "is_list": is_list,
+            "list_level": list_level,
+            "list_type": list_type
+        }
 
     def _lay_gridspan(self, tc) -> int:
         try:
