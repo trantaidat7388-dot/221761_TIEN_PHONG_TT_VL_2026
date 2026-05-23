@@ -48,7 +48,18 @@ dependencies:
   # Lưu token an toàn
   shared_preferences: ^2.3.0
   webview_flutter_android: ^4.11.0
+
+  # iOS WKWebView platform — cần để config allowsInlineMediaPlayback, etc.
+  webview_flutter_wkwebview: ^3.16.0
+
   file_picker: ^11.0.2
+
+  # iOS: Share Sheet để save file ZIP/PDF về máy (iOS không cho blob download)
+  share_plus: ^10.0.0
+
+  # Lưu file tạm trước khi share trên iOS
+  path_provider: ^2.1.0
+
 
 dev_dependencies:
   flutter_test:

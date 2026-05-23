@@ -284,3 +284,73 @@ code, pre, .font-mono {
 nav.fixed {
   padding-top: env(safe-area-inset-top, 0px);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   iOS / MOBILE SPECIFIC FIXES
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Disable iOS elastic bounce scroll — ngăn trang bị kéo quá biên */
+html, body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch; /* iOS smooth scroll */
+  height: 100%;
+}
+
+/* dvh (dynamic viewport height) — không bị keyboard che trên iOS */
+#root {
+  min-height: 100dvh;
+  min-height: -webkit-fill-available; /* Safari iOS fallback */
+}
+
+/* Tắt text selection cho UI elements trên mobile */
+button, label, .glass-card {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Cho phép text selection trong kết quả LaTeX */
+pre, code, textarea, input[type="text"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* iOS: disable callout khi long-press trên ảnh/link */
+img, a {
+  -webkit-touch-callout: none;
+}
+
+/* iOS: Tăng tap area cho small buttons */
+@media (max-width: 768px) and (pointer: coarse) {
+  button, [role="button"] {
+    min-height: 44px; /* Apple HIG: minimum tap target 44pt */
+  }
+
+  /* Fix scrollable areas bên trong WebView */
+  .overflow-y-auto, .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* iOS: Fix input zoom — ngăn iOS zoom khi focus input nhỏ hơn 16px */
+@media screen and (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important; /* Ngăn iOS auto-zoom */
+  }
+}
+
+/* iOS Download progress indicator — hiện khi flutter_download_start fire */
+@keyframes downloadPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Giảm animation trên thiết bị có prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .bg-gradient-animated {
+    animation: none;
+  }
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

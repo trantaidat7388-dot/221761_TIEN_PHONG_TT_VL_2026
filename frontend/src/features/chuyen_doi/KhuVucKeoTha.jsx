@@ -1,6 +1,6 @@
 // KhuVucKeoTha.jsx - Component kéo thả file với hiệu ứng glow
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -21,6 +21,34 @@ const KhuVucKeoTha = ({
 }) => {
   // Component dropzone với hiệu ứng glow khi kéo file vào
   const [dangKeoVao, setDangKeoVao] = useState(false)
+
+  // ===== iOS Flutter Bridge: lắng nghe file được pick từ native iOS =====
+  useEffect(() => {
+    const xuLyFlutterFilePicked = (event) => {
+      const { file } = event.detail || {}
+      if (file && file instanceof File) {
+        // Validate file type
+        const allowedTypes = [
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-word.document.macroEnabled.12',
+          'application/msword',
+        ]
+        const ext = file.name.split('.').pop()?.toLowerCase()
+        if (!allowedTypes.includes(file.type) && !['docx', 'docm', 'doc'].includes(ext || '')) {
+          onChonFile(null, 'Chỉ chấp nhận file .docx hoặc .docm')
+          return
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          onChonFile(null, 'File quá lớn (tối đa 10MB)')
+          return
+        }
+        onChonFile(file, null)
+      }
+    }
+
+    window.addEventListener('flutter_file_picked', xuLyFlutterFilePicked)
+    return () => window.removeEventListener('flutter_file_picked', xuLyFlutterFilePicked)
+  }, [onChonFile])
 
   const onDrop = useCallback((acceptedFiles, rejectedFiles) => {
     // Xử lý khi file được thả vào dropzone

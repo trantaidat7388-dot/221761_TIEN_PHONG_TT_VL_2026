@@ -56,5 +56,24 @@
 			</array>
 		</dict>
 	</array>
+
+	<!-- ===== iOS File Picker Permissions ===== -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Word2LaTeX cần quyền truy cập thư viện ảnh để bạn có thể chọn file tài liệu.</string>
+
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Word2LaTeX cần quyền lưu vào thư viện ảnh.</string>
+
+	<!-- Allow Files app access for document picker -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+
+	<!-- ===== Scroll View Behavior ===== -->
+	<key>UIScrollViewContentInsetAdjustmentBehavior</key>
+	<integer>2</integer>
+
 </dict>
 </plist>
