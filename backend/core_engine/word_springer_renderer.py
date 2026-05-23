@@ -26,13 +26,21 @@ class SpringerWordRenderer(IEEEWordRenderer):
         output_path: str,
         image_root_dir: str | None = None,
         ieee_template_path: str | None = None,
+        springer_template_path: str | None = None,
     ) -> str:
-        """Kết xuất IR sang Word theo phong cách Springer."""
+        """Kết xuất IR sang Word theo phong cách Springer.
+
+        Chấp nhận cả ``springer_template_path`` (từ pipeline ieee-to-springer)
+        và ``ieee_template_path`` (alias cũ) làm đường dẫn template.
+        """
+        # Ưu tiên springer_template_path nếu được truyền vào
+        effective_template = springer_template_path or ieee_template_path
+
         rendered_path = super().render(
             ir_data=ir_data,
             output_path=output_path,
             image_root_dir=image_root_dir,
-            ieee_template_path=ieee_template_path,
+            ieee_template_path=effective_template,
         )
 
         # Phần header của template thường giữ tiêu đề ngắn placeholder nếu không thay rõ ràng.
