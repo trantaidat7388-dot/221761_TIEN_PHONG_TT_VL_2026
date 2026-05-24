@@ -4,6 +4,26 @@ Tài liệu này lưu trữ chi tiết toàn bộ các cập nhật, sửa đổ
 
 ---
 
+## 📅 Phiên làm việc: 25/05/2026
+
+### 🛠️ Sửa lỗi Biên dịch Thuật toán & Khớp liên kết chéo Bộ lõi (Core Engine)
+
+#### 1. Các tệp tin thay đổi:
+*   **[backend/core_engine/ast_parser.py](file:///d:/221761_TIEN_PHONG_TT_VL_2026/backend/core_engine/ast_parser.py)**:
+    *   **Nâng cấp bộ phân tách bảng thuật toán ô đơn (Single-cell Algorithm Table)**: Thay vì bỏ qua toàn bộ ô khi khớp trùng tiêu đề, hệ thống tự động tách dòng (`\n`), trích xuất dòng đầu tiên chứa từ khóa làm tiêu đề thuật toán (`caption`) và phân tích toàn bộ các dòng tiếp theo thành các bước thực thi độc lập (`steps`). Điều này giải quyết triệt để lỗi biên dịch rỗng `algorithmic` (`missing \item` trên Overleaf).
+*   **[backend/core_engine/jinja_renderer.py](file:///d:/221761_TIEN_PHONG_TT_VL_2026/backend/core_engine/jinja_renderer.py)**:
+    *   **Sửa lỗi xung đột chế độ toán học (Math Mode Crash)**: Loại bỏ các ký tự `$` bọc thủ công cho mũi tên gán `←` trong môi trường thuật toán, thay thế bằng cú pháp lệnh toán học toàn văn an toàn `\ensuremath{\leftarrow}`. Điều này giúp XeLaTeX biên dịch thành công 100% không còn lỗi ngắt quãng luồng sinh PDF, khôi phục đầy đủ 100% trang văn bản phía sau (tệp PDF tăng kích thước từ 149 KB lên 171 KB).
+    *   **Ánh xạ nhãn kép chương/mục chính (Dual Section Labeling)**: Tự động đếm thứ tự và chèn đồng thời nhãn chữ (ví dụ: `\label{sec:related_work}`) và nhãn số thứ tự (ví dụ: `\label{sec_2}`) cho toàn bộ các mục chính cấp 1.
+    *   **Hỗ trợ nhãn mục Tài liệu tham khảo (References)**: Tự động đếm tổng số mục cấp 1 và chèn nhãn liên kết tương ứng (ví dụ: `\label{sec_6}`) ngay trước khối `thebibliography`, giải quyết triệt để cảnh báo lỗi liên kết chéo tĩnh `Reference 'sec_2' undefined` trên Overleaf.
+
+#### 2. Kết quả nghiệm thu & Kiểm thử:
+*   **Biên dịch PDF thành công tuyệt đối**: Tài liệu ngân phiếu biên dịch thông suốt bằng XeLaTeX cục bộ đạt mã **`Exit code: 0`** hoàn mỹ, xuất ra tệp PDF hoàn chỉnh 4 trang chứa đầy đủ tiêu đề, các tác giả, tóm tắt, khối thuật toán định dạng thụt lề chuẩn, bảng biểu Experiments cân đối và 22 mục References.
+*   **Quy trình chuyển đổi Word-to-Word**: Thực hiện chuyển đổi thành công tệp ngân phiếu từ IEEE sang Springer LNCS, sinh tệp Word Springer mới tuyệt đẹp.
+*   **Kiểm thử hàng loạt (Batch Test 22 files)**: Thực hiện chạy thử nghiệm hàng loạt trên toàn bộ 22 tài liệu mẫu trong thư mục, đạt tỷ lệ chuyển đổi thành công **100.0%** (22/22 tệp tin .tex) và tỷ lệ biên dịch PDF thành công **100.0%** (22/22 tệp tin .pdf) cho cả hai mẫu IEEE Conference và Springer LNCS.
+*   **Git Push**: Đã commit và push tất cả thay đổi cốt lõi lên nhánh `docs-20260524` của kho lưu trữ từ xa GitHub.
+
+---
+
 ## 📅 Phiên làm việc: 24/05/2026
 
 ### 🚀 Đồng bộ hóa và Hoàn thiện App di động (Android & iOS WebView)
