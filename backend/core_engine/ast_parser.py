@@ -1312,22 +1312,38 @@ class WordASTParser:
                 if is_alg:
                     print(f"[*] SUCCESS: Detected Algorithm TABLE: '{caption or first_cell_text[:50]}'")
                     steps = []
-                    # Flatten table cells into steps
+                    extracted_caption = caption
+                    
+                    # Gather all lines across all cells
+                    is_first_line = True
                     for row in node.get("data", []):
                         for cell in row:
                             txt = (cell.get("text") or "").strip()
                             if txt:
-                                # If the caption was in the first cell, remove it from steps
-                                if txt == first_cell_text and re.search(r'\b(Algorithm|Alg\.?|Algo\.?|Thuật toán)\s+\d+', txt, re.IGNORECASE):
-                                    continue
-                                for line in txt.split('\n'):
-                                    if line.strip():
-                                        processed_txt = loc_ky_tu(line.strip()) if self.mode != "word2word" else line.strip()
-                                        steps.append({"type": "paragraph", "text": processed_txt})
+                                # Split by newline in case the entire algorithm is inside a single cell
+                                lines = txt.split('\n')
+                                for line in lines:
+                                    line_strip = line.strip()
+                                    if not line_strip:
+                                        continue
+                                    
+                                    # Check if this line is the algorithm header/caption
+                                    is_header = False
+                                    if is_first_line and re.search(r'\b(Algorithm|Alg\.?|Algo\.?|Thuật toán)\b', line_strip, re.IGNORECASE):
+                                        is_header = True
+                                        if not extracted_caption:
+                                            extracted_caption = line_strip
+                                            
+                                    is_first_line = False
+                                    if is_header:
+                                        continue
+                                        
+                                    processed_txt = loc_ky_tu(line_strip) if self.mode != "word2word" else line_strip
+                                    steps.append({"type": "paragraph", "text": processed_txt})
                     
                     final_body.append({
                         "type": "algorithm",
-                        "caption": caption or first_cell_text,
+                        "caption": extracted_caption or "Algorithm",
                         "steps": steps
                     })
                     i += 1

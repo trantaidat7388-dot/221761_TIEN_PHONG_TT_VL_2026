@@ -67,6 +67,7 @@ class JinjaLaTeXRenderer:
 
         out = []
         table_counter = 0
+        section_counter = 0
         for node in grouped_nodes:
             t = node.get("type", "")
             if t == "section":
@@ -79,7 +80,12 @@ class JinjaLaTeXRenderer:
                 # Tạo nhãn Section duy nhất động cho liên kết chéo
                 sec_label = re.sub(r'[^a-zA-Z0-9]', '_', text.lower()).strip('_')
                 sec_label = re.sub(r'_{2,}', '_', sec_label)
-                label_str = f"\\label{{sec:{sec_label}}}" if sec_label else ""
+                
+                if lvl == 1:
+                    section_counter += 1
+                    label_str = f"\\label{{sec:{sec_label}}}\\label{{sec_{section_counter}}}" if sec_label else f"\\label{{sec_{section_counter}}}"
+                else:
+                    label_str = f"\\label{{sec:{sec_label}}}" if sec_label else ""
                 
                 if lvl == 1:
                     out.append(f"\\section{{{text}}}{label_str}\n")
@@ -775,7 +781,8 @@ class JinjaLaTeXRenderer:
             body_tex = self._normalize_springer_float_placement(body_tex)
 
         bib_file = self._generate_bib_file(ir_data.get('references', []), output_path)
-        references_block = self._generate_thebibliography(ir_data.get('references', []), doc_class)
+        lvl1_count = sum(1 for node in ir_data.get('body', []) if node.get("type") == "section" and node.get("level", 1) == 1)
+        references_block = self._generate_thebibliography(ir_data.get('references', []), doc_class, last_sec_num=lvl1_count)
         
         # Ghi đè author_block bằng phiên bản phù hợp với định dạng tài liệu
         metadata = dict(ir_data.get('metadata', {}))
@@ -1145,7 +1152,7 @@ class JinjaLaTeXRenderer:
         strategy = strategies.get(doc_class, GenericAuthorStrategy())
         return strategy.generate(authors)
 
-    def _generate_thebibliography(self, references: list, doc_class: str = "generic") -> str:
+    def _generate_thebibliography(self, references: list, doc_class: str = "generic", last_sec_num: int = 5) -> str:
         """Generate \\begin{thebibliography} block with numbered \\bibitem entries."""
         if not references:
             return ""
@@ -1165,7 +1172,8 @@ class JinjaLaTeXRenderer:
         if not items:
             return ""
         width_label = str(len(items))
-        return "\\begin{thebibliography}{" + width_label + "}\n" + "\n".join(items) + "\n\\end{thebibliography}"
+        label_str = f"\\label{{sec_{last_sec_num + 1}}}"
+        return label_str + "\n\\begin{thebibliography}{" + width_label + "}\n" + "\n".join(items) + "\n\\end{thebibliography}"
 
     def _generate_bib_file(self, references: list, output_path: str) -> str:
         """Generates a semantic references.bib file alongside the TeX output if references exist."""
@@ -1228,7 +1236,7 @@ class JinjaLaTeXRenderer:
             line_text = line_text.replace("\\\\leftarrow", "leftxarrow")
             line_text = line_text.replace("\\leftarrow", "leftxarrow")
             line_text = line_text.replace("<-", "leftxarrow")
-            line_text = line_text.replace("leftxarrow", r" $\leftarrow$ ")
+            line_text = line_text.replace("leftxarrow", r"\ensuremath{\leftarrow}")
             line_text = line_text.replace('$ $', ' ').replace('  ', ' ')
             line_text = line_text.replace('$$', '$')
             
