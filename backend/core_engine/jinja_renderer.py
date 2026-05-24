@@ -701,7 +701,7 @@ class JinjaLaTeXRenderer:
         text = re.sub(r"\\\\([A-Za-z]+)\$", r"\\\1$", text)
         return text
 
-    def _soften_long_equations(self, text: str) -> str:
+    def _soften_long_equations(self, text: str, doc_class: str = "generic") -> str:
         """Insert soft breaks into long equation blocks to reduce overflow."""
         if not text:
             return text
@@ -721,7 +721,7 @@ class JinjaLaTeXRenderer:
 
             # Lowered threshold for IEEE columns (approx 70 chars)
             # Narrow columns often overflow around 65-75 characters.
-            if len(inner) >= 70:
+            if doc_class == "ieee" and len(inner) >= 70:
                 scaled = re.sub(r"\s+", " ", inner).strip()
                 return (
                     f"\\begin{{{env}}}\n"
@@ -772,7 +772,7 @@ class JinjaLaTeXRenderer:
         body_tex = self.render_body_nodes(ir_data.get('body', []), doc_class=doc_class)
         body_tex = self._process_omml_math(body_tex)
         body_tex = self._normalize_inline_math_escapes(body_tex)
-        body_tex = self._soften_long_equations(body_tex)
+        body_tex = self._soften_long_equations(body_tex, doc_class=doc_class)
         
         if doc_class == "ieee":
             body_tex = self._normalize_ieee_figure_placement(body_tex)

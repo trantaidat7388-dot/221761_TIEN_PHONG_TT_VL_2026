@@ -531,7 +531,9 @@ class BoXuLyToan:
         res = text
         for pattern, replacement in OMML_CHAR_MAP:
             # Use a replacer function to avoid backslash-escape issues (e.g. "\pm").
-            res = re.sub(pattern, lambda _m, rep=replacement: rep, res)
+            # Convert doubled backslashes (e.g. '\\\\rightarrow') to single backslash in the replacer.
+            rep = replacement.replace('\\\\', '\\')
+            res = re.sub(pattern, lambda _m, r=rep: r, res)
             
         # Nary symbols
         for char, replacement in NARY_SYMBOL_MAP.items():

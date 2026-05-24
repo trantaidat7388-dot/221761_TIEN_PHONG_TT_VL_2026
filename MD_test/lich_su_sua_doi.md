@@ -6,6 +6,20 @@ Tài liệu này lưu trữ chi tiết toàn bộ các cập nhật, sửa đổ
 
 ## 📅 Phiên làm việc: 25/05/2026
 
+### 🛠️ Sửa lỗi Công thức toán học (Math Formulas) & Khoảng trắng Springer LNCS
+
+#### 1. Các tệp tin thay đổi:
+*   **[backend/core_engine/jinja_renderer.py](file:///d:/221761_TIEN_PHONG_TT_VL_2026/backend/core_engine/jinja_renderer.py)**:
+    *   **Ngăn chặn việc co giãn tỷ lệ công thức bất thường trên Springer LNCS**: Giới hạn việc tự động bọc công thức bằng `\resizebox{\columnwidth}{!}{...}` chỉ dành riêng cho cấu hình IEEE (`doc_class == "ieee"`), do IEEE sử dụng bố cục 2 cột hẹp nên cần co giãn. Với Springer và các mẫu đơn cột khác, công thức được hiển thị tự nhiên bằng môi trường toán học chuẩn `\begin{equation}`, giải quyết triệt để lỗi công thức phình to và khoảng trắng thừa xung quanh công thức.
+*   **[backend/core_engine/xu_ly_toan.py](file:///d:/221761_TIEN_PHONG_TT_VL_2026/backend/core_engine/xu_ly_toan.py)**:
+    *   **Sửa lỗi nhân đôi dấu gạch chéo ngược (Doubled Backslashes `\\`) trong công thức**: Bản đồ ký tự Unicode sang LaTeX `OMML_CHAR_MAP` được định nghĩa bằng các dấu gạch chéo ngược kép (ví dụ: `r'\\rightarrow'`). Tuy nhiên, do chúng ta sử dụng hàm lambda làm bộ thay thế (`re.sub(..., lambda _m: rep)`), Python đã bỏ qua việc giải mã dấu gạch chéo ngược kép, dẫn đến LaTeX xuất ra các dấu gạch chéo ngược kép lỗi (như `\\rightarrow`, `\\ldots`, `\\coloneqq`, `\\mapsto`). Đã bổ sung logic chuẩn hóa `rep = replacement.replace('\\\\', '\\')` trước khi gọi `re.sub` để tất cả các ký tự toán học Unicode được chuyển đổi chính xác thành các lệnh LaTeX gạch chéo đơn chuẩn (`\rightarrow`, `\ldots`, `\coloneqq`, `\mapsto`).
+
+#### 2. Kết quả nghiệm thu & Kiểm thử:
+*   **Biên dịch PDF Springer LNCS tuyệt đẹp**: Chuyển đổi và biên dịch thành công tài liệu Blockchain-Based Management sang mẫu Springer LNCS (`Exit code: 0`).
+*   **Công thức & Ký tự toán học chính xác 100%**: Các công thức (từ Equation 1 đến 11) hiển thị ở kích thước chữ tự nhiên, khoảng cách dòng thụt lề chuẩn xác, và các ký tự mũi tên (`\rightarrow`), phép gán (`\coloneqq`), ánh xạ (`\mapsto`), dấu ba chấm (`\ldots`) hiển thị hoàn toàn chính xác về mặt toán học.
+
+---
+
 ### 🛠️ Sửa lỗi Biên dịch Thuật toán & Khớp liên kết chéo Bộ lõi (Core Engine)
 
 #### 1. Các tệp tin thay đổi:
