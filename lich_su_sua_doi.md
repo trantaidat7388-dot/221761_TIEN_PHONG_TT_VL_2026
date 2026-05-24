@@ -27,3 +27,14 @@ Tài liệu này lưu trữ chi tiết toàn bộ các cập nhật, sửa đổ
     > `No issues found! (ran in 2.3s)`
 *   **Frontend React Production Build**: Chạy `npm run build` hoàn thành xuất sắc trong **26.03 giây** không có lỗi.
 *   **Git Push**: Đã commit và push toàn bộ thay đổi sạch sẽ lên nhánh `fix-springer-formatting` của Git repository.
+
+### 📚 Tài liệu hóa & Phân tích Kiến trúc Bộ lõi (Core Engine)
+
+#### 1. Các tài liệu tạo mới & cập nhật:
+*   **[implementation_plan.md](file:///C:/Users/ASUS/.gemini/antigravity-ide/brain/5e1a85b5-5306-403c-bfcd-301b4c498e3b/implementation_plan.md)**: Xây dựng sơ đồ kiến trúc hệ thống, sơ đồ luồng chạy dữ liệu bằng **Mermaid** trực quan và phân tích chi tiết chức năng của 13+ tệp tin trong bộ lõi `core_engine`.
+*   **[walkthrough.md](file:///C:/Users/ASUS/.gemini/antigravity-ide/brain/5e1a85b5-5306-403c-bfcd-301b4c498e3b/walkthrough.md)**: Tóm tắt 4 bước của chu trình chuyển đổi thô từ Word -> cây trung gian AST -> template tiền xử lý -> file nguồn LaTeX & PDF.
+*   **[tai_lieu_hoc_core_engine.md](file:///d:/221761_TIEN_PHONG_TT_VL_2026/tai_lieu_hoc_core_engine.md)**: Tạo cẩm nang tự học chuyên sâu giải thích chi tiết cơ chế hoạt động, thuật toán OLE, OMML, ánh xạ bảng biểu và máy trạng thái cho lập trình viên tìm hiểu bộ lõi chuyển đổi.
+
+#### 2. Kết quả rà soát chú thích tiếng Việt:
+*   Đã tiến hành kiểm tra toàn bộ thư mục `backend/core_engine/`. 100% các tệp tin cốt lõi (như `chuyen_doi.py`, `ast_parser.py`, `jinja_renderer.py`, `word_loader.py`, `xu_ly_bang.py`, v.v.) **đều đã được tích hợp sẵn các chú thích tiếng Việt cực kỳ chi tiết**, giúp người đọc và nhà phát triển dễ dàng nắm bắt thuật toán chuyển đổi nhanh chóng.
+
