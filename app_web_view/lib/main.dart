@@ -137,10 +137,8 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
             if (_activeToken != null) _injectTokenToWeb(_activeToken!);
 
-            // iOS: Inject JS để handle file upload & download qua FlutterBridge
-            if (Platform.isIOS) {
-              await _injectIOSBridgeScript();
-            }
+            // Inject JS để handle file upload & download qua FlutterBridge cho cả Android và iOS
+            await _injectAppBridgeScript();
           },
           onWebResourceError: (_) =>
               setState(() {
@@ -188,23 +186,20 @@ class _WebViewScreenState extends State<WebViewScreen> {
   /// Inject JavaScript bridge script cho iOS để:
   /// 1. Handle file upload input[type=file] → gọi FlutterBridge
   /// 2. Handle download link → gọi FlutterBridge thay vì blob URL
-  Future<void> _injectIOSBridgeScript() async {
+  Future<void> _injectAppBridgeScript() async {
     await _controller.runJavaScript(r'''
       (function() {
-        // --- 1. iOS File Upload: intercept <input type="file"> clicks ---
-        // WKWebView on iOS supports native document picker natively via file input,
-        // but we add a FlutterBridge fallback for programmatic triggers.
+        // --- 1. File Upload: intercept <input type="file"> clicks ---
         document.addEventListener('click', function(e) {
           var el = e.target;
           // Walk up to find file input
           while (el && el.tagName !== 'INPUT') el = el.parentElement;
           if (el && el.type === 'file') {
-            // Allow native WKWebView file picker to handle it (it works on iOS 14+)
             return;
           }
         }, true);
 
-        // --- 2. iOS Download: intercept download anchor clicks ---
+        // --- 2. Download: intercept download anchor clicks (handles blobs + standard downloads) ---
         document.addEventListener('click', function(e) {
           var el = e.target;
           // Walk up DOM to find anchor tag
@@ -218,22 +213,44 @@ class _WebViewScreenState extends State<WebViewScreen> {
           if (isDownload && href) {
             e.preventDefault();
             e.stopPropagation();
-            // Send to Flutter to handle download via share sheet
-            window.FlutterBridge.postMessage(JSON.stringify({
-              type: 'IOS_DOWNLOAD',
-              url: href.startsWith('http') ? href : window.location.origin + href,
-              filename: download || 'download'
-            }));
+            
+            if (href.startsWith('blob:')) {
+              // Convert blob to base64 and send to Flutter
+              fetch(href)
+                .then(function(res) { return res.blob(); })
+                .then(function(blob) {
+                  var reader = new FileReader();
+                  reader.onloadend = function() {
+                    var base64data = reader.result.split(',')[1];
+                    window.FlutterBridge.postMessage(JSON.stringify({
+                      type: 'BLOB_DOWNLOAD',
+                      base64: base64data,
+                      filename: download || 'download',
+                      mimeType: blob.type
+                    }));
+                  };
+                  reader.readAsDataURL(blob);
+                })
+                .catch(function(err) {
+                  console.error('[Flutter Bridge] Failed to convert blob:', err);
+                });
+            } else {
+              // Send to Flutter to handle download via share sheet
+              window.FlutterBridge.postMessage(JSON.stringify({
+                type: 'APP_DOWNLOAD',
+                url: href.startsWith('http') ? href : window.location.origin + href,
+                filename: download || 'download'
+              }));
+            }
           }
         }, true);
 
-        // --- 3. iOS PDF View: intercept PDF open requests ---
-        // If the web opens a PDF URL via window.open(), intercept and send to Flutter
+        // --- 3. PDF View: intercept PDF open requests ---
         var originalOpen = window.open;
         window.open = function(url, target, features) {
           if (url && (url.includes('/download/') || url.includes('/pdf/') || url.endsWith('.pdf'))) {
             window.FlutterBridge.postMessage(JSON.stringify({
-              type: 'IOS_OPEN_URL',
+              type: 'APP_OPEN_URL',
               url: url.startsWith('http') ? url : window.location.origin + url
             }));
             return null;
@@ -241,7 +258,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
           return originalOpen.call(this, url, target, features);
         };
 
-        console.log('[Flutter iOS Bridge] Injected successfully');
+        console.log('[Flutter App Bridge] Injected successfully');
       })();
     ''');
   }
@@ -290,16 +307,25 @@ class _WebViewScreenState extends State<WebViewScreen> {
       try {
         final Map<String, dynamic> msg = jsonDecode(data);
 
-        // iOS Download: tải file và mở Share Sheet
-        if (msg['type'] == 'IOS_DOWNLOAD') {
+        // iOS/Android Download: tải file và mở Share Sheet
+        if (msg['type'] == 'IOS_DOWNLOAD' || msg['type'] == 'APP_DOWNLOAD') {
           final String fileUrl = msg['url'];
           final String filename = msg['filename'] ?? 'download';
-          await _handleIOSDownload(fileUrl, filename);
+          await _handleNativeDownload(fileUrl, filename);
           return;
         }
 
-        // iOS Open URL (PDF viewer, external link)
-        if (msg['type'] == 'IOS_OPEN_URL') {
+        // Blob Download: giải mã Base64 và mở Share Sheet
+        if (msg['type'] == 'BLOB_DOWNLOAD') {
+          final String base64Data = msg['base64'];
+          final String filename = msg['filename'] ?? 'download';
+          final String mimeType = msg['mimeType'] ?? '';
+          await _handleBlobDownload(base64Data, filename, mimeType);
+          return;
+        }
+
+        // iOS/Android Open URL (PDF viewer, external link)
+        if (msg['type'] == 'IOS_OPEN_URL' || msg['type'] == 'APP_OPEN_URL') {
           final String url = msg['url'];
           await _openUrlExternally(url);
           return;
@@ -308,13 +334,37 @@ class _WebViewScreenState extends State<WebViewScreen> {
         // Flutter-native open external URL
         if (msg['type'] == 'OPEN_URL') {
           final String url = msg['url'];
-          await _openUrlExternally(url);
+          if (url.contains('/api/tai-ve-') || url.contains('/api/download/')) {
+            // Determine filename based on endpoint
+            String filename = 'download';
+            bool shouldDownload = true;
+            
+            if (url.contains('/tai-ve-zip/') || url.contains('/download/')) {
+              filename = 'latex_source.zip';
+            } else if (url.contains('/tai-ve-pdf/')) {
+              if (url.contains('download=1')) {
+                filename = 'document.pdf';
+              } else {
+                // PDF view request: open externally in Chrome/Safari for zoomable native viewer
+                shouldDownload = false;
+                await _openUrlExternally(url);
+              }
+            } else if (url.contains('/tai-ve-word/')) {
+              filename = 'document.docx';
+            }
+
+            if (shouldDownload) {
+              await _handleNativeDownload(url, filename);
+            }
+          } else {
+            await _openUrlExternally(url);
+          }
           return;
         }
 
-        // iOS file picker request từ JavaScript
-        if (msg['type'] == 'IOS_FILE_PICK') {
-          await _handleIOSFilePick(msg);
+        // iOS/Android file picker request từ JavaScript
+        if (msg['type'] == 'IOS_FILE_PICK' || msg['type'] == 'APP_FILE_PICK') {
+          await _handleNativeFilePick(msg);
           return;
         }
       } catch (e) {
@@ -348,9 +398,9 @@ class _WebViewScreenState extends State<WebViewScreen> {
     }
   }
 
-  /// iOS: Tải file từ URL và mở Share Sheet để save về máy
-  Future<void> _handleIOSDownload(String fileUrl, String filename) async {
-    debugPrint('==> [iOS Download] Bắt đầu tải: $fileUrl');
+  /// Tải file từ URL và mở Share Sheet để save về máy cho cả Android và iOS
+  Future<void> _handleNativeDownload(String fileUrl, String filename) async {
+    debugPrint('==> [App Download] Bắt đầu tải: $fileUrl');
 
     // Thêm auth header nếu có token
     final Map<String, String> headers = {
@@ -367,7 +417,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
       final response = await http.get(Uri.parse(fileUrl), headers: headers);
       if (response.statusCode != 200) {
-        debugPrint('==> [iOS Download] Lỗi HTTP: ${response.statusCode}');
+        debugPrint('==> [App Download] Lỗi HTTP: ${response.statusCode}');
         await _controller.runJavaScript(
             "window.dispatchEvent(new CustomEvent('flutter_download_error', {detail: {message: 'HTTP ${response.statusCode}'}}))");
         return;
@@ -378,7 +428,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
       final file = File('${tempDir.path}/$filename');
       await file.writeAsBytes(response.bodyBytes);
 
-      // Mở iOS Share Sheet (share_plus v10 API)
+      // Mở Native Share Sheet
       await Share.shareXFiles(
         [XFile(file.path, name: filename, mimeType: _getMimeTypeFromFilename(filename))],
         subject: 'Word2LaTeX — $filename',
@@ -386,17 +436,45 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
       await _controller.runJavaScript(
           "window.dispatchEvent(new CustomEvent('flutter_download_done', {detail: {filename: '$filename'}}))");
-      debugPrint('==> [iOS Download] Hoàn tất: $filename');
+      debugPrint('==> [App Download] Hoàn tất: $filename');
     } catch (e) {
-      debugPrint('==> [iOS Download] Lỗi: $e');
+      debugPrint('==> [App Download] Lỗi: $e');
       await _controller.runJavaScript(
-          "window.dispatchEvent(new CustomEvent('flutter_download_error', {detail: {message: '${e.toString().replaceAll("'", "\\'")}'"
-          "}}))");
+          "window.dispatchEvent(new CustomEvent('flutter_download_error', {detail: {message: '${e.toString().replaceAll("'", "\\'")}'}})");
     }
   }
 
-  /// iOS: File picker request từ JavaScript (programmatic trigger)
-  Future<void> _handleIOSFilePick(Map<String, dynamic> msg) async {
+  /// Nhận dữ liệu Base64 từ Blob WebView, ghi thành file tạm và mở Share Sheet
+  Future<void> _handleBlobDownload(String base64Data, String filename, String mimeType) async {
+    debugPrint('==> [Blob Download] Bắt đầu xử lý: $filename ($mimeType)');
+    try {
+      // Dispatch event thông báo bắt đầu xử lý tải
+      await _controller.runJavaScript(
+          "window.dispatchEvent(new CustomEvent('flutter_download_start', {detail: {filename: '$filename'}}))");
+
+      final Uint8List bytes = base64Decode(base64Data);
+      
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/$filename');
+      await file.writeAsBytes(bytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path, name: filename, mimeType: mimeType.isNotEmpty ? mimeType : _getMimeTypeFromFilename(filename))],
+        subject: 'Word2LaTeX — $filename',
+      );
+
+      await _controller.runJavaScript(
+          "window.dispatchEvent(new CustomEvent('flutter_download_done', {detail: {filename: '$filename'}}))");
+      debugPrint('==> [Blob Download] Thành công: $filename');
+    } catch (e) {
+      debugPrint('==> [Blob Download] Lỗi: $e');
+      await _controller.runJavaScript(
+          "window.dispatchEvent(new CustomEvent('flutter_download_error', {detail: {message: '${e.toString().replaceAll("'", "\\'")}'}})");
+    }
+  }
+
+  /// File picker request từ JavaScript (programmatic trigger)
+  Future<void> _handleNativeFilePick(Map<String, dynamic> msg) async {
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -423,16 +501,16 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 var blob = new Blob([ab], {type: '$mimeType'});
                 var file = new File([blob], '${file.name}', {type: '$mimeType'});
                 window.dispatchEvent(new CustomEvent('flutter_file_picked', {detail: {file: file, name: '${file.name}'}}));
-                console.log('[Flutter iOS] File injected: ${file.name}');
+                console.log('[Flutter App] File injected: ${file.name}');
               } catch(e) {
-                console.error('[Flutter iOS] File inject error:', e);
+                console.error('[Flutter App] File inject error:', e);
               }
             })();
           ''');
         }
       }
     } catch (e) {
-      debugPrint('==> [iOS FilePick] Lỗi: $e');
+      debugPrint('==> [App FilePick] Lỗi: $e');
     }
   }
 
