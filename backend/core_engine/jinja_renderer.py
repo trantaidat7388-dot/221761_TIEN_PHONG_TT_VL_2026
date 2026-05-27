@@ -380,7 +380,7 @@ class JinjaLaTeXRenderer:
         )
 
         out = []
-        out.append(f"\\setlength{{\\arrayrulewidth}}{{0.4pt}}")
+        out.append("\\setlength{\\arrayrulewidth}{0.4pt}")
         out.append(f"\\begin{{longtable}}{{{lt_col_def}}}")
         # Caption TRÊN nội dung (chuẩn IEEE + Springer cho bảng)
         out.append(f"\\caption{{{table_caption}}}\\\\")
@@ -508,7 +508,7 @@ class JinjaLaTeXRenderer:
         # Thoát khỏi chế độ 2 cột
         out.append("\\onecolumn")
         out.append("")
-        out.append(f"\\setlength{{\\arrayrulewidth}}{{0.4pt}}")
+        out.append("\\setlength{\\arrayrulewidth}{0.4pt}")
         out.append(f"\\begin{{longtable}}{{{lt_col_def}}}")
         # Caption TRÊN nội dung (chuẩn IEEE)
         out.append(f"\\caption{{{table_caption}}}\\\\")

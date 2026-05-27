@@ -6,7 +6,7 @@ Luồng xử lý: load Word -> trích phần tử theo thứ tự -> state machi
 import re
 import hashlib
 import base64
-from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Provide typing information when type-checking (no runtime import required)
@@ -2048,16 +2048,16 @@ class WordASTParser:
         list_level = 0
         list_type = "itemize"
         try:
-            pPr = p._element.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}pPr")
+            pPr = p._element.find(".//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr")
             if pPr is not None:
-                if pPr.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}pBdr") is not None:
+                if pPr.find(".//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pBdr") is not None:
                     has_border = True
-                numPr = pPr.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}numPr")
+                numPr = pPr.find(".//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numPr")
                 if numPr is not None:
                     is_list = True
-                    ilvl_el = numPr.find(f".//{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}ilvl")
+                    ilvl_el = numPr.find(".//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ilvl")
                     if ilvl_el is not None:
-                        val_attr = ilvl_el.get(f"{{http://schemas.openxmlformats.org/wordprocessingml/2006/main}}val")
+                        val_attr = ilvl_el.get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val")
                         if val_attr is not None:
                             list_level = int(val_attr)
         except Exception:
