@@ -24,6 +24,10 @@ _PATCH_APPLIED = False
 
 def mo_tai_lieu_word(docx: Any = None) -> Any:
     """Nạp tài liệu Word, hỗ trợ cả docx và docm."""
+    # Đảm bảo PartFactory đã được vá trước khi mở package,
+    # tránh main_document_part trả về kiểu Part thay vì DocumentPart.
+    ap_dung_ban_va_tuong_thich_docx()
+
     from docx.api import _default_docx_path
 
     candidate_path = _default_docx_path() if docx is None else docx
@@ -37,6 +41,12 @@ def mo_tai_lieu_word(docx: Any = None) -> Any:
     if document_part.content_type not in allowed_word_mime_types:
         tmpl = "file '%s' is not a Word file, content type is '%s'"
         raise ValueError(tmpl % (candidate_path, document_part.content_type))
+
+    if not isinstance(document_part, DocumentPart):
+        raise TypeError(
+            f"main_document_part is {type(document_part).__name__!r}, "
+            "expected DocumentPart. Kiểm tra PartFactory patch."
+        )
     return document_part.document
 
 
