@@ -584,10 +584,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
             tag_text = re.sub(r"\s+", "", tag_match.group(1) or "")
             eq_num = f"({tag_text})" if tag_text else ""
         else:
-            trailing_num = re.search(r"\((\d{1,3}[A-Za-z]?)\)\s*$", str(raw_text or ""))
-            if trailing_num and "=" in str(raw_text or ""):
+            trailing_num = re.search(r"\((\d{1,3}[A-Za-z]?)\)\s*$", raw_text or "")
+            if trailing_num and "=" in (raw_text or ""):
                 eq_num = f"({trailing_num.group(1)})"
-                raw_text = str(raw_text or "")[: trailing_num.start()].rstrip()
+                raw_text = (raw_text or "")[: trailing_num.start()].rstrip()
             else: eq_num = ""
 
         clean = raw_text
@@ -861,7 +861,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
 
         keywords = self._sanitize_keywords(metadata.get("keywords") or [])
         if keywords:
-            kw = ", ".join(self._latex_to_plain(str(k)) for k in keywords if str(k).strip())
+            kw = ", ".join(self._latex_to_plain(k) for k in keywords if k.strip())
             kw = re.sub(r"^\s*keywords?\s*[:\-–—]*\s*", "", kw, flags=re.IGNORECASE)
             p = doc.add_paragraph()
             kw_style = self._pick_style_name(["keywords", "Keywords"])
@@ -1160,10 +1160,10 @@ class SpringerWordRenderer(IEEEWordRenderer):
             tag_text = re.sub(r"\s+", "", tag_match.group(1) or "")
             eq_num = f"({tag_text})" if tag_text else ""
         else:
-            trailing_num = re.search(r"\((\d{1,3}[A-Za-z]?)\)\s*$", str(raw_text or ""))
-            if trailing_num and "=" in str(raw_text or ""):
+            trailing_num = re.search(r"\((\d{1,3}[A-Za-z]?)\)\s*$", raw_text or "")
+            if trailing_num and "=" in (raw_text or ""):
                 eq_num = f"({trailing_num.group(1)})"
-                raw_text = str(raw_text or "")[: trailing_num.start()].rstrip()
+                raw_text = (raw_text or "")[: trailing_num.start()].rstrip()
             else:
                 eq_num = ""
 
@@ -1201,7 +1201,7 @@ class SpringerWordRenderer(IEEEWordRenderer):
         if super()._is_equation_like_paragraph(raw_text):
             return True
 
-        plain = self._latex_to_plain(str(raw_text or "")).strip()
+        plain = self._latex_to_plain(raw_text or "").strip()
         if not plain or len(plain) > 180:
             return False
         if re.search(r"https?://", plain, re.IGNORECASE):

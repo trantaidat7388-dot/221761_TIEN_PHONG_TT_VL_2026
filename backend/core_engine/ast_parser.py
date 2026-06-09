@@ -165,6 +165,8 @@ class WordASTParser:
 
         except Exception as e:
             print(f"[WARN] COM chart pre-export error: {e}")
+            word = None
+            w_doc = None
         finally:
             if w_doc:
                 try:

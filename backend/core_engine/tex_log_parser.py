@@ -1,11 +1,20 @@
 import re
+from typing import TypedDict
 
-def phan_tich_log_latex(log_text: str) -> dict:
+
+class LatexLogResult(TypedDict):
+    thanh_cong: bool
+    loai_loi: str
+    dong: int | None
+    thong_diep: str
+    ngu_canh: str
+
+def phan_tich_log_latex(log_text: str) -> LatexLogResult:
     """
     Phân tích file .log của XeLaTeX để trích xuất dòng lỗi và nguyên nhân cụ thể,
     phục vụ cho Visual Debugger trên Frontend.
     """
-    loi = {
+    loi: LatexLogResult = {
         "thanh_cong": False,
         "loai_loi": "KHONG_XAC_DINH",
         "dong": None,

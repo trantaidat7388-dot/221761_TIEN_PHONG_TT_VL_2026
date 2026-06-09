@@ -43,7 +43,7 @@ class JinjaLaTeXRenderer:
     def escape_latex(self, text: str) -> str:
         """Escape ký tự LaTeX đặc biệt nếu AST chưa xử lý."""
         # LocKyTu trong AST parser xử lý phần lớn việc escape.
-        return str(text)
+        return text
 
     def render_body_nodes(self, body_nodes: list, doc_class: str = "generic") -> str:
         """Kết xuất danh sách node ngữ nghĩa (body) sang chuỗi LaTeX."""
@@ -153,10 +153,10 @@ class JinjaLaTeXRenderer:
                 avg_cell_len = total_chars / cell_count if cell_count > 0 else 0
                 
                 is_small_table = cols <= 3 and max_cell_len <= 20 and avg_cell_len <= 10
-                used_resizebox = not is_small_table
 
                 # Thiết lập độ rộng cột. Với bảng metadata 3 cột phổ biến
                 col_widths = None
+                has_custom_widths = False
                 if cols == 3 and rows_data:
                     first_row = rows_data[0]
                     headers = []
@@ -169,6 +169,16 @@ class JinjaLaTeXRenderer:
                         and ("description" in joined or "mô tả" in joined)
                     ):
                         col_widths = [0.22, 0.20, 0.54]
+                        has_custom_widths = True
+
+                if has_custom_widths:
+                    is_small_table = False
+
+                width_ratio = node.get("width_ratio")
+                if width_ratio is not None:
+                    used_resizebox = True
+                else:
+                    used_resizebox = not is_small_table
 
                 if not col_widths:
                     width_frac = 0.98 / cols if cols > 0 else 0.15
@@ -183,7 +193,12 @@ class JinjaLaTeXRenderer:
                 # Phát hiện bảng có nên là dạng rộng (trải qua hai cột) hay không
                 is_wide = cols > 4 or node.get("is_wide", False)
                 env_name = "table*" if (is_wide and doc_class == "acm") else "table"
-                scale_width = "\\textwidth" if env_name == "table*" else "\\columnwidth"
+                
+                base_width = "\\textwidth" if env_name == "table*" else "\\columnwidth"
+                if width_ratio is not None:
+                    scale_width = f"{width_ratio:.3f}{base_width}"
+                else:
+                    scale_width = base_width
 
                 # Bảng siêu dài (>12 hàng): dùng longtable
                 NGUONG_SIEU_DAI = 12
@@ -211,7 +226,7 @@ class JinjaLaTeXRenderer:
                 elif doc_class == "springer":
                     table_pos = "[htbp]"
                 else:
-                    table_pos = "[htbp]"
+                    table_pos = "[H]"
                 
                 out.append(f"\\begin{{{env_name}}}{table_pos}\n\\centering\n")
                 out.append(f"\\caption{{{table_caption}}}\\label{{tab{table_counter}}}\n")
@@ -853,6 +868,9 @@ class JinjaLaTeXRenderer:
                 if len(tail_text.strip()) <= 120:
                     fig_block = self._convert_figure_float_to_inline(fig_block, with_counter=True)
 
+            if fig_block.startswith(r"\begin{figure}[H]"):
+                fig_block = fig_block.replace(r"\begin{figure}[H]", r"\begin{figure}[htbp]", 1)
+
             chunks.append(body_tex[cursor:start])
             chunks.append(fig_block)
             cursor = end
@@ -926,7 +944,7 @@ class JinjaLaTeXRenderer:
         Use ``[!ht]`` to avoid float-only pages caused by the ``p`` placement mode,
         then add ``\\FloatBarrier`` only when a section starts shortly after a float.
         """
-        body_tex = re.sub(r"\\begin\{figure\}\[[^\]]*\]", r"\\begin{figure}[H]", body_tex)
+        body_tex = re.sub(r"\\begin\{figure\}\[[^\]]*\]", r"\\begin{figure}[!ht]", body_tex)
         body_tex = re.sub(r"\\begin\{table\}\[[^\]]*\]", r"\\begin{table}[H]", body_tex)
 
         float_end_pattern = re.compile(r"\\end\{(?:figure|table)\}")

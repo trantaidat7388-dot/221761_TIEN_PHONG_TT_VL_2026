@@ -22,11 +22,11 @@ DOCM_CONTENT_TYPE = "application/vnd.ms-word.document.macroEnabled.main+xml"
 _PATCH_APPLIED = False
 
 
-def mo_tai_lieu_word(docx_path: str | None = None) -> Any:
+def mo_tai_lieu_word(docx: Any = None) -> Any:
     """Nạp tài liệu Word, hỗ trợ cả docx và docm."""
     from docx.api import _default_docx_path
 
-    candidate_path = _default_docx_path() if docx_path is None else docx_path
+    candidate_path = _default_docx_path() if docx is None else docx
     document_part = Package.open(candidate_path).main_document_part
 
     allowed_word_mime_types = [
@@ -38,6 +38,9 @@ def mo_tai_lieu_word(docx_path: str | None = None) -> Any:
         tmpl = "file '%s' is not a Word file, content type is '%s'"
         raise ValueError(tmpl % (candidate_path, document_part.content_type))
     return document_part.document
+
+
+original_text_prop = Paragraph.text
 
 
 def _lay_toan_bo_van_ban(self) -> str:
@@ -53,6 +56,12 @@ def _lay_toan_bo_van_ban(self) -> str:
             return res if res is not None else ""
         except Exception:
             return ""
+
+
+def _dat_toan_bo_van_ban(self, value: str) -> None:
+    """Thiết lập văn bản bằng cách gọi setter gốc."""
+    if original_text_prop and original_text_prop.fset:
+        original_text_prop.fset(self, value)
 
 
 def _lay_toan_bo_run(self) -> list[Run]:
@@ -76,7 +85,7 @@ def ap_dung_ban_va_tuong_thich_docx() -> None:
     docx.Document = mo_tai_lieu_word
     docx.api.Document = mo_tai_lieu_word
 
-    setattr(Paragraph, "text", property(_lay_toan_bo_van_ban))
+    setattr(Paragraph, "text", property(_lay_toan_bo_van_ban, _dat_toan_bo_van_ban))
     setattr(Paragraph, "runs", property(_lay_toan_bo_run))
 
     _PATCH_APPLIED = True
