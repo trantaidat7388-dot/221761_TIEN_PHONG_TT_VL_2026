@@ -289,6 +289,39 @@ Copy-Item frontend/.env.example frontend/.env
 
 > **Nếu dùng `start.bat` (Windows):** Script sẽ **tự động tạo** file `.env` từ `.env.example` nếu chưa có — bạn không cần copy thủ công.
 
+---
+
+### Khởi động bằng Docker (Khuyên Dùng)
+
+Nếu không muốn cài đặt thủ công Python, Node.js, Pandoc và LaTeX (TeX Live) lên máy cá nhân, bạn có thể sử dụng Docker để chạy toàn bộ hệ thống chỉ với một câu lệnh.
+
+#### Yêu cầu
+- Đã cài đặt và khởi động [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+#### Các bước thực hiện
+1. **Tạo file cấu hình môi trường** (nếu chưa có):
+   ```bash
+   # Sao chép file cấu hình mẫu
+   cp backend/.env.example backend/.env
+   cp frontend/.env.example frontend/.env
+   ```
+2. **Khởi chạy hệ thống**:
+   Mở Terminal/CMD tại thư mục gốc dự án và chạy:
+   ```bash
+   docker-compose up --build -d
+   ```
+   *Docker sẽ tự động build image cho cả backend (đã cài sẵn Python, Pandoc, XeLaTeX) và frontend.*
+3. **Truy cập ứng dụng**:
+   - Giao diện Web (Frontend): [http://localhost](http://localhost) (Port 80)
+   - Tài liệu API (Backend Swagger): [http://localhost:8000/docs](http://localhost:8000/docs) (Port 8000)
+4. **Dừng hệ thống**:
+   ```bash
+   docker-compose down
+   ```
+
+---
+
+
 ### Các file quan trọng cần có sau khi clone
 
 Các file dưới đây phải tồn tại trong repository để người mới clone có thể dựng lại môi trường mà không phải tự đoán cấu trúc:
