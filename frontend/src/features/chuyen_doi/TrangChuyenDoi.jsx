@@ -141,6 +141,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
   const [pdfKetQua, setPdfKetQua] = useState(null)   // { soTrang, pdfUrl, tenFilePDF }
   const [pdfLoi, setPdfLoi] = useState(null)
   const [thoiGianChay, setThoiGianChay] = useState(0)
+  const [engineBienDich, setEngineBienDich] = useState('xelatex')
   const abortControllerRef = useRef(null) // 🧊 Quản lý việc ngắt request biên dịch PDF
   const laAdmin = nguoiDung?.role === 'admin'
   const coTheQuanLyTemplate = Boolean(nguoiDung)
@@ -160,6 +161,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
       setBuocHienTai(0)
       setTienTrinh(0)
       setDangBienDichPDF(false)
+      setEngineBienDich('xelatex')
     }
   }, [loaiTemplate, fileChon])
 
@@ -415,7 +417,7 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
     abortControllerRef.current = controller
 
     try {
-      const kq = await bienDichPDF(currentJobId, controller.signal)
+      const kq = await bienDichPDF(currentJobId, engineBienDich, controller.signal)
       if (kq.thanhCong) {
         setPdfKetQua({ soTrang: kq.soTrang, pdfUrl: kq.pdfUrl, tenFilePDF: kq.tenFilePDF })
         toast.success(`Biên dịch PDF thành công! (${kq.soTrang ?? '?'} trang)`)
@@ -883,6 +885,32 @@ const TrangChuyenDoi = ({ nguoiDung }) => {
                         </NutBam>
                         {!pdfKetQua ? (
                           <div className="flex flex-col gap-2 flex-1">
+                            {/* Compiler engine selection buttons */}
+                            <div className="flex items-center justify-between text-xs bg-white/5 border border-white/10 rounded-xl px-3 py-1.5">
+                              <span className="text-white/60">Trình biên dịch:</span>
+                              <div className="flex gap-1 bg-black/20 p-0.5 rounded-lg border border-white/5">
+                                <button
+                                  type="button"
+                                  onClick={() => setEngineBienDich('xelatex')}
+                                  disabled={dangBienDichPDF}
+                                  className={`px-2.5 py-0.5 rounded-md transition-all text-[11px] font-medium ${engineBienDich === 'xelatex'
+                                    ? 'bg-primary-500/20 text-primary-300 font-bold border border-primary-500/30'
+                                    : 'text-white/50 hover:text-white/80 border border-transparent'}`}
+                                >
+                                  XeLaTeX
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEngineBienDich('pdflatex')}
+                                  disabled={dangBienDichPDF}
+                                  className={`px-2.5 py-0.5 rounded-md transition-all text-[11px] font-medium ${engineBienDich === 'pdflatex'
+                                    ? 'bg-primary-500/20 text-primary-300 font-bold border border-primary-500/30'
+                                    : 'text-white/50 hover:text-white/80 border border-transparent'}`}
+                                >
+                                  pdfLaTeX
+                                </button>
+                              </div>
+                            </div>
                             <NutBam
                               onClick={xuLyBienDichPDF}
                               bienThe="secondary"

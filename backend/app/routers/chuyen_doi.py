@@ -1075,7 +1075,13 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = 
             original_tex_name = tex_path.name
 
     try:
-        thanh_cong, thong_bao_loi = await run_in_threadpool(bien_dich_latex, str(tex_path))
+        engine = None
+        if payload and isinstance(payload, dict):
+            engine = payload.get("engine")
+            if engine not in ("xelatex", "pdflatex"):
+                engine = None
+
+        thanh_cong, thong_bao_loi = await run_in_threadpool(bien_dich_latex, str(tex_path), engine=engine)
         if not thanh_cong:
             missing_file_match = re.search(r"! LaTeX Error: File `(.*?)' not found.", thong_bao_loi)
             if missing_file_match:

@@ -280,8 +280,7 @@ export const taiFileZip = async (jobId, tenFileZipFallback = '') => {
 }
 
 // ── COMPILE PDF (Step 2) ──────────────────────────────────────────────────────
-
-export const bienDichPDF = async (jobId, signal = null) => {
+export const bienDichPDF = async (jobId, engine = 'xelatex', signal = null) => {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 60000)
   try {
@@ -289,7 +288,7 @@ export const bienDichPDF = async (jobId, signal = null) => {
     const response = await fetch(`${DIA_CHI_API_GOC}/api/compile-pdf/${jobId}`, {
       method: 'POST',
       headers: { ...taoHeaderXacThuc(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ engine }),
       signal: signal || controller.signal
     })
     if (response.status === 401) thongBaoPhienHetHan()

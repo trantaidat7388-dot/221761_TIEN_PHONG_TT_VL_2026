@@ -166,3 +166,46 @@ def test_smoke_chuyen_doi_word_ieee_khong_can_upload_template(tmp_path, monkeypa
     assert data["job_id"]
     assert data["ten_file_word"].endswith("_ieee.docx")
     assert data["word_url"].startswith("/api/tai-ve-word/")
+
+
+def test_smoke_compile_pdf_with_engine(tmp_path, monkeypatch, client) -> None:
+    # Setup job folder with mock output.tex
+    job_id = "test-job-compile-engine"
+    job_folder = Path(router_chuyen_doi.TEMP_FOLDER) / f"job_{job_id}"
+    job_folder.mkdir(parents=True, exist_ok=True)
+    (job_folder / "job_output.tex").write_text("\\documentclass{article}\\begin{document}X\\end{document}", encoding="utf-8")
+
+    captured_engine = []
+
+    def mock_bien_dich_latex(duong_dan_dau_ra, thu_muc_bien_dich=None, engine=None):
+        captured_engine.append(engine)
+        # Create output pdf file to simulate successful compilation
+        pdf_path = Path(duong_dan_dau_ra).with_suffix(".pdf")
+        pdf_path.write_bytes(b"%PDF-1.4\n")
+        return True, ""
+
+    monkeypatch.setattr(router_chuyen_doi, "bien_dich_latex", mock_bien_dich_latex)
+
+    # Test with engine xelatex
+    resp = client.post(f"/api/compile-pdf/{job_id}", json={"engine": "xelatex"})
+    assert resp.status_code == 200
+    assert resp.json()["thanh_cong"] is True
+    assert captured_engine[-1] == "xelatex"
+
+    # Test with engine pdflatex
+    resp = client.post(f"/api/compile-pdf/{job_id}", json={"engine": "pdflatex"})
+    assert resp.status_code == 200
+    assert resp.json()["thanh_cong"] is True
+    assert captured_engine[-1] == "pdflatex"
+
+    # Test with invalid engine (should default to None or auto)
+    resp = client.post(f"/api/compile-pdf/{job_id}", json={"engine": "invalid"})
+    assert resp.status_code == 200
+    assert resp.json()["thanh_cong"] is True
+    assert captured_engine[-1] is None
+
+    # Cleanup
+    if job_folder.exists():
+        import shutil
+        shutil.rmtree(job_folder, ignore_errors=True)
+

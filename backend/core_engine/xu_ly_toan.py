@@ -35,7 +35,7 @@ _OMML_NSMAP = {
 class BoXuLyToan:
     """Bộ xử lý toán: chuyển OMML XML element → LaTeX string."""
 
-    def __init__(self, duong_dan_xslt: str = None):
+    def __init__(self, duong_dan_xslt: str | None = None):
         self._xslt_transform = None
         self._mathml_to_latex_fn = None
         self._co_pandoc = None  # lazy-check

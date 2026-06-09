@@ -1665,7 +1665,7 @@ class ChuyenDoiWordSangLatex:
 
         # Tách parsed authors thành danh sách các dict {name: '', affil: ''}
         author_list = []
-        current_author = None
+        current_author: Optional[dict[str, Any]] = None
         for info in authors:
             info_escaped = loc_ky_tu(info).strip()
             # Heuristic: nếu chuỗi ngắn và không có email/địa chỉ dài, có thể là tên
