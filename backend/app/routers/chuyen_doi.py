@@ -312,8 +312,8 @@ async def chuyen_doi_file(
     else:
         template_path = _resolve_template_path(
             template_type,
-            current_user_id=current_user.id if current_user else None,
-            current_user_role=current_user.role if current_user else None,
+            current_user_id=_lay_user_id_bat_buoc(current_user) if current_user is not None else None,
+            current_user_role=_lay_user_role(current_user),
         ) or _resolve_template_path("ieee_conference")
         if not template_path or not template_path.exists():
             raise HTTPException(status_code=500, detail="Template không tồn tại hoặc lỗi cấu trúc thư mục.")
@@ -348,6 +348,7 @@ async def chuyen_doi_file(
         )
         await run_in_threadpool(bo_chuyen_doi.chuyen_doi)
 
+        tex_raw = ""
         try:
             tex_raw = output_path.read_text(encoding='utf-8', errors='ignore')
             # [Chống lỗi] Dọn dẹp phần metadata còn sót lại để tránh lỗi "Missing \begin{document}"

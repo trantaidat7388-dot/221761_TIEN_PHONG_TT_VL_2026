@@ -6,7 +6,7 @@ auth_routes.py
 import json
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib import parse, request as urlrequest
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -389,7 +389,7 @@ def google_callback(code: str, state: str = "", request: Request = None, db: Ses
 
 def _don_dep_session_cu(db: Session) -> None:
     """Xóa tất cả login_sessions quá hạn (> TTL phút)."""
-    cutoff = datetime.utcnow() - timedelta(minutes=_LOGIN_SESSION_TTL_MINUTES)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=_LOGIN_SESSION_TTL_MINUTES)
     db.query(models.LoginSession).filter(models.LoginSession.created_at < cutoff).delete()
     db.commit()
 
@@ -431,7 +431,7 @@ def kiem_tra_phien_dang_nhap(
         raise HTTPException(status_code=404, detail="Phiên đăng nhập không tồn tại hoặc đã hết hạn")
 
     # Kiểm tra TTL
-    if datetime.utcnow() - session.created_at > timedelta(minutes=_LOGIN_SESSION_TTL_MINUTES):
+    if datetime.now(timezone.utc).replace(tzinfo=None) - session.created_at > timedelta(minutes=_LOGIN_SESSION_TTL_MINUTES):
         db.delete(session)
         db.commit()
         raise HTTPException(status_code=410, detail="Phiên đăng nhập đã hết hạn")
@@ -607,7 +607,7 @@ def dang_ky_goi_premium(
     if not plan:
         raise HTTPException(status_code=400, detail="Gói Premium không hợp lệ")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     
     # Cho phép cộng dồn ngày nếu đang có Premium
     if current_user.plan_type == "premium" and current_user.premium_expires_at and current_user.premium_expires_at > now:
@@ -633,7 +633,7 @@ def dang_ky_goi_premium(
     cast(Any, current_user).plan_type = "premium"
     if cast(Any, current_user).premium_expires_at is None or cast(Any, current_user).premium_expires_at < now:
         cast(Any, current_user).premium_started_at = now
-    cast(Any, current_user).premium_expires_at = base_time + timedelta(days=so_ngay)
+    cast(Any, current_user).premium_expires_at = base_time + timedelta(days=int(so_ngay))
 
     db.add(
         models.TokenLedger(

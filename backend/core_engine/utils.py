@@ -320,7 +320,8 @@ def loc_ky_tu(text: str) -> str:
             '~': r'\textasciitilde{}',
             '^': r'\textasciicircum{}',
         }
-        return mapping.get(char, char)
+        val = mapping.get(char)
+        return val if val is not None else char
 
     # Escape tất cả ký tự đặc biệt LaTeX từ plain text sạch
     pattern = r'[\\%$_&#{}~^]'
@@ -449,7 +450,7 @@ def phat_hien_engine(duong_dan_tex: str) -> str:
     return 'pdflatex' # Mặc định hệ thống: ưu tiên pdfLaTeX
 
 
-def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str = None, engine: str = None) -> tuple[bool, str]:
+def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str | None = None, engine: str | None = None) -> tuple[bool, str]:
     """Biên dịch file .tex, trả về (thành_công, thông_báo_lỗi).
     
     engine: 'xelatex' hoặc 'pdflatex'. Nếu None sẽ tự phát hiện.
@@ -598,7 +599,7 @@ def phat_hien_loai_tai_lieu(template_src: str) -> str:
     else:
         return "generic"
 
-def giai_nen_mau_zip(zip_path: str, target_dir: str = None) -> str:
+def giai_nen_mau_zip(zip_path: str, target_dir: str | None = None) -> str:
     """Giải nén file ZIP template vào thư mục đích.
 
     - Kiểm tra bảo mật path traversal trước khi giải nén.
@@ -694,7 +695,7 @@ def tim_file_tex_chinh(directory: str) -> str:
 
 
 def dong_goi_thu_muc_dau_ra(work_dir: str, output_zip_path: str,
-                             exclude_suffixes: set = None, generated_tex_name: str = None) -> str:
+                             exclude_suffixes: set | None = None, generated_tex_name: str | None = None) -> str:
     """Đóng gói thư mục làm việc thành file ZIP (dành cho Overleaf upload).
 
     CHỈ bao gồm: .tex (đã render), .pdf, .bib, .cls, .sty, .bst, và thư mục images/.

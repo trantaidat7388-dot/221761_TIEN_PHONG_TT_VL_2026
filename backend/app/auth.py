@@ -80,9 +80,10 @@ def lay_nguoi_dung_hien_tai(
     )
     try:
         payload = _giai_ma_voi_nhieu_khoa(token)
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        user_id_val = payload.get("sub")
+        if user_id_val is None:
             raise credentials_exception
+        user_id = str(user_id_val)
     except (JWTError, ValueError):
         raise credentials_exception
 

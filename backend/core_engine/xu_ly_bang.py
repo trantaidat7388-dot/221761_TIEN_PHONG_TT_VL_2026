@@ -431,7 +431,7 @@ class BoXuLyBang:
                                                 duong_dan_png = os.path.join(self.bo_chuyen.thu_muc_anh, ten_anh)
                                                 new_size = (img.size[0] * 3, img.size[1] * 3)
                                                 # Pillow >= 10: LANCZOS chuyển vào Image.Resampling
-                                                _resample = getattr(Image.Resampling, 'LANCZOS', None) or getattr(Image, 'LANCZOS', Image.BICUBIC)
+                                                _resample = getattr(Image.Resampling, 'LANCZOS', None) or getattr(Image, 'LANCZOS', None) or getattr(Image, 'BICUBIC', 3)
                                                 img_resized = img.resize(new_size, _resample)
                                                 img_resized.save(duong_dan_png)
                                                 os.remove(duong_dan_anh)

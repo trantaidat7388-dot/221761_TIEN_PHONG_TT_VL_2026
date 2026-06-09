@@ -300,7 +300,7 @@ class TemplatePreprocessor:
 
     @classmethod
     def _trim_after_first_end_document(cls, tex: str) -> str:
-        """Giữ lại duy nhất một tài liệu LaTeX, bỏ phần dư sau \end{document} đầu tiên."""
+        r"""Giữ lại duy nhất một tài liệu LaTeX, bỏ phần dư sau \end{document} đầu tiên."""
         end_match = re.search(r'^[ \t]*\\end\{document\}', tex, re.MULTILINE)
         if not end_match:
             return tex

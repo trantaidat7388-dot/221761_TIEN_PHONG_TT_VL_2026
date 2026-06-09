@@ -185,17 +185,18 @@ class WordASTParser:
     def _extract_elements_in_order(self) -> List[tuple]:
         """Trích danh sách phần tử theo thứ tự, bao gồm cả nội dung trong content control."""
         elements = []
+        doc = self.doc
         # Guard against uninitialized parser state (helps static analyzers)
-        if not self.doc:
+        if not doc:
             return elements
-        body = self.doc.element.body
+        body = doc.element.body
         
         def traverse(node):
             if not hasattr(node, "tag") or not isinstance(node.tag, str):
                 return
             tag = node.tag.split("}")[-1]
             if tag == "p":
-                elements.append(("paragraph", Paragraph(node, self.doc)))
+                elements.append(("paragraph", Paragraph(node, doc)))
             elif tag in ("oMathPara", "oMath"):
                 elements.append(("omml", node))
                 # Capture nested blocks only from explicit containers where paragraph
@@ -302,7 +303,7 @@ class WordASTParser:
             return None
 
     def _includegraphics_options(self, width_expr: str) -> str:
-        """Tạo option \includegraphics để giữ tỉ lệ khi ảnh vector mất thông tin crop."""
+        r"""Tạo option \includegraphics để giữ tỉ lệ khi ảnh vector mất thông tin crop."""
         return f"width={width_expr},keepaspectratio"
         
     def _is_body_label(self, text: str) -> bool:
@@ -1598,6 +1599,8 @@ class WordASTParser:
             # FIX 2: Map by superscript numbers/symbols (*, †, ‡ included)
             for a in authors:
                 name = a["name"]
+                if not isinstance(name, str):
+                    name = str(name)
                 # Match trailing superscript markers: digits, *, †, ‡, commas
                 num_match = re.search(r'([\d\*†‡,\s]+)$', name)
                 if num_match:

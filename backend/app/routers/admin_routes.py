@@ -235,8 +235,8 @@ def lay_danh_sach_nguoi_dung(
                 "role": u.role,
                 "plan_type": u.plan_type,
                 "token_balance": u.token_balance,
-                "premium_started_at": u.premium_started_at.isoformat() if u.premium_started_at else None,
-                "premium_expires_at": u.premium_expires_at.isoformat() if u.premium_expires_at else None,
+                "premium_started_at": u.premium_started_at.isoformat() if u.premium_started_at is not None else None,
+                "premium_expires_at": u.premium_expires_at.isoformat() if u.premium_expires_at is not None else None,
                 "google_id": u.google_id,
                 "photo_url": u.photo_url,
                 "is_active": u.is_active,
@@ -451,14 +451,16 @@ def cap_nhat_premium_nguoi_dung(
 
     db.commit()
     db.refresh(user)
+    start_at = user.premium_started_at
+    exp_at = user.premium_expires_at
     return {
         "thanh_cong": True,
         "user": {
             "id": user.id,
             "plan_type": user.plan_type,
             "token_balance": user.token_balance,
-            "premium_started_at": user.premium_started_at.isoformat() if user.premium_started_at else None,
-            "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None,
+            "premium_started_at": start_at.isoformat() if isinstance(start_at, datetime) else None,
+            "premium_expires_at": exp_at.isoformat() if isinstance(exp_at, datetime) else None,
         },
     }
 
@@ -663,8 +665,8 @@ def lay_token_ledger_toan_he_thong(
             {
                 "id": r.id,
                 "user_id": r.user_id,
-                "username": users.get(r.user_id).username if users.get(r.user_id) else None,
-                "email": users.get(r.user_id).email if users.get(r.user_id) else None,
+                "username": u.username if u is not None else None,
+                "email": u.email if u is not None else None,
                 "delta_token": r.delta_token,
                 "balance_after": r.balance_after,
                 "reason": r.reason,
@@ -673,6 +675,7 @@ def lay_token_ledger_toan_he_thong(
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in records
+            for u in [users.get(r.user_id)]
         ]
     }
 
@@ -759,8 +762,8 @@ def lay_lich_su_toan_he_thong(
             {
                 "id": r.id,
                 "user_id": r.user_id,
-                "username": users.get(r.user_id).username if users.get(r.user_id) else None,
-                "email": users.get(r.user_id).email if users.get(r.user_id) else None,
+                "username": u.username if u is not None else None,
+                "email": u.email if u is not None else None,
                 "job_id": r.job_id,
                 "file_name": r.file_name,
                 "template_name": r.template_name,
@@ -773,6 +776,7 @@ def lay_lich_su_toan_he_thong(
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in records
+            for u in [users.get(r.user_id)]
         ]
     }
 
@@ -969,8 +973,8 @@ def lay_danh_sach_payments_admin(
             {
                 "id": r.id,
                 "user_id": r.user_id,
-                "username": users.get(r.user_id).username if users.get(r.user_id) else None,
-                "email": users.get(r.user_id).email if users.get(r.user_id) else None,
+                "username": u.username if u is not None else None,
+                "email": u.email if u is not None else None,
                 "amount_vnd": r.amount_vnd,
                 "token_amount": r.token_amount,
                 "status": r.status,
@@ -978,6 +982,7 @@ def lay_danh_sach_payments_admin(
                 "updated_at": r.updated_at.isoformat() if r.updated_at else None,
             }
             for r in records
+            for u in [users.get(r.user_id)]
         ]
     }
 

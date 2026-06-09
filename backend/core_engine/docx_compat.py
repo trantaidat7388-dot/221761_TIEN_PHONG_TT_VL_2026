@@ -76,8 +76,7 @@ def ap_dung_ban_va_tuong_thich_docx() -> None:
     docx.Document = mo_tai_lieu_word
     docx.api.Document = mo_tai_lieu_word
 
-    # Patch paragraph accessors so inline content-control text is preserved.
-    Paragraph.text = property(_lay_toan_bo_van_ban)
-    Paragraph.runs = property(_lay_toan_bo_run)
+    setattr(Paragraph, "text", property(_lay_toan_bo_van_ban))
+    setattr(Paragraph, "runs", property(_lay_toan_bo_run))
 
     _PATCH_APPLIED = True

@@ -15,7 +15,7 @@ import re
 import subprocess
 import tempfile
 from copy import deepcopy
-from lxml import etree
+from lxml import etree  # type: ignore
 
 from .utils import loc_ky_tu
 
@@ -65,9 +65,9 @@ class BoXuLyToan:
         # Tìm thư viện MathML→LaTeX có sẵn trong môi trường
         # latex2mathml (có hàm ngược mathml→latex ở phiên bản mới)
         try:
-            from latex2mathml.converter import convert as _l2m  # noqa: F401
+            from latex2mathml.converter import convert as _l2m  # type: ignore # noqa: F401
             # Thử hàm ngược (chỉ có ở các bản fork hoặc repo clone hiếm gặp)
-            from latex2mathml import mathml2latex as _m2l
+            from latex2mathml import mathml2latex as _m2l  # type: ignore
             self._mathml_to_latex_fn = _m2l
             return
         except ImportError:
