@@ -319,7 +319,7 @@ def dang_nhap_google_redirect(request: Request) -> RedirectResponse:
     if not GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=500, detail="Thiếu cấu hình GOOGLE_CLIENT_ID")
 
-    # Tự động chọn redirect_uri dựa trên host hoặc referer (localhost vs ngrok)
+    # Tự động chọn redirect_uri dựa trên host (localhost vs production domain)
     host = request.headers.get("host", "")
     referer = request.headers.get("referer", "")
     
@@ -328,7 +328,7 @@ def dang_nhap_google_redirect(request: Request) -> RedirectResponse:
     if "word2latex.id.vn" in (host + referer).lower():
         logger.info("[SmartRedirect] Detected Project Domain. Using PUBLIC callback.")
     elif any(x in (host + referer).lower() for x in ["localhost", "127.0.0.1"]):
-        # Nếu truy cập qua localhost, ưu tiên dùng callback local để tiết kiệm ngrok
+        # Truy cập qua localhost → dùng callback local
         redirect_uri = "http://localhost:8000/api/auth/google/callback"
         logger.info("[SmartRedirect] Detected Localhost. Using LOCAL callback.")
     else:
