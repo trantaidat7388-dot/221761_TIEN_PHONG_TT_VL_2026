@@ -133,7 +133,7 @@ echo.
 if not exist "%ROOT%frontend\node_modules" (
     echo       Installing frontend dependencies...
     pushd "%ROOT%frontend"
-    npm install --prefer-offline
+    call npm install --prefer-offline
     if errorlevel 1 (
         popd
         echo       ERROR: frontend dependency install failed.
