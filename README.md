@@ -500,28 +500,36 @@ Truy cập `http://localhost:5173` trên trình duyệt.
 
 ## Pipeline CLI (Không cần giao diện)
 
-Nếu không muốn vào web UI, có thể chạy pipeline chuyển đổi trực tiếp bằng script:
+Nếu không muốn vào web UI, bạn có thể chạy pipeline chuyển đổi trực tiếp bằng script CLI. Hệ thống đã chuẩn bị sẵn một số tệp dữ liệu mẫu để bạn chạy thử nghiệm ngay lập tức.
 
-- **Input 1**: 1 file Word (`.docx` hoặc `.docm`)
-- **Input 2**: 1 file ZIP template LaTeX
-- **Output**: thư mục kết quả chứa `.tex` và `.zip` (tùy chọn thêm `.pdf`)
+* **File Word mẫu:** Nằm trong thư mục [input_data/Template_word/](file:///d:/DOWNLOAD/221761_TIEN_PHONG_TT_VL_2026-main%20(4)/221761_TIEN_PHONG_TT_VL_2026-main/input_data/Template_word) (ví dụ: `IEEE Paper Format.docx`, `acm_submission_template.docx`, `conference-template-a4 (ieee).docx`,...).
+* **Template ZIP mẫu:** Nằm trong thư mục [input_data/](file:///d:/DOWNLOAD/221761_TIEN_PHONG_TT_VL_2026-main%20(4)/221761_TIEN_PHONG_TT_VL_2026-main/input_data) (ví dụ: `IEEE_Conference_Template.zip`, `ACM_Hypertext_Conference_Template.zip`, `Elsevier_Article__elsarticle__Template.zip`,...).
 
-### Lệnh chạy cơ bản
+### Lệnh chạy cơ bản (Dùng file mẫu sẵn có)
 
 ```powershell
-# PowerShell (Windows)
+# PowerShell (Windows) - Chạy thử nghiệm ngay lập tức với file mẫu
 python run_conversion_pipeline.py `
-    --word input_data/Template_word/<ten_file_word>.docx `
-    --template-zip <duong_dan_template_zip>.zip `
+    --word "input_data/Template_word/IEEE Paper Format.docx" `
+    --template-zip "input_data/IEEE_Conference_Template.zip" `
     --output-dir outputs/pipeline_cli
 ```
 
 ```bash
 # Bash (Linux/macOS)
 python run_conversion_pipeline.py \
-    --word input_data/Template_word/<ten_file_word>.docx \
-    --template-zip <duong_dan_template_zip>.zip \
+    --word "input_data/Template_word/IEEE Paper Format.docx" \
+    --template-zip "input_data/IEEE_Conference_Template.zip" \
     --output-dir outputs/pipeline_cli
+```
+
+### Cú pháp tổng quát cho tệp của bạn
+
+```bash
+python run_conversion_pipeline.py \
+    --word "đường/dẫn/đến/file_word_của_bạn.docx" \
+    --template-zip "đường/dẫn/đến/template_latex.zip" \
+    --output-dir "thư_mục_đầu_ra"
 ```
 
 ### Tùy chọn nâng cao
@@ -529,43 +537,53 @@ python run_conversion_pipeline.py \
 ```bash
 # Biên dịch PDF (cần xelatex/pdflatex trong PATH)
 python run_conversion_pipeline.py \
-    --word <file>.docx --template-zip <template>.zip \
+    --word "input_data/Template_word/IEEE Paper Format.docx" \
+    --template-zip "input_data/IEEE_Conference_Template.zip" \
     --output-dir outputs/pipeline_cli --compile-pdf
 
-# Giữ thư mục job để debug
+# Giữ thư mục job tạm để debug
 python run_conversion_pipeline.py \
-    --word <file>.docx --template-zip <template>.zip \
+    --word "input_data/Template_word/IEEE Paper Format.docx" \
+    --template-zip "input_data/IEEE_Conference_Template.zip" \
     --output-dir outputs/pipeline_cli --keep-workdir
 ```
 
+---
+
 ## Pipeline Word -> Word CLI
 
-Script dành cho chuyển đổi trực tiếp giữa Springer Word và IEEE Word:
+Script dành cho chuyển đổi trực tiếp định dạng tài liệu giữa Springer Word và IEEE Word:
 
-- `springer-to-ieee`: Springer Word -> IEEE Word
-- `ieee-to-springer`: IEEE Word -> Springer Word
+* `springer-to-ieee`: Chuyển đổi từ định dạng Springer Word sang IEEE Word
+* `ieee-to-springer`: Chuyển đổi từ định dạng IEEE Word sang Springer Word
+
+### Lệnh chạy mẫu (Chạy thử nghiệm ngay lập tức)
 
 ```powershell
+# PowerShell (Windows)
 python run_word_to_word_pipeline.py `
-    --input-word input_data/Template_word/<ten_file>.docx `
+    --input-word "input_data/Template_word/IEEE Paper Format.docx" `
     --direction ieee-to-springer `
     --output-dir outputs/word_to_word
 ```
 
 ```bash
+# Bash (Linux/macOS)
 python run_word_to_word_pipeline.py \
-    --input-word input_data/Template_word/<ten_file>.docx \
-    --direction springer-to-ieee \
+    --input-word "input_data/Template_word/IEEE Paper Format.docx" \
+    --direction ieee-to-springer \
     --output-dir outputs/word_to_word
 ```
 
-Tùy chọn template riêng:
+### Sử dụng template tùy chỉnh riêng của bạn
+
+Nếu không muốn dùng template mặc định của hệ thống, bạn có thể truyền thêm tham số `--template-word`:
 
 ```bash
 python run_word_to_word_pipeline.py \
-    --input-word <file>.docm \
+    --input-word "đường/dẫn/đến/file_đầu_vào.docx" \
     --direction ieee-to-springer \
-    --template-word input_data/Template_word/splnproc2510.docm \
+    --template-word "input_data/Template_word/splnproc2510.docm" \
     --output-dir outputs/word_to_word
 ```
 
