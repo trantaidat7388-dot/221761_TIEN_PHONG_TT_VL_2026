@@ -76,8 +76,6 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 - **Hệ thống Token Economy** — Quản lý quota chuyển đổi theo token, hỗ trợ gói Premium.
 - **Thanh toán SePay (Polling Sync)** — Đối soát giao dịch tự động không cần Webhook, có state machine pending/failed/completed.
 - **Quản trị Admin** — Dashboard quản lý user, audit log, cấp/thu hồi token.
-- **Lộ trình quản trị Admin** — Xem checklist, kiến trúc quyền và backlog tại `docs/admin-governance-roadmap.md`.
-- **Tài liệu SePay** — Luồng kỹ thuật tại `docs/sepay-payment-polling-sync.md`, checklist cấu hình nhanh ở mục **Cấu Hình Biến Môi Trường**.
 - **Rate Limiting** — Giới hạn request theo nhóm (auth, convert, admin) để chống lạm dụng.
 - **Dọn dẹp tự động** — Thư mục job tạm và file output được xóa theo TTL cấu hình.
 - **Xử lý cục bộ nội dung tài liệu** — Nội dung Word/LaTeX được xử lý trên máy chủ của hệ thống; chỉ gọi dịch vụ bên ngoài khi dùng OAuth hoặc thanh toán.
@@ -104,12 +102,15 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 │   │   │   ├── chuyen_doi.py
 │   │   │   ├── templates.py
 │   │   │   ├── payment_routes.py
+│   │   │   ├── pages_routes.py               # Router phục vụ page
 │   │   │   └── admin_routes.py
 │   │   ├── security/
 │   │   │   └── security.py
 │   │   ├── services/
 │   │   │   ├── token_service.py
-│   │   │   └── sepay_sync.py
+│   │   │   ├── sepay_sync.py
+│   │   │   ├── admin_system_config.py        # Quản lý cấu hình hệ thống
+│   │   │   └── landing_content.py            # Quản lý nội dung trang chủ
 │   │   └── utils/
 │   │       └── api_utils.py
 │   ├── core_engine/                      # Pipeline Word -> LaTeX
@@ -126,6 +127,8 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 │   │   ├── author_strategies.py
 │   │   ├── docx_compat.py
 │   │   ├── tex_log_parser.py
+│   │   ├── word_ieee_renderer.py         # Renderer chuyên biệt cho mẫu IEEE
+│   │   ├── word_springer_renderer.py     # Renderer chuyên biệt cho mẫu Springer
 │   │   ├── utils.py
 │   │   ├── config.py
 │   │   ├── publishers_manifest.json
@@ -150,21 +153,16 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 │   │   ├── services/
 │   │   ├── utils/
 │   │   └── features/
-│   │       ├── landing/
-│   │       ├── xac_thuc/
-│   │       ├── chuyen_doi/
-│   │       ├── lich_su/
-│   │       ├── tai_khoan/
-│   │       ├── premium/
-│   │       └── admin/
 │   ├── tests-e2e/                        # Playwright E2E
 │   ├── playwright.config.js
 │   ├── package.json
 │   ├── vite.config.js
+│   ├── Dockerfile                        # Dockerfile cho frontend (Vite -> Nginx)
+│   ├── nginx.conf                        # Cấu hình Nginx phục vụ frontend
 │   ├── .env.example
 │   └── .env                              # File local cho frontend (VITE_*)
 │
-├── tests/                                # Bộ test pytest (50+ files)
+├── tests/                                # Bộ test pytest (60+ files)
 │   ├── conftest.py
 │   ├── test_api_smoke.py
 │   ├── test_compile.py
@@ -175,22 +173,21 @@ Ngoài ra, người dùng có thể **tải lên mẫu riêng** (file `.tex` ho�
 │   ├── test_token_deduct_refund.py
 │   └── ...
 │
-├── brain/                                # Thư mục làm việc/ghi chú nội bộ
-├── FIX/                                  # Ghi chú sửa lỗi và phân tích
-├── docs/                                 # Tài liệu kỹ thuật và roadmap
-├── input_data/                           # Dữ liệu Word đầu vào mẫu
-├── output/                               # Kết quả chuyển đổi (legacy)
-├── outputs/                              # Kết quả chuyển đổi
-├── images/                               # Ảnh minh họa / tài nguyên
+├── app_web_view/                         # Ứng dụng di động Flutter Web View wrapper
+│   ├── lib/                              # Mã nguồn Flutter
+│   ├── pubspec.yaml                      # Cấu hình packages Flutter
+│   └── ...
 │
+├── input_data/                           # Dữ liệu Word đầu vào mẫu và templates
+├── outputs/                              # Kết quả chuyển đổi cục bộ
+├── docker-compose.yml                    # Quản lý chạy hệ thống bằng Docker Compose
 ├── run_api.py                            # Chạy API nhanh bằng Uvicorn
 ├── run_conversion_pipeline.py            # Chạy pipeline CLI
 ├── run_word_to_word_pipeline.py          # Chạy pipeline Word -> Word CLI
 ├── start.bat                             # Khởi động nhanh trên Windows
 ├── start.sh                              # Khởi động nhanh trên Linux/macOS
-├── requirements.txt                      # Dependencies root
-├── package-lock.json
-├── pytest.ini
+├── requirements.txt                      # Dependencies Python root
+├── pytest.ini                            # Cấu hình Pytest
 └── README.md
 ```
 
@@ -365,8 +362,6 @@ Copy-Item frontend/.env.example frontend/.env
 
 - [ ] Nếu đang ở môi trường dev và chưa có luồng ngân hàng thật, xác nhận thủ công qua:
     - `POST /api/payment/dev/complete/{id}`
-
-> Luồng kỹ thuật chi tiết: `docs/sepay-payment-polling-sync.md`.
 
 ---
 
