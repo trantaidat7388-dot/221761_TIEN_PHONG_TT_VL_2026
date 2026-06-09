@@ -1,4 +1,3 @@
-import pytest
 from TexSoup import TexSoup
 import os
 
