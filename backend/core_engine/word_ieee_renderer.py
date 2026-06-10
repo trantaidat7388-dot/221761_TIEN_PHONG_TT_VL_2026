@@ -535,26 +535,66 @@ class IEEEWordRenderer:
             run.font.name = "Times New Roman"
             run.font.size = Pt(10)
 
-    def _insert_algorithm_before(self, doc, anchor_p, node: Dict[str, Any]):
-        caption = self._latex_to_plain(node.get("caption") or "Algorithm")
-        steps = node.get("steps", [])
+    def _set_cell_borders(self, cell, top="nil", bottom="nil", left="nil", right="nil") -> None:
+        tc_pr = cell._tc.get_or_add_tcPr()
+        tc_borders = OxmlElement("w:tcBorders")
 
-        cap_p = anchor_p.insert_paragraph_before()
-        cap_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        cap_run = cap_p.add_run(caption)
-        cap_run.font.name = "Times New Roman"
-        cap_run.font.size = Pt(10)
-        cap_run.bold = True
+        for name, val in [("top", top), ("bottom", bottom), ("left", left), ("right", right)]:
+            edge = OxmlElement(f"w:{name}")
+            edge.set(qn("w:val"), val)
+            if val != "nil":
+                edge.set(qn("w:sz"), "6")  # thin line (0.75 pt)
+                edge.set(qn("w:space"), "0")
+                edge.set(qn("w:color"), "000000")
+            tc_borders.append(edge)
 
-        if not steps:
-            return
+        for name in ["insideH", "insideV"]:
+            edge = OxmlElement(f"w:{name}")
+            edge.set(qn("w:val"), "nil")
+            tc_borders.append(edge)
 
-        table = doc.add_table(rows=len(steps), cols=1)
+        existing_tc_borders = tc_pr.xpath('w:tcBorders')
+        if existing_tc_borders:
+            tc_pr.replace(existing_tc_borders[0], tc_borders)
+        else:
+            tc_pr.append(tc_borders)
+
+    def _render_algorithm_table(self, doc, steps: List[Dict[str, Any]], caption: str) -> Table:
+        # Table has len(steps) + 1 rows: row 0 is the caption, row 1..N are the steps
+        table = doc.add_table(rows=len(steps) + 1, cols=1)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        try:
+            table.autofit = True
+        except Exception:
+            pass
+
+        # Set full width to match columns
+        col_width = self._get_current_column_width_inch(doc)
+        self._set_table_width(table, 1, col_width)
+
+        # Row 0: Caption
+        cell_cap = table.cell(0, 0)
+        p_cap = cell_cap.paragraphs[0]
+        p_cap.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p_cap.paragraph_format.space_before = Pt(4)
+        p_cap.paragraph_format.space_after = Pt(4)
+        run_cap = p_cap.add_run(caption)
+        run_cap.font.name = "Times New Roman"
+        run_cap.font.size = Pt(10)
+        run_cap.bold = True
+
+        # Style caption cell borders: top=single, bottom=single, left=single, right=single
+        self._set_cell_borders(cell_cap, top="single", bottom="single", left="single", right="single")
+
+        # Rows 1..N: Steps
         for i, step_node in enumerate(steps):
-            cell = table.cell(i, 0)
-            p = cell.paragraphs[0]
+            cell_step = table.cell(i + 1, 0)
+            p = cell_step.paragraphs[0]
+            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(2)
+            p.paragraph_format.line_spacing = 1.0
+
             text = step_node.get("text") or ""
-            # Prevent nested OMML issue with prefix by separating prefix into a run
             prefix = ""
             if not re.match(r'^\s*\d+\.', text):
                 prefix = f"{i+1}. "
@@ -563,12 +603,24 @@ class IEEEWordRenderer:
                 run = p.add_run(prefix)
                 run.font.name = "Times New Roman"
                 run.font.size = Pt(10)
-            
-            self._add_rich_runs(p, text)
-            p.paragraph_format.space_before = Pt(2)
-            p.paragraph_format.space_after = Pt(2)
 
-        self._force_table_borders(table)
+            self._add_rich_runs(p, text)
+
+            # Style step cell borders: top=nil, bottom=single if last step else nil, left=single, right=single
+            is_last = (i == len(steps) - 1)
+            bottom_border = "single" if is_last else "nil"
+            self._set_cell_borders(cell_step, top="nil", bottom=bottom_border, left="single", right="single")
+
+        return table
+
+    def _insert_algorithm_before(self, doc, anchor_p, node: Dict[str, Any]):
+        caption = self._latex_to_plain(node.get("caption") or "Algorithm")
+        steps = node.get("steps", [])
+        if not steps:
+            return
+
+        table = self._render_algorithm_table(doc, steps, caption)
+
         parent = anchor_p._p.getparent()
         parent.insert(parent.index(anchor_p._p), table._tbl)
 
@@ -1188,36 +1240,16 @@ class IEEEWordRenderer:
     def _add_algorithm_node(self, doc, node: Dict[str, Any]):
         caption = self._latex_to_plain(node.get("caption") or "Algorithm")
         steps = node.get("steps", [])
-
-        cap_p = doc.add_paragraph()
-        cap_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        cap_run = cap_p.add_run(caption)
-        cap_run.font.name = "Times New Roman"
-        cap_run.font.size = Pt(10)
-        cap_run.bold = True
-
         if not steps:
             return
 
-        table = doc.add_table(rows=len(steps), cols=1)
-        for i, step_node in enumerate(steps):
-            cell = table.cell(i, 0)
-            p = cell.paragraphs[0]
-            text = step_node.get("text") or ""
-            prefix = ""
-            if not re.match(r'^\s*\d+\.', text):
-                prefix = f"{i+1}. "
-            
-            if prefix:
-                run = p.add_run(prefix)
-                run.font.name = "Times New Roman"
-                run.font.size = Pt(10)
+        p_space = doc.add_paragraph()
+        p_space.paragraph_format.space_before = Pt(6)
+        p_space.paragraph_format.space_after = Pt(0)
 
-            self._add_rich_runs(p, text)
-            p.paragraph_format.space_before = Pt(2)
-            p.paragraph_format.space_after = Pt(2)
+        table = self._render_algorithm_table(doc, steps, caption)
 
-        self._force_table_borders(table)
+        doc.add_paragraph("")
 
     def _add_table_node(self, doc: DocxDocument, node: Dict[str, Any], force_full_width: bool = False) -> None:
         """Render a table IR node as a real Word table."""

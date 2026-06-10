@@ -11,7 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 
 from .. import auth
 from .. import models
@@ -82,10 +83,10 @@ class YeuCauCapNhatCauHinhHeThong(BaseModel):
 
 def _ghi_audit_admin(
     db: Session,
-    actor_user_id: int,
+    actor_user_id: Any,
     action: str,
     request: Request,
-    target_user_id: int | None = None,
+    target_user_id: Any = None,
     target_record_id: str | None = None,
     detail: str | None = None,
 ) -> None:
@@ -266,7 +267,7 @@ def thuc_hien_bulk_action_nguoi_dung(
         raise HTTPException(status_code=400, detail=f"Action khong hop le: {action}")
 
     users = db.query(models.User).filter(models.User.id.in_(req.user_ids)).all()
-    user_map = {u.id: u for u in users}
+    user_map = {cast(int, u.id): u for u in users}
     results = []
     success_count = 0
 
@@ -311,8 +312,8 @@ def thuc_hien_bulk_action_nguoi_dung(
                 if req.premium_enabled is None:
                     raise ValueError("premium_enabled la bat buoc")
                 if req.premium_enabled:
-                    so_ngay = max(1, int(req.premium_days or 30))
-                    now = datetime.utcnow()
+                    so_ngay = max(1, req.premium_days or 30)
+                    now = datetime.now(timezone.utc).replace(tzinfo=None)
                     user.plan_type = "premium"
                     user.premium_started_at = now
                     user.premium_expires_at = now + timedelta(days=so_ngay)
@@ -329,7 +330,7 @@ def thuc_hien_bulk_action_nguoi_dung(
                 )
 
             elif action in {"grant_token", "deduct_token"}:
-                amount = int(req.amount or 0)
+                amount = req.amount or 0
                 if amount <= 0:
                     raise ValueError("So token phai > 0")
                 if action == "deduct_token" and user.token_balance < amount:
@@ -431,7 +432,7 @@ def cap_nhat_premium_nguoi_dung(
 
     if req.enabled:
         so_ngay = max(1, req.so_ngay)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         user.plan_type = "premium"
         user.premium_started_at = now
         user.premium_expires_at = now + timedelta(days=so_ngay)
@@ -813,7 +814,7 @@ def lay_danh_sach_template_admin(
 ) -> dict:
     danh_sach = []
     users_map = {
-        u.id: u
+        cast(int, u.id): u
         for u in db.query(models.User).all()
     }
 
@@ -1004,7 +1005,7 @@ def xac_nhan_payment_thu_cong_admin(
 
     # Cập nhật payment → completed
     payment.status = "completed"
-    payment.updated_at = datetime.utcnow()
+    payment.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # Cộng token cho user
     user = db.query(models.User).filter(models.User.id == payment.user_id).first()
@@ -1014,10 +1015,10 @@ def xac_nhan_payment_thu_cong_admin(
         # [Way A] Xử lý kích hoạt Premium Combo nếu có plan_key
         if payment.plan_key:
             from ..config import PREMIUM_PACKAGES
-            plan = PREMIUM_PACKAGES.get(payment.plan_key)
+            plan = PREMIUM_PACKAGES.get(str(payment.plan_key)) if payment.plan_key else None
             if plan:
-                so_ngay = plan.get("so_ngay", 30)
-                now = datetime.utcnow()
+                so_ngay = int(plan.get("so_ngay", 30))
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
                 if user.plan_type == "premium" and user.premium_expires_at and user.premium_expires_at > now:
                     base_time = user.premium_expires_at
                 else:
@@ -1126,10 +1127,10 @@ def sync_payments_admin(
     count_success = 0
 
     for p in pending_payments:
-        ok, tx_id = check_payment_status(p.id, p.amount_vnd)
+        ok, tx_id = check_payment_status(cast(int, p.id), cast(int, p.amount_vnd))
         if ok:
             p.status = "completed"
-            p.updated_at = datetime.utcnow()
+            p.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             user = db.query(models.User).filter(models.User.id == p.user_id).first()
             if user:
                 user.token_balance += p.token_amount

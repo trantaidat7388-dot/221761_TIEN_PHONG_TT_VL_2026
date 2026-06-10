@@ -24,3 +24,6 @@ TexSoup>=0.3.3
 
 # Optional: nếu muốn compile LaTeX trên server
 # python-pdflatex==0.1.3
+
+# Word → PDF trực tiếp (dùng Microsoft Word COM trên Windows)
+docx2pdf>=0.1.8

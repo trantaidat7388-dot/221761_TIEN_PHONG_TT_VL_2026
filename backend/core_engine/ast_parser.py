@@ -165,8 +165,6 @@ class WordASTParser:
 
         except Exception as e:
             print(f"[WARN] COM chart pre-export error: {e}")
-            word = None
-            w_doc = None
         finally:
             if w_doc:
                 try:
@@ -178,6 +176,14 @@ class WordASTParser:
                     word.Quit()
                 except Exception:
                     pass
+
+            # Explicitly clear references to COM objects before CoUninitialize
+            export_shape = None
+            w_doc = None
+            word = None
+            import gc
+            gc.collect()
+
             try:
                 import pythoncom
                 pythoncom.CoUninitialize()
@@ -199,8 +205,6 @@ class WordASTParser:
             tag = node.tag.split("}")[-1]
             if tag == "p":
                 elements.append(("paragraph", Paragraph(node, doc)))
-            elif tag in ("oMathPara", "oMath"):
-                elements.append(("omml", node))
                 # Capture nested blocks only from explicit containers where paragraph
                 # text is semantically embedded (e.g., text boxes / content controls),
                 # avoiding broad recursion that can duplicate paragraphs.
@@ -214,6 +218,8 @@ class WordASTParser:
                         seen_container_ids.add(did)
                         for nested in descendant:
                             traverse(nested)
+            elif tag in ("oMathPara", "oMath"):
+                elements.append(("omml", node))
             elif tag == "tbl":
                 elements.append(("table", Table(node, self.doc)))
             else:
@@ -1029,28 +1035,27 @@ class WordASTParser:
                 else:
                     danh_sach_anh = self._trich_xuat_anh_tu_bang(element)
                     if danh_sach_anh:
-                        # Group all images from the table into a SINGLE figure block
-                        # so the IEEE renderer treats them as one figure with one caption.
                         caption_chinh = self._bat_caption_hinh(elements, idx, used_nodes)
                         if not caption_chinh:
                             caption_chinh = self._bat_caption_hinh_theo_style(elements, idx, used_nodes)
-                        ten_thu_muc = os.path.basename(self.thu_muc_anh)
-                        self.dem_anh += 1
-                        fig_tex = "\\begin{figure}[H]\n\\centering\n"
+                        ten_thu_muc = os.path.basename(self.thu_muc_anh) if self.thu_muc_anh else ''
                         for ten_anh in danh_sach_anh:
-                            img_path = f"{ten_thu_muc}/{ten_anh}"
+                            img_path = f"{ten_thu_muc}/{ten_anh}" if ten_thu_muc else ten_anh
                             if img_path in seen_figure_paths:
                                 continue
                             seen_figure_paths.add(img_path)
-                            fig_tex += (
+                            self.dem_anh += 1
+                            fig_tex = (
+                                f"\\begin{{figure}}[H]\n"
+                                f"\\centering\n"
                                 f"  \\includegraphics[width=\\columnwidth,height=0.4\\textheight,"
                                 f"keepaspectratio]{{{img_path}}}\n"
                             )
-                        caption_chinh_protected = (caption_chinh or '').replace(r"\url{", r"\protect\url{")
-                        fig_tex += f"  \\caption{{{caption_chinh_protected}}}\n"
-                        fig_tex += f"  \\label{{fig:img_{self.dem_anh}}}\n"
-                        fig_tex += "\\end{figure}\n\n"
-                        self.ir["body"].append({"type": "paragraph", "text": fig_tex})
+                            caption_chinh_protected = (caption_chinh or '').replace(r"\url{", r"\protect\url{")
+                            fig_tex += f"  \\caption{{{caption_chinh_protected}}}\n"
+                            fig_tex += f"  \\label{{fig:img_{self.dem_anh}}}\n"
+                            fig_tex += "\\end{figure}\n\n"
+                            self.ir["body"].append({"type": "paragraph", "text": fig_tex, "no_merge": True})
                     else:
                         # Regular data table — with caption from look-behind
                         caption = self._bat_caption_bang(elements, idx, used_nodes)
@@ -1200,7 +1205,7 @@ class WordASTParser:
                 continue
                 
             prev = merged_body[-1]
-            if prev.get("type") == "paragraph" and node.get("type") == "paragraph":
+            if prev.get("type") == "paragraph" and node.get("type") == "paragraph" and not prev.get("no_merge") and not node.get("no_merge"):
                 prev_text = prev.get("text", "")
                 curr_text = node.get("text", "")
                 
@@ -1608,7 +1613,7 @@ class WordASTParser:
                 if num_match:
                     raw_markers = num_match.group(1)
                     markers = re.findall(r'\d+|[*†‡]', raw_markers)
-                    a["name"] = str(name[:num_match.start()]).strip()
+                    a["name"] = name[:num_match.start()].strip()
                     a["affiliations"] = []
                     for mk in markers:
                         if mk in affil_map:

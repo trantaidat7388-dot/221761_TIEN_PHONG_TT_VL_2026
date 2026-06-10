@@ -44,9 +44,25 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
         symbol_only_re = re.compile(r'^[*†‡]+$')
         email_re = re.compile(r'[\w\.\-\+]+@[\w\.\-]+')
 
+        shared_email_sets = []
+        for author in authors:
+            author_emails = []
+            for aff in author.get('affiliations', []):
+                for email in email_re.findall(aff or ''):
+                    if email not in author_emails:
+                        author_emails.append(email)
+            shared_email_sets.append(author_emails)
+        distribute_shared_emails = (
+            len(authors) > 1
+            and bool(shared_email_sets)
+            and len(shared_email_sets[0]) == len(authors)
+            and all(emails == shared_email_sets[0] for emails in shared_email_sets[1:])
+        )
+
         block = "\\author{\n"
         parts = []
-        for author in authors:
+        column_parts = []
+        for author_index, author in enumerate(authors):
             name = _escape_latex_text(author['name'])
             has_corresponding_marker = False
             emails = []
@@ -62,10 +78,14 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
                     if em not in emails:
                         emails.append(em)
 
+            if distribute_shared_emails:
+                emails = [shared_email_sets[0][author_index]]
+
             if has_corresponding_marker:
                 name += "\\textsuperscript{*}"
 
             auth_str = f"\\IEEEauthorblockN{{{name}}}"
+            affil_text = ""
             if author.get('affiliations'):
                 affil_lines = []
                 for aff in author['affiliations']:
@@ -74,19 +94,38 @@ class IEEEAuthorStrategy(AuthorBlockStrategy):
                         if symbol_only_re.match(sl):
                             continue
                         if '@' in sl:
-                            for em in email_re.findall(sl):
-                                if em not in emails:
-                                    emails.append(em)
+                            if not distribute_shared_emails:
+                                for em in email_re.findall(sl):
+                                    if em not in emails:
+                                        emails.append(em)
                             continue
-                        compact = _escape_latex_text(re.sub(r'\s{2,}', ' ', sl).strip())
-                        if compact:
-                            affil_lines.append(f"\\textit{{{compact}}}")
+                        compact = re.sub(r'\s{2,}', ' ', sl).strip()
+                        for affiliation_line in _split_affiliation_line(compact):
+                            escaped_line = _escape_latex_text(affiliation_line)
+                            if escaped_line:
+                                affil_lines.append(f"\\textit{{{escaped_line}}}")
                 for em in emails:
                     affil_lines.append(f"\\texttt{{{em}}}")
                 affil_text = " \\\\ ".join(affil_lines)
                 auth_str += f"\n\\IEEEauthorblockA{{{affil_text}}}"
             parts.append(auth_str)
-        block += " \\and\n".join(parts)
+            column_content = name
+            if affil_text:
+                column_content += " \\\\ " + affil_text
+            column_parts.append(column_content)
+        if 1 < len(parts) <= 3:
+            width = 0.47 if len(parts) == 2 else 0.31
+            columns = [
+                (
+                    f"\\parbox[t]{{{width:.2f}\\textwidth}}{{"
+                    "\\centering\\strut "
+                    f"{column_content}\\strut}}"
+                )
+                for column_content in column_parts
+            ]
+            block += "\n\\hfill\n".join(columns)
+        else:
+            block += " \\and\n".join(parts)
         block += "\n}"
         return block
 

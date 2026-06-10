@@ -76,7 +76,7 @@ DEFAULT_SPRINGER_WORD_TEMPLATE = (
 
 def _la_file_word_hop_le(ten_file: str) -> bool:
     ten = (ten_file or "").lower()
-    return ten.endswith('.docx') or ten.endswith('.docm')
+    return ten.endswith('.docx') or ten.endswith('.docm') or ten.endswith('.doc')
 
 
 def _la_file_latex_hop_le(ten_file: str) -> bool:
@@ -1142,9 +1142,105 @@ async def bien_dich_pdf_theo_job(job_id: str, request: Request, payload: dict = 
         })
 
 
+@router.post("/compile-pdf-from-word-job/{job_id}")
+async def bien_dich_pdf_tu_word_job(job_id: str, request: Request) -> JSONResponse:
+    """Chuyển file Word đã chuyển đổi (IEEE/Springer) sang PDF trực tiếp bằng Microsoft Word."""
+    request_id = getattr(request.state, "request_id", "-")
+    logger.info("request_id=%s job_id=%s Word→PDF direct", request_id, job_id)
+
+    job_folder = TEMP_FOLDER / f"job_{job_id}"
+    if not job_folder.exists() or not job_folder.is_dir():
+        raise HTTPException(status_code=404, detail="Job không tồn tại hoặc đã bị dọn")
+
+    # ── 1. Tìm file Word đã chuyển đổi ─────────────────────────────────────────
+    ds_ieee_docx     = sorted(job_folder.glob("*_ieee.docx"),     key=lambda p: p.stat().st_mtime, reverse=True)
+    ds_springer_docx = sorted(job_folder.glob("*_springer.docx"), key=lambda p: p.stat().st_mtime, reverse=True)
+    ds_all_docx      = ds_ieee_docx or ds_springer_docx or sorted(job_folder.glob("*.docx"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    if not ds_all_docx:
+        raise HTTPException(status_code=404, detail="Không tìm thấy file Word trong job để xuất PDF")
+
+    word_path = ds_all_docx[0]
+
+    # ── 2. Tên file PDF sạch ───────────────────────────────────────────────────
+    clean_stem = word_path.stem
+    for suffix in ("_ieee", "_springer"):
+        if clean_stem.endswith(suffix):
+            clean_stem = clean_stem[: -len(suffix)]
+            break
+    clean_stem = re.sub(r"_\d{8}_\d{6}$", "", clean_stem)
+    clean_stem = re.sub(r"_doc[xm]?$", "", clean_stem, flags=re.IGNORECASE)
+    if not clean_stem:
+        clean_stem = "document"
+
+    final_pdf_name = f"{clean_stem}.pdf"
+    final_pdf_path = job_folder / final_pdf_name
+
+    # ── 3. Word → PDF bằng PowerShell COM (tương thích cả MS Word và WPS Office) ─────────────────
+    def _convert_word_to_pdf():
+        import subprocess
+        powershell_cmd = f"""
+        $word = New-Object -ComObject Word.Application
+        $doc = $word.Documents.Open('{str(word_path)}')
+        $doc.SaveAs('{str(final_pdf_path)}', 17)
+        $doc.Close()
+        try {{
+            $word.Quit()
+        }} catch {{}}
+        exit 0
+        """
+        logger.info("Running PowerShell COM Word->PDF conversion for job_id=%s", job_id)
+        res = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", powershell_cmd],
+            capture_output=True,
+            text=True
+        )
+        if res.returncode != 0:
+            logger.error("PowerShell COM conversion returned non-zero code: returncode=%s stdout=%s stderr=%s", res.returncode, res.stdout, res.stderr)
+
+    try:
+        await run_in_threadpool(_convert_word_to_pdf)
+    except Exception as loi:
+        logger.exception("request_id=%s job_id=%s Word→PDF failed", request_id, job_id)
+        return JSONResponse(status_code=500, content={
+            "thanh_cong": False,
+            "loi": f"Lỗi xuất PDF từ Word: {str(loi)}",
+        })
+
+    if not final_pdf_path.exists():
+        return JSONResponse(status_code=500, content={
+            "thanh_cong": False,
+            "loi": "Không tạo được file PDF — hãy đảm bảo Microsoft Word hoặc WPS Office đã được cài trên máy chủ",
+        })
+
+    # Đếm số trang thực tế của file PDF đã tạo bằng pypdf
+    so_trang = None
+    try:
+        from pypdf import PdfReader as _PdfReader
+        reader = _PdfReader(str(final_pdf_path))
+        so_trang = len(reader.pages)
+    except Exception:
+        # Fallback sang python-docx nếu pypdf lỗi
+        try:
+            from docx import Document as _DocxDocument
+            doc = _DocxDocument(str(word_path))
+            body_xml = doc.element.body.xml
+            so_trang = body_xml.count('<w:lastRenderedPageBreak') + 1
+        except Exception:
+            so_trang = None
+
+    logger.info("request_id=%s job_id=%s Word→PDF success: %s", request_id, job_id, final_pdf_name)
+    return JSONResponse(status_code=200, content={
+        "thanh_cong": True,
+        "so_trang": so_trang,
+        "ten_file_pdf": final_pdf_name,
+        "pdf_url": f"/api/tai-ve-pdf/{job_id}",
+    })
+
 @router.api_route("/tai-ve-pdf/{job_id}", methods=["GET", "HEAD"])
 def tai_ve_pdf_theo_job(job_id: str, download: int = 0) -> FileResponse:
     """Tải file PDF đã biên dịch từ job folder."""
+
     job_folder = TEMP_FOLDER / f"job_{job_id}"
     if not job_folder.exists() or not job_folder.is_dir():
         raise HTTPException(status_code=404, detail="Job không tồn tại hoặc đã bị dọn")

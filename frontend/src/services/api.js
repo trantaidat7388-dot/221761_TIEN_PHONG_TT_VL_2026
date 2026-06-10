@@ -236,6 +236,40 @@ export const taiFileWordTheoJob = async (jobId, tenFileWordFallback = '') => {
   }
 }
 
+export const bienDichPDFTuWordJob = async (jobId) => {
+  try {
+    if (!jobId || typeof jobId !== 'string') throw new Error('Job ID không hợp lệ')
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 phút timeout
+    const response = await fetch(`${DIA_CHI_API_GOC}/api/compile-pdf-from-word-job/${jobId}`, {
+      method: 'POST',
+      headers: { ...taoHeaderXacThuc(), 'Content-Type': 'application/json' },
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+    if (response.status === 401) thongBaoPhienHetHan()
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || !data?.thanh_cong) {
+      return {
+        thanhCong: false,
+        loiMessage: data?.loi || 'Biên dịch PDF thất bại',
+        chiTiet: data?.chi_tiet || null,
+      }
+    }
+    return {
+      thanhCong: true,
+      soTrang: data.so_trang,
+      tenFilePDF: data.ten_file_pdf,
+      pdfUrl: `${DIA_CHI_API_GOC}${data.pdf_url}`,
+    }
+  } catch (loi) {
+    if (loi.name === 'AbortError') return { thanhCong: false, loiMessage: 'Biên dịch PDF quá lâu (>5 phút). Vui lòng thử lại.' }
+    return { thanhCong: false, loiMessage: loi.message || 'Không thể kết nối server để biên dịch' }
+  }
+}
+
+
+
 export const taiFile = async (duongDan, tenFile) => {
   try {
     const response = await fetch(duongDan, { headers: taoHeaderXacThuc() })

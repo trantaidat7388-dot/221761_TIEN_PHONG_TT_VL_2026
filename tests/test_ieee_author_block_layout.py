@@ -20,8 +20,10 @@ def test_ieee_author_strategy_splits_comma_affiliation_lines():
         ]
     )
 
-    assert "\\textit{Nam Can Tho University, Can Tho, Vietnam}" in block
-    assert "\\textit{Adhightech Ltd., Can Tho, Viet Nam}" in block
+    assert "\\textit{Nam Can Tho University, Can Tho}" in block
+    assert "\\textit{Vietnam}" in block
+    assert "\\textit{Adhightech Ltd., Can Tho}" in block
+    assert "\\textit{Viet Nam}" in block
     assert "nguyenanhduy@adhightech.com" in block
     assert "NGUYEN Anh-Duy\\textsuperscript{*}" in block
     assert "\\textit{*}" not in block

@@ -27,4 +27,4 @@ def test_three_column_feature_type_description_uses_wider_description_column():
     out = renderer.render_body_nodes(body)
     assert "p{0.220\\linewidth}|p{0.200\\linewidth}|p{0.540\\linewidth}" in out
     assert "\\setlength{\\tabcolsep}{3pt}" in out
-    assert "\\renewcommand{\\arraystretch}{0.95}" in out
+    assert "\\renewcommand{\\arraystretch}{1.05}" in out

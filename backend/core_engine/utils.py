@@ -484,7 +484,7 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str | None = None,
         shutil.copyfile(source_tex_path, compile_file_path)
 
     print(f"\n--- [LATEX] START: {engine} (file={compile_file}, cwd={runtime_cwd}) ---")
-    cmd = [engine, '-interaction=nonstopmode', '-halt-on-error', compile_file]
+    cmd = [engine, '-interaction=nonstopmode', compile_file]
     print(f"[LATEX] CMD: {' '.join(cmd)}")
     
     try:
@@ -500,12 +500,31 @@ def bien_dich_latex(duong_dan_dau_ra: str, thu_muc_bien_dich: str | None = None,
             timeout=LATEX_COMPILE_TIMEOUT_SECONDS,
         )
         duration = time.time() - t_start
-        print(f"--- [LATEX] FINISHED in {duration:.2f}s (Exit code: {ket_qua.returncode}) ---")
+        print(f"--- [LATEX] FINISHED 1st run in {duration:.2f}s (Exit code: {ket_qua.returncode}) ---")
 
-        # Kiểm tra PDF tồn tại (nonstopmode có thể tạo PDF dù có lỗi nhỏ)
+        # Check PDF existence
         output_pdf_name = os.path.splitext(compile_file)[0] + '.pdf'
         pdf_path = os.path.join(runtime_cwd, output_pdf_name)
         pdf_exists = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+
+        # Rerun to resolve cross-references if first run succeeded or produced PDF
+        if ket_qua.returncode == 0 or pdf_exists:
+            print("[LATEX] Running 2nd pass to resolve cross-references...")
+            t_start2 = time.time()
+            ket_qua = subprocess.run(
+                cmd,
+                cwd=runtime_cwd if runtime_cwd else '.',
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                errors='ignore',
+                timeout=LATEX_COMPILE_TIMEOUT_SECONDS,
+            )
+            duration2 = time.time() - t_start2
+            print(f"--- [LATEX] FINISHED 2nd run in {duration2:.2f}s (Exit code: {ket_qua.returncode}) ---")
+            # Recheck PDF existence
+            pdf_exists = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
 
         # Mặc định đọc log nếu thất bại
         error_msg = ""

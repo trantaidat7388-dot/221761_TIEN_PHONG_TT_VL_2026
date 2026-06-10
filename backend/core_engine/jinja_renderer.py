@@ -2,6 +2,7 @@ import jinja2
 import os
 import re
 import base64
+import unicodedata
 from lxml import etree  # type: ignore
 from bisect import bisect_right
 from .utils import phat_hien_loai_tai_lieu
@@ -112,6 +113,7 @@ class JinjaLaTeXRenderer:
                 
                 # Áp dụng tự động hóa liên kết chéo cho Figure, Table, Equation, Section
                 para_text = self._apply_cross_referencing(para_text)
+                para_text = self._normalize_plain_text_in_equations(para_text)
                 
                 if doc_class in ("springer", "ieee"):
                     promoted_eq = self._promote_inline_equation_paragraph(para_text)
@@ -186,13 +188,27 @@ class JinjaLaTeXRenderer:
 
                 if is_small_table:
                     # Bảng nhỏ hiển thị tự nhiên với căn giữa đẹp mắt
-                    col_def = "|" + "|".join(["c"] * cols) + "|"
+                    col_tokens = ["c"] * cols
                 else:
-                    col_def = "|" + "|".join([f"p{{{w:.3f}\\linewidth}}" for w in col_widths]) + "|"
-                
-                # Phát hiện bảng có nên là dạng rộng (trải qua hai cột) hay không
-                is_wide = cols > 4 or node.get("is_wide", False)
-                env_name = "table*" if (is_wide and doc_class == "acm") else "table"
+                    col_tokens = [f"p{{{w:.3f}\\linewidth}}" for w in col_widths]
+                if doc_class == "ieee":
+                    # Đồng bộ với W2W: chỉ dùng đường kẻ ngang, không đóng khung dọc.
+                    col_def = "|" + "|".join(col_tokens) + "|"
+                else:
+                    col_def = "|" + "|".join(col_tokens) + "|"
+
+                # Bảng không vừa một cột IEEE phải trải qua cả hai cột, tương tự
+                # section toàn chiều rộng mà Word renderer dùng cho bảng rộng.
+                is_wide = (
+                    cols >= 4
+                    or bool(node.get("is_wide", False))
+                    or (cols == 3 and (max_cell_len > 48 or avg_cell_len > 24))
+                )
+                env_name = (
+                    "table*"
+                    if is_wide and doc_class in ("ieee", "acm")
+                    else "table"
+                )
                 
                 base_width = "\\textwidth" if env_name == "table*" else "\\columnwidth"
                 if width_ratio is not None:
@@ -222,17 +238,19 @@ class JinjaLaTeXRenderer:
                 table_caption = node.get("caption", "Table")
                 table_caption = table_caption.replace(r"\url{", r"\protect\url{")
                 if env_name == "table*":
-                    table_pos = "[t]"
+                    table_pos = "[!t]"
                 elif doc_class == "springer":
                     table_pos = "[htbp]"
+                elif doc_class == "ieee":
+                    table_pos = "[!t]"
                 else:
                     table_pos = "[H]"
                 
                 out.append(f"\\begin{{{env_name}}}{table_pos}\n\\centering\n")
                 out.append(f"\\caption{{{table_caption}}}\\label{{tab{table_counter}}}\n")
                 if used_resizebox:
-                    out.append(f"\\resizebox{{{scale_width}}}{{!}}{{%.\n")
-                    out.append("\\begingroup\\small\\setlength{\\tabcolsep}{3pt}\\setlength{\\arrayrulewidth}{0.4pt}\\renewcommand{\\arraystretch}{0.95}\n")
+                    out.append(f"\\begin{{adjustbox}}{{max width={scale_width}}}\n")
+                    out.append("\\begingroup\\fontsize{8}{9}\\selectfont\\setlength{\\tabcolsep}{3pt}\\setlength{\\arrayrulewidth}{0.4pt}\\renewcommand{\\arraystretch}{1.05}\n")
                 else:
                     out.append("\\begingroup\\setlength{\\tabcolsep}{10pt}\\setlength{\\arrayrulewidth}{0.4pt}\\renewcommand{\\arraystretch}{1.1}\n")
                 out.append(f"\\begin{{tabular}}{{{col_def}}}\n\\hline\n")
@@ -277,7 +295,9 @@ class JinjaLaTeXRenderer:
                             else:
                                 mc_width = (0.98 / cols) * colspan if cols > 0 else 0.15 * colspan
                             
-                            if c_logical == 0:
+                            if doc_class == "ieee":
+                                mc_format = f"p{{{mc_width:.3f}\\linewidth}}"
+                            elif c_logical == 0:
                                 mc_format = f"|p{{{mc_width:.3f}\\linewidth}}|"
                             else:
                                 mc_format = f"p{{{mc_width:.3f}\\linewidth}}|"
@@ -346,7 +366,7 @@ class JinjaLaTeXRenderer:
                 out.append("\\end{tabular}\n")
                 out.append("\\endgroup\n")
                 if used_resizebox:
-                    out.append("}\n") # End of \resizebox
+                    out.append("\\end{adjustbox}\n")
                 out.append(f"\\end{{{env_name}}}\n\n")
         
         # Đảm bảo mọi phần tử trong `out` đều là chuỗi
@@ -632,7 +652,7 @@ class JinjaLaTeXRenderer:
         if not text:
             return ""
         cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
-        return cleaned.replace("\n", r"\\ ")
+        return cleaned.replace("\n", r"\newline ")
 
     def _sanitize_table_cell_math(self, text: str) -> str:
         """Normalize math in table cells to avoid equation blocks or bad escapes."""
@@ -716,6 +736,115 @@ class JinjaLaTeXRenderer:
         text = re.sub(r"\\\\([A-Za-z]+)\$", r"\\\1$", text)
         return text
 
+    def _normalize_math_text_artifacts(self, text: str) -> str:
+        """Remove invisible Word characters and join letter-spaced OMML words."""
+        if not text:
+            return text
+        text = re.sub(r"[\u200b\u200c\u200d\u2060\ufeff]", "", text)
+        text = re.sub(r"[\u00a0\u2000-\u200a\u202f\u205f]", " ", text)
+
+        def _repair_math_content(content: str) -> str:
+            def _join_letters(spaced_match):
+                return re.sub(r"\s+", "", spaced_match.group(0))
+
+            accent_commands = {
+                "\u0302": "hat",
+                "\u0303": "tilde",
+                "\u0304": "bar",
+                "\u0307": "dot",
+            }
+            normalized_chars = []
+            for char in content:
+                decomposed = unicodedata.normalize("NFD", char)
+                if len(decomposed) == 2 and decomposed[1] in accent_commands:
+                    command = accent_commands[decomposed[1]]
+                    normalized_chars.append(f"\\{command}{{{decomposed[0]}}}")
+                else:
+                    normalized_chars.append(char)
+            content = "".join(normalized_chars)
+
+            content = re.sub(
+                r"(?:\b[A-Za-z]\b\s+){2,}\b[A-Za-z]\b",
+                _join_letters,
+                content,
+            )
+            content = re.sub(
+                r"\\(times|cdot|pm|mp|leq|geq|neq|approx|sim|to)(?=[A-Za-z])",
+                r"\\\1 ",
+                content,
+            )
+            content = content.replace("ϵ", r"\epsilon").replace("ε", r"\epsilon")
+            content = re.sub(r"\\sumi\s*-\s*1C", r"\\sum_{i=1}^{C}", content)
+            content = re.sub(
+                r"\\sumi\s*=\s*1\{N\}_\{c\}",
+                r"\\sum_{i=1}^{N_c}",
+                content,
+            )
+            content = re.sub(
+                r"\\overset\{\^\}\{([^{}]+)\}",
+                r"\\hat{\1}",
+                content,
+            )
+            content = content.replace(r"{\text{\Sigma}}", r"\sum")
+            content = content.replace(r"\text{\Sigma}", r"\sum")
+            content = re.sub(r"\\parallel(?=[A-Za-z])", r"\\parallel ", content)
+            content = re.sub(r"(?<!\\)\blog\s*\(", r"\\log(", content)
+            return content
+
+        def _normalize_inline_math(match):
+            return f"${_repair_math_content(match.group(1))}$"
+
+        text = re.sub(r"\$([^$]+)\$", _normalize_inline_math, text)
+
+        def _normalize_equation(match):
+            env = match.group(1)
+            content = _repair_math_content(match.group(2))
+            return f"\\begin{{{env}}}{content}\\end{{{env}}}"
+
+        text = re.sub(
+            r"\\begin\{(equation\*?)\}(.*?)\\end\{\1\}",
+            _normalize_equation,
+            text,
+            flags=re.DOTALL,
+        )
+        combining_accent_map = {
+            "\u0302": "hat",
+            "\u0303": "tilde",
+            "\u0304": "bar",
+            "\u0307": "dot",
+        }
+        for accent, command in combining_accent_map.items():
+            text = re.sub(
+                rf"([A-Za-z]){accent}",
+                rf"\\ensuremath{{\\{command}{{\1}}}}",
+                text,
+            )
+        greek_text_map = {
+            "ε": r"$\epsilon$",
+            "ϵ": r"$\epsilon$",
+            "Σ": r"$\Sigma$",
+            "σ": r"$\sigma$",
+            "μ": r"$\mu$",
+            "λ": r"$\lambda$",
+            "α": r"$\alpha$",
+            "β": r"$\beta$",
+            "γ": r"$\gamma$",
+            "δ": r"$\delta$",
+            "θ": r"$\theta$",
+            "κ": r"$\kappa$",
+            "ρ": r"$\rho$",
+            "τ": r"$\tau$",
+            "φ": r"$\phi$",
+            "ω": r"$\omega$",
+            "Δ": r"$\Delta$",
+            "Θ": r"$\Theta$",
+            "Λ": r"$\Lambda$",
+            "Ω": r"$\Omega$",
+        }
+        for char, latex in greek_text_map.items():
+            text = text.replace(char, latex)
+        return text
+
     def _soften_long_equations(self, text: str, doc_class: str = "generic") -> str:
         """Insert soft breaks into long equation blocks to reduce overflow."""
         if not text:
@@ -738,9 +867,17 @@ class JinjaLaTeXRenderer:
             # Narrow columns often overflow around 65-75 characters.
             if doc_class == "ieee" and len(inner) >= 70:
                 scaled = re.sub(r"\s+", " ", inner).strip()
+                tag_match = re.search(r"\s*(\\tag\{[^}]+\})\s*$", scaled)
+                tag = ""
+                if tag_match:
+                    tag = "\n" + tag_match.group(1)
+                    scaled = scaled[:tag_match.start()].strip()
                 return (
                     f"\\begin{{{env}}}\n"
-                    f"\\resizebox{{\\columnwidth}}{{!}}{{${{\\displaystyle {scaled}}}$}}\n"
+                    "\\begin{adjustbox}{max width=\\columnwidth}\n"
+                    f"${{\\displaystyle {scaled}}}$\n"
+                    "\\end{adjustbox}"
+                    f"{tag}\n"
                     f"\\end{{{env}}}"
                 )
 
@@ -786,6 +923,7 @@ class JinjaLaTeXRenderer:
         # Kết xuất sẵn body nodes để template chỉ cần chèn << body >>
         body_tex = self.render_body_nodes(ir_data.get('body', []), doc_class=doc_class)
         body_tex = self._process_omml_math(body_tex)
+        body_tex = self._normalize_math_text_artifacts(body_tex)
         body_tex = self._normalize_inline_math_escapes(body_tex)
         body_tex = self._soften_long_equations(body_tex, doc_class=doc_class)
         
@@ -1008,6 +1146,52 @@ class JinjaLaTeXRenderer:
         num = m.group("num")
         return f"\\begin{{equation}}\n{expr}\n\\tag{{{num}}}\\label{{eq:eq_{num}}}\n\\end{{equation}}\n\n"
 
+    def _normalize_plain_text_in_equations(self, text: str) -> str:
+        """Render prose-like Word equation text upright instead of math italics."""
+        if not text or "\\begin{equation" not in text:
+            return text
+
+        def _normalize_block(match):
+            env = match.group(1)
+            inner = match.group(2)
+            if "«OMML:" in inner:
+                return match.group(0)
+
+            tag_match = re.search(r"(\s*\\tag\{[^}]+\}\s*)$", inner)
+            tag = tag_match.group(1) if tag_match else ""
+            expression = inner[:tag_match.start()] if tag_match else inner
+            expression = expression.strip()
+
+            if "=" in expression:
+                lhs, rhs = expression.split("=", 1)
+                lhs = lhs.strip()
+                if (
+                    re.search(r"[A-Za-z]", lhs)
+                    and " " in lhs
+                    and "\\" not in lhs
+                ):
+                    lhs = f"\\text{{{lhs}}}"
+
+                def _upright_identifier(identifier_match):
+                    word = identifier_match.group(1)
+                    return f"\\mathrm{{{word}}}"
+
+                rhs = re.sub(
+                    r"(?<![\\A-Za-z])([A-Za-z]{4,})(?![A-Za-z])",
+                    _upright_identifier,
+                    rhs,
+                )
+                expression = f"{lhs} = {rhs.strip()}"
+
+            return f"\\begin{{{env}}}\n{expression}{tag}\n\\end{{{env}}}"
+
+        return re.sub(
+            r"\\begin\{(equation\*?)\}\s*(.*?)\s*\\end\{\1\}",
+            _normalize_block,
+            text,
+            flags=re.DOTALL,
+        )
+
     def _remove_float_barriers(self, body_tex: str) -> str:
         """Remove legacy FloatBarrier markers that can force awkward page breaks."""
         return re.sub(r"^[ \t]*\\FloatBarrier[ \t]*\n?", "", body_tex, flags=re.MULTILINE)
@@ -1048,6 +1232,7 @@ class JinjaLaTeXRenderer:
         has_fontenc = re.search(r"\\usepackage(?:\[[^\]]*\])?\{fontenc\}", tex_content) is not None
         has_iftex = re.search(r"\\usepackage(?:\[[^\]]*\])?\{iftex\}", tex_content) is not None
         has_multirow = re.search(r"\\usepackage(?:\[[^\]]*\])?\{multirow\}", tex_content) is not None
+        has_adjustbox = re.search(r"\\usepackage(?:\[[^\]]*\])?\{adjustbox\}", tex_content) is not None
         doc_match = re.search(r"^[ \t]*\\begin\{document\}", tex_content, re.MULTILINE)
         if doc_match is None:
             return tex_content
@@ -1062,6 +1247,8 @@ class JinjaLaTeXRenderer:
             inject_lines.append("\\fi")
         if not has_multirow:
             inject_lines.append("\\usepackage{multirow}")
+        if not has_adjustbox:
+            inject_lines.append("\\usepackage{adjustbox}")
         
         if "graphicx" not in tex_content:
             inject_lines.append("\\usepackage{graphicx}")

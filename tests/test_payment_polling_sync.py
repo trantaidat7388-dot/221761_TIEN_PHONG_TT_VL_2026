@@ -70,7 +70,7 @@ def test_payment_polling_flow_pending_then_completed(monkeypatch) -> None:
 
     tao = client.post(
         "/api/payment/create",
-        json={"amount_vnd": 15000},
+        json={"amount_vnd": 20000},
         headers=headers,
     )
     assert tao.status_code == 200
@@ -85,10 +85,10 @@ def test_payment_polling_flow_pending_then_completed(monkeypatch) -> None:
     completed = client.get(f"/api/payment/status/{payment_id}", headers=headers)
     assert completed.status_code == 200
     assert completed.json().get("status") == "completed"
-    assert int(completed.json().get("token_nhan", 0)) == 15000
+    assert int(completed.json().get("token_nhan", 0)) == 250
 
     so_du_sau = _lay_so_du_token(headers)
-    assert so_du_sau == so_du_ban_dau + 15000
+    assert so_du_sau == so_du_ban_dau + 250
 
     payment = _lay_payment(payment_id)
     assert payment is not None
@@ -105,7 +105,7 @@ def test_payment_failed_can_still_complete_when_money_arrives_late(monkeypatch) 
 
     tao = client.post(
         "/api/payment/create",
-        json={"amount_vnd": 12000},
+        json={"amount_vnd": 10000},
         headers=headers,
     )
     assert tao.status_code == 200
@@ -126,7 +126,7 @@ def test_payment_failed_can_still_complete_when_money_arrives_late(monkeypatch) 
     status_resp = client.get(f"/api/payment/status/{payment_id}", headers=headers)
     assert status_resp.status_code == 200
     assert status_resp.json().get("status") == "completed"
-    assert int(status_resp.json().get("token_nhan", 0)) == 12000
+    assert int(status_resp.json().get("token_nhan", 0)) == 100
 
     payment_after = _lay_payment(payment_id)
     assert payment_after is not None
