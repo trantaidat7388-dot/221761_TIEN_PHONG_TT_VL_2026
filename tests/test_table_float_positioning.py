@@ -43,7 +43,7 @@ def test_renderer_uses_flexible_table_float_for_springer():
     assert "\\begin{table}[htbp]" in out
 
 
-def test_renderer_uses_top_float_for_ieee():
+def test_renderer_keeps_regular_ieee_table_at_source_position():
     renderer = JinjaLaTeXRenderer(".")
     body = [
         {
@@ -61,10 +61,43 @@ def test_renderer_uses_top_float_for_ieee():
     ]
 
     out = renderer.render_body_nodes(body, doc_class="ieee")
-    assert "\\begin{table}[!t]" in out
+    assert "\\begin{table}[H]" in out
 
 
-def test_ieee_wide_table_spans_both_columns_without_longtable():
+def test_short_four_column_ieee_table_stays_in_one_column():
+    renderer = JinjaLaTeXRenderer(".")
+    body = [
+        {
+            "type": "table",
+            "rows": 2,
+            "cols": 4,
+            "caption": "Compact metrics",
+            "width_ratio": 0.83,
+            "data": [
+                [
+                    {"type": "cell", "text": "Algorithm", "colspan": 1, "rowspan": 1},
+                    {"type": "cell", "text": "Average", "colspan": 1, "rowspan": 1},
+                    {"type": "cell", "text": "Last Batch", "colspan": 1, "rowspan": 1},
+                    {"type": "cell", "text": "Std. Dev.", "colspan": 1, "rowspan": 1},
+                ],
+                [
+                    {"type": "cell", "text": "EKI-Bagging", "colspan": 1, "rowspan": 1},
+                    {"type": "cell", "text": "99.05", "colspan": 1, "rowspan": 1},
+                    {"type": "cell", "text": "98.82", "colspan": 1, "rowspan": 1},
+                    {"type": "cell", "text": "0.93", "colspan": 1, "rowspan": 1},
+                ],
+            ],
+        }
+    ]
+
+    out = renderer.render_body_nodes(body, doc_class="ieee")
+
+    assert "\\begin{table}[H]" in out
+    assert "\\begin{table*}" not in out
+    assert "\\begin{adjustbox}{max width=\\columnwidth}" in out
+
+
+def test_ieee_wide_table_uses_inline_two_column_strip():
     renderer = JinjaLaTeXRenderer(".")
     row = [
         {"type": "cell", "text": f"Column {i}", "colspan": 1, "rowspan": 1}
@@ -82,7 +115,9 @@ def test_ieee_wide_table_spans_both_columns_without_longtable():
 
     out = renderer.render_body_nodes(body, doc_class="ieee")
 
-    assert "\\begin{table*}[!t]" in out
+    assert "\\begin{strip}" in out
+    assert "\\FloatBarrier\n\\begin{strip}" in out
+    assert "\\captionof{table}{Wide results}" in out
     assert "\\begin{adjustbox}{max width=\\textwidth}" in out
     assert "\\begin{longtable}" not in out
     assert "\\onecolumn" not in out

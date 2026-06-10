@@ -10,6 +10,7 @@ import json
 import shutil
 import logging
 import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from copy import deepcopy
@@ -1153,9 +1154,15 @@ async def bien_dich_pdf_tu_word_job(job_id: str, request: Request) -> JSONRespon
         raise HTTPException(status_code=404, detail="Job không tồn tại hoặc đã bị dọn")
 
     # ── 1. Tìm file Word đã chuyển đổi ─────────────────────────────────────────
-    ds_ieee_docx     = sorted(job_folder.glob("*_ieee.docx"),     key=lambda p: p.stat().st_mtime, reverse=True)
-    ds_springer_docx = sorted(job_folder.glob("*_springer.docx"), key=lambda p: p.stat().st_mtime, reverse=True)
-    ds_all_docx      = ds_ieee_docx or ds_springer_docx or sorted(job_folder.glob("*.docx"), key=lambda p: p.stat().st_mtime, reverse=True)
+    ds_output_docx = [
+        *job_folder.glob("*_ieee.docx"),
+        *job_folder.glob("*_springer.docx"),
+    ]
+    ds_all_docx = sorted(
+        ds_output_docx or list(job_folder.glob("*.docx")),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
 
     if not ds_all_docx:
         raise HTTPException(status_code=404, detail="Không tìm thấy file Word trong job để xuất PDF")
@@ -1164,11 +1171,17 @@ async def bien_dich_pdf_tu_word_job(job_id: str, request: Request) -> JSONRespon
 
     # ── 2. Tên file PDF sạch ───────────────────────────────────────────────────
     clean_stem = word_path.stem
-    for suffix in ("_ieee", "_springer"):
-        if clean_stem.endswith(suffix):
-            clean_stem = clean_stem[: -len(suffix)]
+    while True:
+        previous_stem = clean_stem
+        clean_stem = re.sub(
+            r"_(?:ieee|springer)$",
+            "",
+            clean_stem,
+            flags=re.IGNORECASE,
+        )
+        clean_stem = re.sub(r"_\d{8}_\d{6}$", "", clean_stem)
+        if clean_stem == previous_stem:
             break
-    clean_stem = re.sub(r"_\d{8}_\d{6}$", "", clean_stem)
     clean_stem = re.sub(r"_doc[xm]?$", "", clean_stem, flags=re.IGNORECASE)
     if not clean_stem:
         clean_stem = "document"
@@ -1178,25 +1191,54 @@ async def bien_dich_pdf_tu_word_job(job_id: str, request: Request) -> JSONRespon
 
     # ── 3. Word → PDF bằng PowerShell COM (tương thích cả MS Word và WPS Office) ─────────────────
     def _convert_word_to_pdf():
-        import subprocess
-        powershell_cmd = f"""
-        $word = New-Object -ComObject Word.Application
-        $doc = $word.Documents.Open('{str(word_path)}')
-        $doc.SaveAs('{str(final_pdf_path)}', 17)
-        $doc.Close()
-        try {{
-            $word.Quit()
-        }} catch {{}}
-        exit 0
-        """
-        logger.info("Running PowerShell COM Word->PDF conversion for job_id=%s", job_id)
-        res = subprocess.run(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", powershell_cmd],
-            capture_output=True,
-            text=True
-        )
-        if res.returncode != 0:
-            logger.error("PowerShell COM conversion returned non-zero code: returncode=%s stdout=%s stderr=%s", res.returncode, res.stdout, res.stderr)
+        import pythoncom
+        import win32com.client
+
+        short_dir = Path(tempfile.mkdtemp(prefix="w2w_pdf_"))
+        short_docx = short_dir / "input.docx"
+        short_pdf = short_dir / "output.pdf"
+        word_app = None
+        word_doc = None
+
+        try:
+            shutil.copy2(word_path, short_docx)
+            pythoncom.CoInitialize()
+            word_app = win32com.client.DispatchEx("Word.Application")
+            word_app.Visible = False
+            word_app.DisplayAlerts = 0
+            word_doc = word_app.Documents.Open(
+                str(short_docx),
+                ConfirmConversions=False,
+                ReadOnly=True,
+                AddToRecentFiles=False,
+                Visible=False,
+            )
+            word_doc.ExportAsFixedFormat(
+                str(short_pdf),
+                17,
+                OpenAfterExport=False,
+            )
+            if not short_pdf.exists() or short_pdf.stat().st_size <= 0:
+                raise RuntimeError("Word/WPS khong tao duoc file PDF")
+            shutil.copy2(short_pdf, final_pdf_path)
+        except Exception as exc:
+            raise RuntimeError(f"Word/WPS COM export failed: {exc}") from exc
+        finally:
+            if word_doc is not None:
+                try:
+                    word_doc.Close(False)
+                except Exception:
+                    pass
+            if word_app is not None:
+                try:
+                    word_app.Quit()
+                except Exception:
+                    pass
+            try:
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+            shutil.rmtree(short_dir, ignore_errors=True)
 
     try:
         await run_in_threadpool(_convert_word_to_pdf)

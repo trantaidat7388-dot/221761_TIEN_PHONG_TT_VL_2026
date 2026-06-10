@@ -2164,6 +2164,15 @@ class WordASTParser:
                 def _len_to_float(v) -> float:
                     if v is None:
                         return 0.0
+                    # python-docx Length objects store the authoritative twips
+                    # value alongside the EMU integer representation. Using
+                    # twips keeps units consistent with Word's tblW dxa values.
+                    twips_val = getattr(v, 'twips', None)
+                    if twips_val is not None:
+                        try:
+                            return float(twips_val)
+                        except Exception:
+                            pass
                     try:
                         return float(v)
                     except Exception:

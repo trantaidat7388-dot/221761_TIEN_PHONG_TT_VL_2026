@@ -1,7 +1,7 @@
 from backend.core_engine.jinja_renderer import JinjaLaTeXRenderer
 
 
-def test_ieee_figure_placement_flexible_float_hint():
+def test_ieee_figure_placement_keeps_source_order():
     src = (
         "\\begin{figure}[H]\\centering\\includegraphics{a}\\caption{Top 3 EKI Algorithms}\\end{figure}\n"
         "\\begin{figure}[!ht]\\centering\\includegraphics{b}\\caption{Use-case diagram of the system}\\end{figure}\n"
@@ -9,7 +9,7 @@ def test_ieee_figure_placement_flexible_float_hint():
     )
     out = JinjaLaTeXRenderer(".")._normalize_ieee_figure_placement(src)
 
-    assert out.count("\\begin{figure}[htbp]") == 2
+    assert out.count("\\begin{figure}[H]") == 2
     assert "\\captionof{figure}{" not in out
     assert "\\begin{table}[H]" in out
 
@@ -33,6 +33,13 @@ def test_remove_float_barriers_from_body_text():
 
     assert "\\FloatBarrier" not in out
     assert "\\begin{figure}[htbp]" in out
+
+
+def test_keep_float_barrier_that_protects_inline_wide_table():
+    src = "\\FloatBarrier\n\\begin{strip}x\\end{strip}\n"
+    out = JinjaLaTeXRenderer(".")._remove_float_barriers(src)
+
+    assert out == src
 
 
 def test_ieee_figure_near_next_section_is_converted_to_inline():

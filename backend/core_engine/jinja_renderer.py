@@ -199,19 +199,28 @@ class JinjaLaTeXRenderer:
 
                 # Bảng không vừa một cột IEEE phải trải qua cả hai cột, tương tự
                 # section toàn chiều rộng mà Word renderer dùng cho bảng rộng.
-                is_wide = (
-                    cols >= 4
-                    or bool(node.get("is_wide", False))
-                    or (cols == 3 and (max_cell_len > 48 or avg_cell_len > 24))
-                )
+                if doc_class in ("ieee", "acm"):
+                    is_wide = self._should_span_two_columns(node)
+                else:
+                    is_wide = (
+                        cols >= 4
+                        or bool(node.get("is_wide", False))
+                        or (cols == 3 and (max_cell_len > 48 or avg_cell_len > 24))
+                    )
+                inline_wide = is_wide and doc_class == "ieee"
                 env_name = (
-                    "table*"
-                    if is_wide and doc_class in ("ieee", "acm")
+                    "strip"
+                    if inline_wide
+                    else "table*"
+                    if is_wide and doc_class == "acm"
                     else "table"
                 )
                 
-                base_width = "\\textwidth" if env_name == "table*" else "\\columnwidth"
-                if width_ratio is not None:
+                base_width = "\\textwidth" if env_name in ("table*", "strip") else "\\columnwidth"
+                honor_source_width = not (
+                    doc_class in ("ieee", "acm") and env_name == "table"
+                )
+                if width_ratio is not None and honor_source_width:
                     scale_width = f"{width_ratio:.3f}{base_width}"
                 else:
                     scale_width = base_width
@@ -239,15 +248,25 @@ class JinjaLaTeXRenderer:
                 table_caption = table_caption.replace(r"\url{", r"\protect\url{")
                 if env_name == "table*":
                     table_pos = "[!t]"
+                elif env_name == "strip":
+                    table_pos = ""
                 elif doc_class == "springer":
                     table_pos = "[htbp]"
                 elif doc_class == "ieee":
-                    table_pos = "[!t]"
+                    table_pos = "[H]"
                 else:
                     table_pos = "[H]"
                 
+                if env_name == "strip":
+                    out.append("\\FloatBarrier\n")
                 out.append(f"\\begin{{{env_name}}}{table_pos}\n\\centering\n")
-                out.append(f"\\caption{{{table_caption}}}\\label{{tab{table_counter}}}\n")
+                if env_name == "strip":
+                    out.append(
+                        f"\\captionof{{table}}{{{table_caption}}}"
+                        f"\\label{{tab{table_counter}}}\n"
+                    )
+                else:
+                    out.append(f"\\caption{{{table_caption}}}\\label{{tab{table_counter}}}\n")
                 if used_resizebox:
                     out.append(f"\\begin{{adjustbox}}{{max width={scale_width}}}\n")
                     out.append("\\begingroup\\fontsize{8}{9}\\selectfont\\setlength{\\tabcolsep}{3pt}\\setlength{\\arrayrulewidth}{0.4pt}\\renewcommand{\\arraystretch}{1.05}\n")
@@ -388,6 +407,44 @@ class JinjaLaTeXRenderer:
         )
 
         return result
+
+    def _should_span_two_columns(self, node: dict) -> bool:
+        """Mirror the Word renderer's conservative IEEE table width decision."""
+        if bool(node.get("is_wide", False)):
+            return True
+
+        cols = int(node.get("cols", 1) or 1)
+        if cols <= 0:
+            return False
+        if cols >= 5:
+            return True
+
+        rows_data = node.get("data", []) or []
+        max_chars_per_col = [0] * cols
+        for r_idx, row in enumerate(rows_data):
+            c_idx = 0
+            for cell in row:
+                if c_idx >= cols:
+                    break
+                colspan = max(1, int(cell.get("colspan", 1) or 1))
+                text = re.sub(r"\\[a-zA-Z]+\{([^{}]*)\}", r"\1", cell.get("text") or "")
+                lines = text.splitlines() or [text]
+                effective_chars = max((len(line.strip()) for line in lines), default=0)
+                if r_idx == 0:
+                    effective_chars = int(effective_chars * 1.15)
+
+                per_col = int(max(1, effective_chars) / colspan)
+                for offset in range(colspan):
+                    col_idx = c_idx + offset
+                    if col_idx < cols:
+                        max_chars_per_col[col_idx] = max(max_chars_per_col[col_idx], per_col)
+                c_idx += colspan
+
+        required_width = sum(
+            max(0.72, min(2.8, chars * 0.045 + 0.26))
+            for chars in max_chars_per_col
+        )
+        return required_width > 3.5 * 1.35
 
     def _render_springer_longtable(
         self,
@@ -1006,9 +1063,6 @@ class JinjaLaTeXRenderer:
                 if len(tail_text.strip()) <= 120:
                     fig_block = self._convert_figure_float_to_inline(fig_block, with_counter=True)
 
-            if fig_block.startswith(r"\begin{figure}[H]"):
-                fig_block = fig_block.replace(r"\begin{figure}[H]", r"\begin{figure}[htbp]", 1)
-
             chunks.append(body_tex[cursor:start])
             chunks.append(fig_block)
             cursor = end
@@ -1194,7 +1248,12 @@ class JinjaLaTeXRenderer:
 
     def _remove_float_barriers(self, body_tex: str) -> str:
         """Remove legacy FloatBarrier markers that can force awkward page breaks."""
-        return re.sub(r"^[ \t]*\\FloatBarrier[ \t]*\n?", "", body_tex, flags=re.MULTILINE)
+        return re.sub(
+            r"^[ \t]*\\FloatBarrier[ \t]*\n(?![ \t]*\\begin\{strip\})",
+            "",
+            body_tex,
+            flags=re.MULTILINE,
+        )
 
     def _choose_magic_engine(self, tex_content: str) -> str:
         """Choose a safe TeX engine hint for editors/Overleaf based on content.
@@ -1233,6 +1292,9 @@ class JinjaLaTeXRenderer:
         has_iftex = re.search(r"\\usepackage(?:\[[^\]]*\])?\{iftex\}", tex_content) is not None
         has_multirow = re.search(r"\\usepackage(?:\[[^\]]*\])?\{multirow\}", tex_content) is not None
         has_adjustbox = re.search(r"\\usepackage(?:\[[^\]]*\])?\{adjustbox\}", tex_content) is not None
+        has_cuted = re.search(r"\\usepackage(?:\[[^\]]*\])?\{cuted\}", tex_content) is not None
+        has_capt_of = re.search(r"\\usepackage(?:\[[^\]]*\])?\{capt-of\}", tex_content) is not None
+        has_placeins = re.search(r"\\usepackage(?:\[[^\]]*\])?\{placeins\}", tex_content) is not None
         doc_match = re.search(r"^[ \t]*\\begin\{document\}", tex_content, re.MULTILINE)
         if doc_match is None:
             return tex_content
@@ -1249,6 +1311,12 @@ class JinjaLaTeXRenderer:
             inject_lines.append("\\usepackage{multirow}")
         if not has_adjustbox:
             inject_lines.append("\\usepackage{adjustbox}")
+        if "\\begin{strip}" in tex_content and not has_cuted:
+            inject_lines.append("\\usepackage{cuted}")
+        if "\\captionof{table}" in tex_content and not has_capt_of:
+            inject_lines.append("\\usepackage{capt-of}")
+        if "\\FloatBarrier" in tex_content and not has_placeins:
+            inject_lines.append("\\usepackage{placeins}")
         
         if "graphicx" not in tex_content:
             inject_lines.append("\\usepackage{graphicx}")
@@ -1415,7 +1483,7 @@ class JinjaLaTeXRenderer:
         steps = node.get("steps", [])
         
         out = []
-        out.append("\\begin{algorithm}")
+        out.append("\\begin{algorithm}[H]")
         out.append(f"\\caption{{{caption}}}")
         out.append("\\begin{algorithmic}[1]")
         
