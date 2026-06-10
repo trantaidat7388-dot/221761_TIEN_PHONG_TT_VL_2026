@@ -1247,7 +1247,7 @@ class IEEEWordRenderer:
         p_space.paragraph_format.space_before = Pt(6)
         p_space.paragraph_format.space_after = Pt(0)
 
-        table = self._render_algorithm_table(doc, steps, caption)
+        self._render_algorithm_table(doc, steps, caption)
 
         doc.add_paragraph("")
 
